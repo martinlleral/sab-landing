@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <link rel="canonical" href="https://sindicatoargentinodeboleros.com.ar/">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <title>Sindicato Argentino de Boleros — Ticketera Oficial</title>
+  <meta name="description" content="Sindicato Argentino de Boleros — Orquesta cooperativa de 21 músicos. Boleros en vivo todos los miércoles en La Plata. Comprá tus entradas online.">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/assets/img/logo-sab.png">
+  <link rel="apple-touch-icon" href="/assets/img/logo-sab.png">
+
+  <!-- Open Graph (para WhatsApp, Instagram, Facebook) -->
+  <meta property="og:title" content="Sindicato Argentino de Boleros">
+  <meta property="og:description" content="Orquesta cooperativa de 21 músicos. Boleros en vivo todos los miércoles en La Plata. Comprá tus entradas.">
+  <meta property="og:image" content="https://sindicatoargentinodeboleros.com.ar/assets/img/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Sindicato Argentino de Boleros — Orquesta cooperativa de 21 músicos en La Plata">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://sindicatoargentinodeboleros.com.ar">
+  <meta property="og:locale" content="es_AR">
+  <meta property="og:site_name" content="Sindicato Argentino de Boleros">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Sindicato Argentino de Boleros">
+  <meta name="twitter:description" content="Orquesta cooperativa de 21 músicos. Boleros en vivo todos los miércoles en La Plata.">
+  <meta name="twitter:image" content="https://sindicatoargentinodeboleros.com.ar/assets/img/og-image.jpg">
+  <meta name="twitter:image:alt" content="Sindicato Argentino de Boleros">
+
+  <!-- Schema.org: Organización (siempre presente) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "MusicGroup",
+    "name": "Sindicato Argentino de Boleros",
+    "alternateName": "SAB",
+    "url": "https://sindicatoargentinodeboleros.com.ar",
+    "logo": "https://sindicatoargentinodeboleros.com.ar/assets/img/logo-sab.png",
+    "image": "https://sindicatoargentinodeboleros.com.ar/assets/img/logo-sab.png",
+    "description": "Orquesta cooperativa de 21 músicos de La Plata. Boleros en vivo todos los miércoles.",
+    "genre": ["Bolero", "Música popular"],
+    "foundingLocation": {
+      "@type": "Place",
+      "name": "La Plata, Buenos Aires, Argentina"
+    },
+    "sameAs": [
+      "https://www.instagram.com/sindicatoargentinodeboleros/",
+      "https://open.spotify.com/intl-es/artist/5zWAsjuY5R96Od9beHFGYI",
+      "https://www.youtube.com/@SindicatoArgentinodeBoleros"
+    ]
+  }
+  </script>
+
+  <!-- Schema.org: Evento destacado (se completa dinámicamente) -->
+  <script type="application/ld+json" id="schema-event"></script>
+
+  <!-- Bootstrap 5 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <!-- Waitlist CSS -->
+  <style>#waitlist{position:relative;padding:80px 0 60px;background:linear-gradient(175deg,#0a0a0a 0%,#12090c 40%,#0a0a0a 100%);overflow:hidden}#waitlist::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#c4384b44,transparent)}.wl-container{max-width:640px;margin:0 auto;padding:0 24px}.wl-header{text-align:center;margin-bottom:48px}.wl-eyebrow{font-family:'Oswald',sans-serif;font-size:.7rem;font-weight:500;letter-spacing:4px;text-transform:uppercase;color:#c4384b;margin-bottom:12px}.wl-title{font-family:'Oswald',sans-serif;font-size:clamp(2rem,6vw,3rem);font-weight:700;color:#f0ece8;text-transform:uppercase;letter-spacing:3px;line-height:1.1;margin-bottom:20px}.wl-subtitle{font-family:'Open Sans',sans-serif;font-size:.95rem;color:#b0aaa2;line-height:1.7;max-width:480px;margin:0 auto}.wl-form-wrap{background:#141414;border:1px solid #2a2a2a;border-radius:12px;padding:36px 32px;position:relative}.wl-form-wrap::before{content:'';position:absolute;top:-1px;left:40px;right:40px;height:2px;background:linear-gradient(90deg,transparent,#c4384b,transparent);border-radius:2px}.wl-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}@media(max-width:500px){.wl-row{grid-template-columns:1fr}.wl-form-wrap{padding:28px 20px}}.wl-field{display:flex;flex-direction:column;gap:6px}.wl-label{font-family:'Oswald',sans-serif;font-size:.7rem;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:#999}.wl-input{background:#0a0a0a;border:1px solid #2a2a2a;border-radius:6px;padding:12px 14px;color:#f0ece8;font-family:'Open Sans',sans-serif;font-size:.9rem;transition:border-color .2s,box-shadow .2s;outline:none}.wl-input::placeholder{color:#4a4a4a}.wl-input:focus{border-color:#c4384b;box-shadow:0 0 0 3px rgba(196,56,75,.1)}.wl-question{margin-bottom:24px}.wl-question-label{font-family:'Open Sans',sans-serif;font-size:.85rem;color:#f0ece8;font-weight:600;margin-bottom:12px;display:block}.wl-radio-group{display:flex;gap:8px;flex-wrap:wrap}.wl-radio-option{position:relative}.wl-radio-option input[type="radio"]{position:absolute;opacity:0;pointer-events:none}.wl-radio-option label{display:block;padding:10px 18px;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:6px;color:#b0aaa2;font-family:'Open Sans',sans-serif;font-size:.82rem;cursor:pointer;transition:all .2s;user-select:none}.wl-radio-option input:checked+label{border-color:#c4384b;color:#f0ece8;background:rgba(196,56,75,.08)}.wl-radio-option label:hover{border-color:#4a4a4a;color:#f0ece8}.wl-check-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:500px){.wl-check-grid{grid-template-columns:1fr}}.wl-check-option{position:relative}.wl-check-option input[type="checkbox"]{position:absolute;opacity:0;pointer-events:none}.wl-check-option label{display:flex;align-items:center;gap:10px;padding:12px 14px;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:6px;color:#b0aaa2;font-family:'Open Sans',sans-serif;font-size:.82rem;cursor:pointer;transition:all .2s;user-select:none;line-height:1.3}.wl-check-option label i{font-size:16px;color:#4a4a4a;flex-shrink:0;transition:color .2s}.wl-check-option input:checked+label{border-color:#c4384b;color:#f0ece8;background:rgba(196,56,75,.08)}.wl-check-option input:checked+label i{color:#c4384b}.wl-check-option label:hover{border-color:#4a4a4a}.wl-submit-wrap{margin-top:28px;text-align:center}.wl-btn{display:inline-block;background:var(--color-accent,#e63946);color:#fff;font-family:'Oswald',sans-serif;font-size:1rem;font-weight:600;letter-spacing:3px;text-transform:uppercase;border:none;border-radius:4px;padding:14px 48px;cursor:pointer;transition:background .2s,transform .1s,box-shadow .2s;position:relative;overflow:hidden}.wl-btn:hover{background:var(--color-accent-hover,#c1121f);transform:translateY(-1px);box-shadow:0 6px 20px rgba(196,56,75,.25)}.wl-btn:active{transform:translateY(0)}.wl-btn:disabled{opacity:.6;cursor:not-allowed;transform:none}.wl-btn .spinner-border{width:16px;height:16px;border-width:2px;margin-right:8px;vertical-align:middle}.wl-note{font-family:'Open Sans',sans-serif;font-size:.72rem;color:#4a4a4a;margin-top:12px;text-align:center}.wl-counter{text-align:center;margin-top:32px;padding-top:24px;border-top:1px solid #2a2a2a}.wl-counter-number{font-family:'Oswald',sans-serif;font-size:1.8rem;font-weight:700;color:#f0ece8;line-height:1}.wl-counter-label{font-family:'Open Sans',sans-serif;font-size:.8rem;color:#999;margin-top:4px}.wl-success{display:none;text-align:center;padding:40px 20px;animation:wlFadeIn .5s ease}.wl-success.visible{display:block}.wl-success-icon{width:64px;height:64px;border-radius:50%;background:rgba(196,56,75,.12);display:flex;align-items:center;justify-content:center;margin:0 auto 20px}.wl-success-icon i{font-size:28px;color:#c4384b}.wl-success-title{font-family:'Oswald',sans-serif;font-size:1.5rem;font-weight:600;color:#f0ece8;letter-spacing:1px;margin-bottom:8px}.wl-success-text{font-family:'Open Sans',sans-serif;font-size:.9rem;color:#b0aaa2;line-height:1.6}.wl-error{background:rgba(196,56,75,.1);border:1px solid rgba(196,56,75,.3);border-radius:6px;padding:10px 14px;margin-bottom:16px;font-family:'Open Sans',sans-serif;font-size:.82rem;color:#e88;display:none}.wl-error.visible{display:block;animation:wlFadeIn .3s ease}@keyframes wlFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}</style>
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <header>
+    <nav class="navbar navbar-expand-lg">
+      <div class="container">
+        <a class="navbar-brand" href="/">SINDICATO ARGENTINO <span>DE BOLEROS</span></a>
+        <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu" aria-label="Toggle navigation">
+          <i class="bi bi-list text-white fs-4" aria-hidden="true"></i>
+        </button>
+        <div class="collapse navbar-collapse" id="navMenu">
+          <ul class="navbar-nav ms-auto gap-2">
+            <li class="nav-item"><a class="nav-link" href="#descripcion">El Evento</a></li>
+            <li class="nav-item"><a class="nav-link" href="#proximos">Próximos</a></li>
+            <li class="nav-item"><a class="nav-link" href="#quienes-somos">Quiénes Somos</a></li>
+            <li class="nav-item"><a class="nav-link" href="#waitlist">Sumate</a></li>
+            <!-- Admin: acceder por URL directa /backoffice/login.html -->
+          </ul>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <!-- PAYMENT STATUS (oculto por defecto, se muestra al volver de MP) -->
+  <div id="pago-status" style="min-height:100vh; display:none; align-items:center; justify-content:center; padding: 80px 20px;">
+    <div id="pago-status-content"></div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <main id="main-content">
+
+    <!-- SECCIÓN 1: HERO SLIDER -->
+    <section id="hero">
+      <div id="heroCarousel" class="carousel slide carousel-fade hero-carousel" data-bs-ride="carousel" data-bs-interval="6000">
+        <div class="carousel-inner" id="carousel-inner">
+          <div class="carousel-item active">
+            <div class="slide-placeholder"></div>
+          </div>
+        </div>
+        <button class="carousel-control-prev" type="button" data-bs-target="#heroCarousel" data-bs-slide="prev" aria-label="Imagen anterior">
+          <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+        </button>
+        <button class="carousel-control-next" type="button" data-bs-target="#heroCarousel" data-bs-slide="next" aria-label="Imagen siguiente">
+          <span class="carousel-control-next-icon" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div class="hero-overlay">
+        <div class="hero-content" id="hero-content">
+          <div class="hero-badge">Próximo Evento</div>
+          <h1 class="hero-title" id="hero-nombre"></h1>
+          <p class="hero-meta">
+            <span id="hero-fecha"></span>
+            <span id="hero-hora-sep" style="margin:0 10px;">—</span>
+            <span id="hero-hora"></span>
+          </p>
+          <p class="hero-guest" id="hero-invitado-wrap">
+            Invitado especial: <strong id="hero-invitado"></strong>
+          </p>
+          <p class="hero-precio" id="hero-precio-wrap">
+            Desde <strong id="hero-precio">$12.000</strong>
+          </p>
+          <button class="btn-comprar" id="btn-comprar" data-bs-toggle="modal" data-bs-target="#modalCompra">
+            COMPRAR ENTRADAS
+          </button>
+          <!-- Trust signals inline (hero) - minimal -->
+
+        </div>
+      </div>
+
+      <div class="scroll-indicator">
+        <span></span>
+        <span></span>
+      </div>
+    </section>
+
+    <!-- TRUST BAR -->
+    <style>
+      .trust-mp-badge{height:32px;width:auto;flex-shrink:0;border-radius:18px;box-shadow:0 2px 8px rgba(0,177,234,.25)}
+      @media(max-width:600px){.trust-mp-badge{height:28px}}
+    </style>
+    <section id="trust-bar">
+      <div class="container">
+        <div class="trust-bar-grid">
+          <div class="trust-item">
+            <img src="/assets/img/mercadopago-badge.svg" alt="Mercado Pago" class="trust-mp-badge" width="88" height="32">
+            <div>
+              <div class="trust-text-title">Pago seguro</div>
+              <div class="trust-text-subtitle">con Mercado Pago</div>
+            </div>
+          </div>
+          <div class="trust-item">
+            <div class="trust-icon trust-icon--qr"><i class="bi bi-qr-code"></i></div>
+            <div>
+              <div class="trust-text-title">Entrada digital</div>
+              <div class="trust-text-subtitle">QR directo al celular</div>
+            </div>
+          </div>
+          <div class="trust-item">
+            <div class="trust-icon trust-icon--people"><i class="bi bi-people-fill"></i></div>
+            <div>
+              <div class="trust-text-title">+500 entradas</div>
+              <div class="trust-text-subtitle">vendidas en el ciclo</div>
+            </div>
+          </div>
+          <div class="trust-item">
+            <div class="trust-icon trust-icon--whatsapp"><i class="bi bi-whatsapp"></i></div>
+            <div>
+              <div class="trust-text-title">Soporte directo</div>
+              <div class="trust-text-subtitle">221 591-7409</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN 2: DESCRIPCIÓN DEL EVENTO -->
+    <section id="descripcion">
+      <div class="container">
+        <div class="text-center">
+          <h2 class="section-title">El Evento</h2>
+          <div class="section-divider"></div>
+        </div>
+
+        <!-- Info cards -->
+        <div id="evento-info-grid">
+          <div class="info-card">
+            <i class="bi bi-calendar-event info-card-icon"></i>
+            <div class="info-card-label">Cuándo</div>
+            <div id="info-fecha" class="info-card-value">—</div>
+            <div id="info-hora" class="info-card-detail">—</div>
+          </div>
+          <div class="info-card">
+            <i class="bi bi-geo-alt-fill info-card-icon"></i>
+            <div class="info-card-label">Dónde</div>
+            <div id="info-lugar" class="info-card-value">Espacio Doble T</div>
+            <div class="info-card-detail">La Plata</div>
+          </div>
+          <div class="info-card">
+            <i class="bi bi-ticket-perforated info-card-icon"></i>
+            <div class="info-card-label">Entrada</div>
+            <div id="info-precio" class="info-card-value info-card-value--big">—</div>
+            <div class="info-card-detail">Anticipada online</div>
+          </div>
+        </div>
+
+        <!-- Descripción con formato -->
+        <div class="evento-content">
+          <!-- Nombre del ciclo -->
+          <div class="ciclo-name-wrap">
+            <div class="ciclo-name">
+              <span class="ciclo-name-label">Ciclo</span>
+              <span class="ciclo-name-value">Amor de Miércoles</span>
+            </div>
+          </div>
+
+          <!-- Viñetas de la propuesta -->
+          <div class="propuesta-grid">
+            <div class="propuesta-item">
+              <i class="bi bi-music-note-beamed"></i>
+              <span>Orquesta en vivo con invitadxs de lujo</span>
+            </div>
+            <div class="propuesta-item">
+              <i class="bi bi-vinyl"></i>
+              <span>Musicalización en vinilos</span>
+            </div>
+            <div class="propuesta-item">
+              <i class="bi bi-heart-pulse"></i>
+              <span>Clase de baile</span>
+            </div>
+            <div class="propuesta-item">
+              <i class="bi bi-headphones"></i>
+              <span>La.Puta Ama DJ de cierre</span>
+            </div>
+          </div>
+
+          <!-- Texto adicional del CMS (oculto si vacío) -->
+          <p id="evento-descripcion"></p>
+
+          <!-- Callout info práctica -->
+          <div class="callout callout--info">
+            <ul class="callout-list">
+              <li><i class="bi bi-check-circle-fill"></i> Mesas por orden de llegada</li>
+              <li><i class="bi bi-check-circle-fill"></i> Comida y bebida disponible</li>
+              <li><i class="bi bi-check-circle-fill"></i> Menú sin TACC y vegano</li>
+              <li><i class="bi bi-check-circle-fill"></i> Menores de 12 años no pagan</li>
+            </ul>
+          </div>
+          <!-- Callout WhatsApp -->
+          <div class="callout callout--whatsapp">
+            <p class="callout-text">
+              <i class="bi bi-whatsapp"></i>
+              Grupos, cumpleaños y consultas: <a href="https://wa.me/5492215917409" target="_blank" rel="noopener" class="callout-link">221 591-7409</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: UBICACIÓN -->
+    <section id="ubicacion">
+      <div class="container">
+        <div class="text-center mb-4">
+          <h2 class="section-title">Cómo llegar</h2>
+          <div class="section-divider"></div>
+        </div>
+        <div class="row justify-content-center">
+          <div class="col-lg-8">
+            <div class="ubicacion-card">
+              <iframe
+                src="https://www.google.com/maps?q=Calle+23+565,+La+Plata,+Buenos+Aires,+Argentina&output=embed"
+                allowfullscreen="" loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+                title="Ubicación Espacio Doble T">
+              </iframe>
+              <div class="ubicacion-info">
+                <div>
+                  <div class="ubicacion-nombre">
+                    <i class="bi bi-geo-alt-fill"></i>Espacio Doble T
+                  </div>
+                  <div class="ubicacion-direccion">Calle 23 N°565 entre 44 y 45, La Plata</div>
+                </div>
+                <a href="https://www.instagram.com/espaciodoblet" target="_blank" rel="noopener" class="ubicacion-ig">
+                  <i class="bi bi-instagram"></i> @espaciodoblet
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN 3: VIDEO YOUTUBE -->
+    <section id="video">
+      <div class="container">
+        <div class="text-center mb-4">
+          <h2 class="section-title">Así suena</h2>
+          <div class="section-divider"></div>
+        </div>
+        <div class="row justify-content-center">
+          <div class="col-lg-10">
+            <div id="video-container"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN 4: PRÓXIMOS EVENTOS -->
+    <section id="proximos">
+      <div class="container">
+        <div class="text-center mb-5">
+          <h2 class="section-title">Próximos Eventos</h2>
+          <div class="section-divider"></div>
+        </div>
+        <div class="row" id="proximos-container">
+          <!-- Cards generadas por JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: QUIÉNES SOMOS -->
+    <style>
+      #quienes-somos{padding:5rem 0;background:linear-gradient(180deg,#0a0a0a 0%,#141414 50%,#0a0a0a 100%);position:relative;overflow:hidden}
+      #quienes-somos::before{content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);width:80px;height:3px;background:#e63946}
+      .qs-eyebrow{display:inline-block;color:#e63946;font-family:'Oswald',sans-serif;font-size:.95rem;letter-spacing:.25em;text-transform:uppercase;margin-bottom:.6rem;font-weight:600}
+      .qs-title{font-family:'Oswald',sans-serif;font-size:clamp(2.2rem,5vw,3.5rem);font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.04em;line-height:1.05;margin-bottom:1.4rem}
+      .qs-title em{font-style:normal;color:#e63946}
+      .qs-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:3.5rem;align-items:center;max-width:1200px;margin:0 auto;padding:0 1.5rem}
+      @media(max-width:900px){.qs-grid{grid-template-columns:1fr;gap:2rem}}
+      .qs-photo-wrap{position:relative;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);transform:rotate(-1deg);transition:transform .4s ease}
+      .qs-photo-wrap:hover{transform:rotate(0deg) scale(1.01)}
+      .qs-photo-wrap::after{content:"";position:absolute;inset:0;border:2px solid rgba(230,57,70,.5);border-radius:12px;transform:translate(12px,12px);z-index:-1}
+      .qs-photo{display:block;width:100%;height:auto;border-radius:12px}
+      .qs-lead{color:#e8e8e8;font-size:1.08rem;line-height:1.65;margin-bottom:1.4rem}
+      .qs-lead strong{color:#fff;font-weight:600}
+      .qs-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1.8rem 0;padding:1.2rem 0;border-top:1px solid rgba(255,255,255,.1);border-bottom:1px solid rgba(255,255,255,.1)}
+      .qs-stat-num{font-family:'Oswald',sans-serif;font-size:2rem;font-weight:700;color:#e63946;line-height:1}
+      .qs-stat-label{font-size:.78rem;color:#aaa;text-transform:uppercase;letter-spacing:.08em;margin-top:.3rem}
+      .qs-hitos{color:#cfcfcf;font-size:.95rem;line-height:1.6;margin-bottom:1.4rem}
+      .qs-hitos strong{color:#e63946;font-weight:600}
+      .qs-artistas-label{display:block;color:#888;font-size:.78rem;text-transform:uppercase;letter-spacing:.12em;margin-bottom:.5rem}
+      .qs-artistas{color:#bdbdbd;font-size:.88rem;line-height:1.55;font-style:italic;margin-bottom:1.6rem}
+      .qs-cta{display:flex;flex-wrap:wrap;gap:.8rem;margin-top:1.5rem}
+      .qs-cta a{display:inline-flex;align-items:center;gap:.5rem;padding:.65rem 1.2rem;border-radius:30px;text-decoration:none;font-size:.9rem;font-weight:600;transition:all .25s ease;border:1px solid rgba(255,255,255,.15)}
+      .qs-cta a:hover{transform:translateY(-2px);background:rgba(230,57,70,.15);border-color:#e63946}
+      .qs-cta a i{font-size:1.1rem}
+      .qs-cta-spotify{color:#1ed760}
+      .qs-cta-yt{color:#ff0000}
+      .qs-cta-ig{color:#e1306c}
+    </style>
+    <section id="quienes-somos">
+      <div class="qs-grid">
+        <div class="qs-photo-wrap">
+          <img class="qs-photo" src="/assets/img/sab-grupal.jpg" alt="Foto grupal del Sindicato Argentino de Boleros" loading="lazy" width="1100" height="1649">
+        </div>
+        <div>
+          <span class="qs-eyebrow">Quiénes somos</span>
+          <h2 class="qs-title">Una orquesta <em>cooperativa</em> de boleros</h2>
+          <p class="qs-lead">Somos una <strong>orquesta popular y cooperativa</strong> que rinde homenaje al bolero fusionando su elegancia romántica tradicional con sonidos contemporáneos. Nacimos en La Plata en noviembre de 2023 junto al ciclo <strong>Amor de Miércoles</strong>, donde cortamos la semana platense con romance, baile y encuentro.</p>
+
+          <div class="qs-stats">
+            <div><div class="qs-stat-num">17</div><div class="qs-stat-label">Músicos y músicas</div></div>
+            <div><div class="qs-stat-num">2</div><div class="qs-stat-label">Bailarines</div></div>
+            <div><div class="qs-stat-num">2023</div><div class="qs-stat-label">Desde noviembre</div></div>
+          </div>
+
+          <p class="qs-hitos">Pasamos por el <strong>Patio del Konex</strong>, los teatros <strong>Ópera de La Plata</strong> y de Buenos Aires, el <strong>CCK</strong>, <strong>Bebop Club</strong>, La Paz Arriba, Galpón B y el <strong>Coliseo Podestá</strong>. Fuimos seleccionados para el Isoca Festival 2025 y el cierre de Teatro X la Identidad.</p>
+
+          <span class="qs-artistas-label">Compartimos escenario con</span>
+          <p class="qs-artistas">Juan Carlos Baglietto · Teresa Parodi · Lula Bertoldi (Eruca Sativa) · Juan Falú · Charo Bogarín · Juan Quintero · El Plan de la Mariposa · Daniela Herrero · Chico Trujillo · Sara Hebe · Miss Bolivia · Sofía Viola · Daniel Maza · Lucy Patané · entre muchxs más.</p>
+
+          <p class="qs-lead" style="font-size:.98rem;margin-bottom:0">Estamos presentando nuestro primer EP <strong><em>"En este Club"</em></strong>, disponible en Spotify y YouTube.</p>
+
+          <div class="qs-cta">
+            <a href="https://open.spotify.com/intl-es/artist/5zWAsjuY5R96Od9beHFGYI" target="_blank" rel="noopener" class="qs-cta-spotify"><i class="bi bi-spotify"></i> Escuchar en Spotify</a>
+            <a href="https://www.youtube.com/@SindicatoArgentinodeBoleros" target="_blank" rel="noopener" class="qs-cta-yt"><i class="bi bi-youtube"></i> Ver en YouTube</a>
+            <a href="https://www.instagram.com/sindicatoargentinodeboleros/" target="_blank" rel="noopener" class="qs-cta-ig"><i class="bi bi-instagram"></i> Instagram</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WAITLIST — SUMATE AL SINDICATO -->
+    <style>
+      /* Intro note: bloque centrado, dos líneas con jerarquía */
+      .wl-intro-note{color:#e0dbd4;font-size:1rem;text-align:center;margin:0 0 2rem;line-height:1.55;font-weight:500}
+      .wl-intro-note-sub{display:inline-block;margin-top:.35rem;color:#8f8a82;font-size:.85rem;font-weight:400;font-style:italic}
+      /* Equilibrio y simetría del formulario */
+      .wl-form-wrap{padding:40px 36px 36px}
+      @media(max-width:500px){.wl-form-wrap{padding:28px 20px 24px}}
+      .wl-question{margin-bottom:1.75rem}
+      .wl-question:last-of-type{margin-bottom:1.25rem}
+      .wl-question-label{font-size:.9rem;color:#f0ece8;font-weight:600;margin-bottom:.75rem;display:block;line-height:1.4}
+      .wl-radio-group{display:flex;gap:.55rem;flex-wrap:wrap}
+      .wl-check-grid{gap:.55rem}
+      .wl-helper{color:#8a857e;font-size:.8rem;margin:.5rem 0 .75rem;font-style:italic;line-height:1.45}
+      .wl-optional{color:#6f6a63;font-weight:400;font-size:.8rem;font-style:italic;margin-left:.35rem}
+      .wl-row{margin-bottom:1.75rem;margin-top:.25rem}
+      /* Consentimiento: separación visual clara */
+      .wl-consent{margin:1.75rem 0 .75rem;padding:.95rem 1.1rem;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:8px}
+      .wl-consent-label{display:flex;align-items:flex-start;gap:.7rem;color:#a8a39c;font-size:.78rem;line-height:1.5;cursor:pointer;margin:0}
+      .wl-consent-label input[type="checkbox"]{margin-top:.2rem;flex-shrink:0;accent-color:#c4384b;width:16px;height:16px}
+      /* CTA con aire respirable */
+      .wl-submit-wrap{margin-top:2rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.06)}
+    </style>
+    <section id="waitlist">
+      <div class="wl-container">
+        <div class="wl-header">
+          <div class="wl-eyebrow">Próximamente</div>
+          <h2 class="wl-title">Sumate al Sindicato</h2>
+          <p class="wl-subtitle">Estamos armando un sistema de socios para quienes quieran ser parte del SAB más allá de los miércoles. Dejá tus datos y sé de lxs primerxs.</p>
+        </div>
+        <div class="wl-form-wrap">
+          <div id="wl-error" class="wl-error"></div>
+          <form id="wl-form" autocomplete="on">
+            <p class="wl-intro-note">Ayudanos a construir el sistema de socios.<br><span class="wl-intro-note-sub">Son 6 preguntas, menos de 1 minuto.</span></p>
+
+            <div class="wl-question">
+              <span class="wl-question-label">¿Desde dónde nos venís a ver?</span>
+              <div class="wl-radio-group">
+                <div class="wl-radio-option"><input type="radio" name="ubicacion" id="ub-lp" value="la_plata" required><label for="ub-lp">La Plata</label></div>
+                <div class="wl-radio-option"><input type="radio" name="ubicacion" id="ub-caba" value="caba"><label for="ub-caba">CABA</label></div>
+                <div class="wl-radio-option"><input type="radio" name="ubicacion" id="ub-gba" value="gba"><label for="ub-gba">GBA</label></div>
+                <div class="wl-radio-option"><input type="radio" name="ubicacion" id="ub-otra" value="otra"><label for="ub-otra">Otra</label></div>
+              </div>
+            </div>
+
+            <div class="wl-question">
+              <span class="wl-question-label">En los últimos 6 meses, ¿cuántas veces fuiste a un show del SAB?</span>
+              <div class="wl-radio-group">
+                <div class="wl-radio-option"><input type="radio" name="frecuencia_6m" id="fr-0" value="0" required><label for="fr-0">Ninguna</label></div>
+                <div class="wl-radio-option"><input type="radio" name="frecuencia_6m" id="fr-12" value="1-2"><label for="fr-12">1 o 2</label></div>
+                <div class="wl-radio-option"><input type="radio" name="frecuencia_6m" id="fr-35" value="3-5"><label for="fr-35">3 a 5</label></div>
+                <div class="wl-radio-option"><input type="radio" name="frecuencia_6m" id="fr-6" value="6+"><label for="fr-6">6 o más</label></div>
+                <div class="wl-radio-option"><input type="radio" name="frecuencia_6m" id="fr-antes" value="sigo_desde_antes"><label for="fr-antes">Los sigo desde antes</label></div>
+              </div>
+            </div>
+
+            <div class="wl-question">
+              <span class="wl-question-label">Cuando vas, ¿cómo solés entrar?</span>
+              <div class="wl-radio-group">
+                <div class="wl-radio-option"><input type="radio" name="modo_entrada" id="me-anti" value="anticipada" required><label for="me-anti">Compro anticipada</label></div>
+                <div class="wl-radio-option"><input type="radio" name="modo_entrada" id="me-puerta" value="puerta"><label for="me-puerta">Pago en puerta</label></div>
+                <div class="wl-radio-option"><input type="radio" name="modo_entrada" id="me-gorra" value="gorra"><label for="me-gorra">A la gorra cuando se puede</label></div>
+                <div class="wl-radio-option"><input type="radio" name="modo_entrada" id="me-gratis" value="invitacion"><label for="me-gratis">Por invitación</label></div>
+                <div class="wl-radio-option"><input type="radio" name="modo_entrada" id="me-nunca" value="nunca_fui"><label for="me-nunca">Todavía no fui</label></div>
+              </div>
+            </div>
+
+            <div class="wl-question">
+              <span class="wl-question-label">De estos beneficios, marcá los <strong>3 que más te entusiasmarían</strong></span>
+              <div class="wl-check-grid">
+                <div class="wl-check-option"><input type="checkbox" id="chk-desc" name="quiere_descuentos"><label for="chk-desc"><i class="bi bi-tag-fill"></i>50% de descuento en entradas del ciclo</label></div>
+                <div class="wl-check-option"><input type="checkbox" id="chk-early" name="quiere_early_access"><label for="chk-early"><i class="bi bi-lightning-charge-fill"></i>Comprar antes que el público general</label></div>
+                <div class="wl-check-option"><input type="checkbox" id="chk-back" name="quiere_backstage"><label for="chk-back"><i class="bi bi-camera-reels-fill"></i>Contenido exclusivo del backstage</label></div>
+                <div class="wl-check-option"><input type="checkbox" id="chk-com" name="quiere_comunidad"><label for="chk-com"><i class="bi bi-people-fill"></i>Ser parte de la comunidad de socios</label></div>
+                <div class="wl-check-option"><input type="checkbox" id="chk-ensayo" name="quiere_ensayo"><label for="chk-ensayo"><i class="bi bi-music-note-beamed"></i>Asistir a ensayos abiertos</label></div>
+                <div class="wl-check-option"><input type="checkbox" id="chk-mesa" name="quiere_mesa"><label for="chk-mesa"><i class="bi bi-cup-hot-fill"></i>Mesa reservada en los shows</label></div>
+                <div class="wl-check-option"><input type="checkbox" id="chk-merch" name="quiere_merch"><label for="chk-merch"><i class="bi bi-bag-heart-fill"></i>Merch exclusivo de socios</label></div>
+              </div>
+              <p class="wl-helper">Elegí hasta 3.</p>
+            </div>
+
+            <div class="wl-question">
+              <span class="wl-question-label">¿Qué rango te parece razonable pagar por mes para ser socio/a?</span>
+              <p class="wl-helper">Pensá en lo que gastás en una salida: una entrada de cine con algo, un café compartido, una pizza afuera.</p>
+              <div class="wl-radio-group">
+                <div class="wl-radio-option"><input type="radio" name="rango_pago" id="rp-1" value="hasta_5k" required><label for="rp-1">Hasta $5.000</label></div>
+                <div class="wl-radio-option"><input type="radio" name="rango_pago" id="rp-2" value="5k_8k"><label for="rp-2">$5.000 a $8.000</label></div>
+                <div class="wl-radio-option"><input type="radio" name="rango_pago" id="rp-3" value="8k_12k"><label for="rp-3">$8.000 a $12.000</label></div>
+                <div class="wl-radio-option"><input type="radio" name="rango_pago" id="rp-4" value="12k_20k"><label for="rp-4">$12.000 a $20.000</label></div>
+                <div class="wl-radio-option"><input type="radio" name="rango_pago" id="rp-5" value="mas_20k"><label for="rp-5">Más de $20.000</label></div>
+              </div>
+            </div>
+
+            <div class="wl-row">
+              <div class="wl-field">
+                <label class="wl-label" for="wl-nombre">¿Cómo te llamás?</label>
+                <input class="wl-input" type="text" id="wl-nombre" name="nombre" placeholder="Tu nombre" required autocomplete="given-name">
+              </div>
+              <div class="wl-field">
+                <label class="wl-label" for="wl-email">Tu email</label>
+                <input class="wl-input" type="email" id="wl-email" name="email" placeholder="tu@email.com" required autocomplete="email">
+              </div>
+            </div>
+
+            <div class="wl-question">
+              <span class="wl-question-label">¿Cómo nos conociste? <span class="wl-optional">(opcional)</span></span>
+              <div class="wl-radio-group">
+                <div class="wl-radio-option"><input type="radio" name="canal_descubrimiento" id="cd-ig" value="instagram"><label for="cd-ig">Instagram</label></div>
+                <div class="wl-radio-option"><input type="radio" name="canal_descubrimiento" id="cd-amigo" value="boca_a_boca"><label for="cd-amigo">Me lo recomendaron</label></div>
+                <div class="wl-radio-option"><input type="radio" name="canal_descubrimiento" id="cd-show" value="en_un_show"><label for="cd-show">En un show</label></div>
+                <div class="wl-radio-option"><input type="radio" name="canal_descubrimiento" id="cd-prensa" value="prensa"><label for="cd-prensa">Prensa / radio</label></div>
+                <div class="wl-radio-option"><input type="radio" name="canal_descubrimiento" id="cd-otro" value="otro"><label for="cd-otro">Otro</label></div>
+              </div>
+            </div>
+
+            <div class="wl-consent">
+              <label class="wl-consent-label">
+                <input type="checkbox" id="wl-consent" checked>
+                <span>Acepto recibir novedades del SAB por mail. Tus datos están protegidos por la Ley 25.326 y no los compartimos con terceros.</span>
+              </label>
+            </div>
+
+            <div class="wl-submit-wrap">
+              <button type="submit" class="wl-btn" id="wl-btn">QUIERO ESTAR</button>
+              <p class="wl-note">Sin tarjetas ni pagos.</p>
+            </div>
+          </form>
+          <div id="wl-success" class="wl-success">
+            <div class="wl-success-icon"><i class="bi bi-heart-fill"></i></div>
+            <div class="wl-success-title">¡Gracias por sumarte!</div>
+            <p class="wl-success-text">Te vamos a avisar cuando lancemos.<br>Mientras tanto, seguinos en nuestras redes.</p>
+          </div>
+          <div class="wl-counter">
+            <div class="wl-counter-number" id="wl-count">—</div>
+            <div class="wl-counter-label">personas ya se sumaron</div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <script>
+    (function(){
+      const U='https://ugvlzjbsulrkdjtapozn.supabase.co';
+      const K='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVndmx6amJzdWxya2RqdGFwb3puIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NjEzNjksImV4cCI6MjA5MTMzNzM2OX0.dB_LHqIp9ViBpy5KkbMJwRdbwTLkgbEnsdv7u_0rOkU';
+      const A=`${U}/rest/v1/waitlist_socios`;
+      // Sin 'return=minimal' para poder leer el body de error de Supabase
+      const H={'apikey':K,'Authorization':`Bearer ${K}`,'Content-Type':'application/json'};
+      const BENEFIT_IDS=['chk-early','chk-desc','chk-back','chk-com','chk-ensayo','chk-mesa','chk-merch'];
+
+      async function loadCount(){
+        try{
+          const r=await fetch(`${U}/rest/v1/rpc/waitlist_count`,{method:'POST',headers:{'apikey':K,'Authorization':`Bearer ${K}`,'Content-Type':'application/json'}});
+          const d=await r.json();
+          const el=document.getElementById('wl-count');
+          if(el)el.textContent=d||0;
+        }catch(e){console.warn('Waitlist count:',e)}
+      }
+
+      const f=document.getElementById('wl-form');
+      if(!f)return;
+
+      // Limitar a 3 beneficios marcados
+      BENEFIT_IDS.forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el)return;
+        el.addEventListener('change',()=>{
+          const marcados=BENEFIT_IDS.filter(i=>{const e=document.getElementById(i);return e&&e.checked});
+          if(marcados.length>3){el.checked=false}
+        });
+      });
+
+      f.addEventListener('submit',async(e)=>{
+        e.preventDefault();
+        const btn=document.getElementById('wl-btn'),err=document.getElementById('wl-error');
+        btn.disabled=true;
+        btn.innerHTML='<span class="spinner-border spinner-border-sm" role="status"></span> ENVIANDO...';
+        err.classList.remove('visible');
+
+        const nombre=document.getElementById('wl-nombre').value.trim();
+        const email=document.getElementById('wl-email').value.trim();
+        const ubicacion=f.querySelector('input[name="ubicacion"]:checked');
+        const frecuencia=f.querySelector('input[name="frecuencia_6m"]:checked');
+        const modo=f.querySelector('input[name="modo_entrada"]:checked');
+        const rango=f.querySelector('input[name="rango_pago"]:checked');
+        const canal=f.querySelector('input[name="canal_descubrimiento"]:checked');
+        const consent=document.getElementById('wl-consent').checked;
+
+        if(!nombre||!email||!ubicacion||!frecuencia||!modo||!rango){
+          err.textContent='Completá todos los campos obligatorios.';
+          err.classList.add('visible');
+          btn.disabled=false;btn.textContent='QUIERO ESTAR';
+          return;
+        }
+
+        const payload={
+          nombre,email,
+          ubicacion:ubicacion.value,
+          frecuencia_6m:frecuencia.value,
+          modo_entrada:modo.value,
+          rango_pago:rango.value,
+          canal_descubrimiento:canal?canal.value:null,
+          consentimiento_mails:consent,
+          quiere_early_access:document.getElementById('chk-early').checked,
+          quiere_descuentos:document.getElementById('chk-desc').checked,
+          quiere_backstage:document.getElementById('chk-back').checked,
+          quiere_comunidad:document.getElementById('chk-com').checked,
+          fuente:'landing'
+        };
+
+        try{
+          const res=await fetch(A,{method:'POST',headers:H,body:JSON.stringify(payload)});
+          if(res.ok){
+            f.style.display='none';
+            err.classList.remove('visible');
+            document.getElementById('wl-success').classList.add('visible');
+            loadCount();
+            return;
+          }
+          // Error: leer body para diferenciar duplicado real de otros errores
+          let body=null;
+          try{body=await res.json()}catch(_){}
+          const code=body&&body.code;
+          if(code==='23505'){
+            // unique_violation = email ya registrado
+            err.textContent='Este email ya está registrado. ¡Ya estás en la lista!';
+          }else{
+            err.textContent='Hubo un problema al enviar el formulario. Intentá de nuevo en unos segundos.';
+            console.error('Waitlist error:',res.status,body);
+          }
+          err.classList.add('visible');
+          btn.disabled=false;btn.textContent='QUIERO ESTAR';
+        }catch(er){
+          err.textContent='No pudimos conectar. Revisá tu conexión e intentá de nuevo.';
+          err.classList.add('visible');
+          btn.disabled=false;btn.textContent='QUIERO ESTAR';
+          console.error('Waitlist network error:',er);
+        }
+      });
+
+      loadCount();
+    })();
+    </script>
+
+    <!-- FOOTER -->
+    <footer>
+      <div class="container text-center">
+        <div class="footer-brand">SINDICATO ARGENTINO <span>DE BOLEROS</span></div>
+        <p class="footer-tagline">Boleros · Pasión · Música en vivo</p>
+        <div class="social-links">
+          <a href="https://www.instagram.com/sindicatoargentinodeboleros/" class="social-link" target="_blank" rel="noopener" title="Instagram" aria-label="Instagram del SAB">
+            <i class="bi bi-instagram" aria-hidden="true"></i>
+          </a>
+          <a href="https://open.spotify.com/intl-es/artist/5zWAsjuY5R96Od9beHFGYI" class="social-link" target="_blank" rel="noopener" title="Spotify" aria-label="Spotify del SAB">
+            <i class="bi bi-spotify" aria-hidden="true"></i>
+          </a>
+          <a href="https://www.youtube.com/@SindicatoArgentinodeBoleros" class="social-link" target="_blank" rel="noopener" title="YouTube" aria-label="YouTube del SAB">
+            <i class="bi bi-youtube" aria-hidden="true"></i>
+          </a>
+        </div>
+        <p class="footer-copy">© 2026 Sindicato Argentino de Boleros. Todos los derechos reservados.</p>
+      </div>
+    </footer>
+
+  </main><!-- /main-content -->
+
+  <!-- MODAL DE COMPRA -->
+  <div class="modal fade" id="modalCompra" tabindex="-1" aria-labelledby="modalCompraLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalCompraLabel">
+            <i class="bi bi-ticket-perforated me-2 text-accent"></i>
+            Comprar Entradas
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+
+          <!-- Flyer del evento -->
+          <div id="modal-flyer-wrap" style="display:none; margin-bottom:16px;">
+            <img id="modal-flyer" src="" alt="Flyer del evento" style="width:100%; max-height:380px; object-fit:contain; border-radius:8px; background:#0a0a0a;">
+          </div>
+
+          <!-- Info del evento -->
+          <div class="evento-info-modal">
+            <div class="nombre" id="modal-evento-nombre">—</div>
+            <div class="fecha" id="modal-evento-fecha">—</div>
+          </div>
+
+          <!-- Error -->
+          <div id="modal-error" class="alert alert-danger py-2 small" style="display:none;"></div>
+
+          <!-- Formulario -->
+          <form id="form-compra" onsubmit="handleComprar(); return false;" autocomplete="on">
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label" for="modal-nombre">Nombre *</label>
+              <input type="text" class="form-control" id="modal-nombre" placeholder="Juan" autocomplete="given-name">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="modal-apellido">Apellido *</label>
+              <input type="text" class="form-control" id="modal-apellido" placeholder="Pérez" autocomplete="family-name">
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="modal-email">Email *</label>
+              <input type="email" class="form-control" id="modal-email" placeholder="juan@email.com" autocomplete="email">
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="modal-telefono">Teléfono</label>
+              <input type="tel" class="form-control" id="modal-telefono" placeholder="11 1234-5678" autocomplete="tel">
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="modal-cantidad">Cantidad de entradas *</label>
+              <select class="form-select" id="modal-cantidad" onchange="updateTotal()">
+                <option value="1">1 entrada</option>
+                <option value="2">2 entradas</option>
+                <option value="3">3 entradas</option>
+                <option value="4">4 entradas</option>
+                <option value="5">5 entradas</option>
+                <option value="6">6 entradas</option>
+                <option value="7">7 entradas</option>
+                <option value="8">8 entradas</option>
+                <option value="9">9 entradas</option>
+                <option value="10">10 entradas</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Precio oculto -->
+          <input type="hidden" id="modal-precio-unit" value="0">
+
+          <!-- Total -->
+          <div class="total-display mt-3">
+            <div class="total-label">Total a pagar</div>
+            <div class="total-amount" id="modal-total">$ 0</div>
+          </div>
+          </form>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-pagar" id="btn-pagar" onclick="handleComprar()">
+            <span class="spinner-border spinner-border-sm" id="pagar-spinner" style="display:none;" role="status"></span>
+            <i class="bi bi-credit-card me-1"></i>
+            IR A PAGAR
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WhatsApp flotante -->
+  <a href="https://wa.me/5492215917409?text=Hola!%20Quiero%20consultar%20por%20las%20entradas"
+     target="_blank" rel="noopener"
+     title="Consultanos por WhatsApp"
+     aria-label="Consultanos por WhatsApp"
+     class="whatsapp-float">
+    <i class="bi bi-whatsapp" aria-hidden="true"></i>
+  </a>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- App JS -->
+  <script src="/assets/js/app.js"></script>
+</body>
+</html>

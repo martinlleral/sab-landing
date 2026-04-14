@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lector QR — SAB Backoffice</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/backoffice/assets/css/bo.css">
+  <style>
+    #reader {
+      width: 100%;
+      max-width: 420px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 2px solid #2a2a2a;
+      background: #0a0a0a;
+    }
+    #reader video { border-radius: 8px; }
+
+    .scan-result {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 10px;
+      border-left: 4px solid;
+      animation: fadeIn .25s ease;
+    }
+    .scan-result.ok    { background: #0d2b1a; border-color: #48bb78; }
+    .scan-result.error { background: #2b0d0d; border-color: #fc8181; }
+    .scan-result.warn  { background: #2b1e0d; border-color: #f6c90e; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; } }
+
+    .counter-box {
+      background: #1e1e1e;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 14px 20px;
+      text-align: center;
+    }
+    .counter-num { font-size: 2.2rem; font-weight: 700; }
+
+    .scan-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #1e1e1e;
+      font-size: 0.875rem;
+    }
+    .scan-row:last-child { border-bottom: none; }
+    .scan-icon { font-size: 1.3rem; width: 28px; text-align: center; flex-shrink: 0; }
+    .scan-info { flex: 1; min-width: 0; }
+    .scan-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .scan-meta { color: #888; font-size: 0.78rem; }
+    .scan-time { color: #666; font-size: 0.75rem; flex-shrink: 0; }
+
+    .flash-ok    { animation: flashGreen .5s ease; }
+    .flash-error { animation: flashRed .5s ease; }
+    @keyframes flashGreen { 0%,100% { background:transparent; } 40% { background: rgba(72,187,120,.25); } }
+    @keyframes flashRed   { 0%,100% { background:transparent; } 40% { background: rgba(252,129,129,.25); } }
+  </style>
+</head>
+<body>
+  <div class="bo-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="bo-sidebar" id="sidebar">
+      <div class="bo-sidebar-brand">S.A. <span>BOLEROS</span></div>
+      <nav class="bo-nav">
+        <a href="/backoffice/dashboard.html" class="bo-nav-link">
+          <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <a href="/backoffice/home-cms.html" class="bo-nav-link">
+          <i class="bi bi-house-gear"></i> Home CMS
+        </a>
+        <a href="/backoffice/eventos-lista.html" class="bo-nav-link">
+          <i class="bi bi-calendar-event"></i> Eventos
+        </a>
+        <a href="/backoffice/lector-qr.html" class="bo-nav-link active">
+          <i class="bi bi-qr-code-scan"></i> Lector QR
+        </a>
+        <div class="bo-nav-divider"></div>
+        <a href="#" class="bo-nav-link text-danger" onclick="handleLogout()">
+          <i class="bi bi-box-arrow-right"></i> Cerrar sesión
+        </a>
+      </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="bo-main">
+      <header class="bo-topbar">
+        <button class="bo-sidebar-toggle" onclick="toggleSidebar()">
+          <i class="bi bi-list fs-4"></i>
+        </button>
+        <h1 class="bo-page-title">Lector de QRs</h1>
+        <div class="bo-topbar-user" id="topbar-user">—</div>
+      </header>
+
+      <div class="bo-content">
+
+        <!-- Selector de evento -->
+        <div class="bo-card mb-4">
+          <div class="bo-card-body">
+            <div class="row align-items-end g-3">
+              <div class="col-md-6">
+                <label class="bo-form-label" for="sel-evento">Evento activo</label>
+                <select id="sel-evento" class="bo-form-select" onchange="cambiarEvento()">
+                  <option value="">— Seleccioná un evento —</option>
+                </select>
+              </div>
+              <div class="col-auto">
+                <div class="counter-box">
+                  <div class="counter-num" id="cnt-validadas" style="color:#48bb78;">0</div>
+                  <div style="font-size:.7rem;color:#888;letter-spacing:1px;text-transform:uppercase;">Validadas</div>
+                </div>
+              </div>
+              <div class="col-auto">
+                <div class="counter-box">
+                  <div class="counter-num" id="cnt-total" style="color:#f6c90e;">0</div>
+                  <div style="font-size:.7rem;color:#888;letter-spacing:1px;text-transform:uppercase;">Total entradas</div>
+                </div>
+              </div>
+              <div class="col-auto">
+                <div class="counter-box">
+                  <div class="counter-num" id="cnt-pendientes" style="color:#888;">0</div>
+                  <div style="font-size:.7rem;color:#888;letter-spacing:1px;text-transform:uppercase;">Pendientes</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4">
+
+          <!-- Columna cámara + input manual -->
+          <div class="col-lg-5">
+
+            <div class="bo-card mb-3">
+              <div class="bo-card-header">
+                <h5 class="bo-card-title"><i class="bi bi-camera me-2"></i>Cámara</h5>
+                <div class="d-flex gap-2">
+                  <button id="btn-start" class="btn-bo-primary" onclick="iniciarCamara()" style="font-size:.8rem;padding:5px 14px;">
+                    <i class="bi bi-play-fill me-1"></i> Activar
+                  </button>
+                  <button id="btn-stop" class="btn-bo-secondary" onclick="detenerCamara()" style="font-size:.8rem;padding:5px 14px;display:none;">
+                    <i class="bi bi-stop-fill me-1"></i> Detener
+                  </button>
+                </div>
+              </div>
+              <div class="bo-card-body" style="padding:16px;">
+                <div id="reader"></div>
+                <div id="cam-placeholder" style="width:100%;max-width:420px;height:200px;background:#111;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#444;flex-direction:column;gap:8px;">
+                  <i class="bi bi-camera" style="font-size:2.5rem;"></i>
+                  <span style="font-size:.8rem;letter-spacing:1px;">ACTIVAR CÁMARA</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bo-card">
+              <div class="bo-card-header">
+                <h5 class="bo-card-title"><i class="bi bi-keyboard me-2"></i>Ingreso manual</h5>
+              </div>
+              <div class="bo-card-body">
+                <div class="d-flex gap-2">
+                  <input type="text" id="input-qr" class="bo-form-control" placeholder="Pegá o escribí el código QR..." autocomplete="off">
+                  <button class="btn-bo-primary" onclick="procesarManual()" style="white-space:nowrap;padding:8px 16px;">
+                    <i class="bi bi-check2"></i> Validar
+                  </button>
+                </div>
+                <p class="mt-2 small" style="color:#666;">Útil para lectores físicos de código de barras/QR conectados por USB.</p>
+              </div>
+            </div>
+
+            <!-- Resultado del último scan -->
+            <div id="ultimo-resultado" class="mt-3" style="display:none;"></div>
+
+          </div>
+
+          <!-- Columna historial de scans del día -->
+          <div class="col-lg-7">
+            <div class="bo-card h-100">
+              <div class="bo-card-header">
+                <h5 class="bo-card-title"><i class="bi bi-list-check me-2"></i>Historial de scans</h5>
+                <div class="d-flex gap-2 align-items-center">
+                  <span id="scanning-badge" style="display:none;background:#1a3a1a;color:#48bb78;border:1px solid #2d5a27;border-radius:999px;padding:2px 10px;font-size:.75rem;letter-spacing:1px;">
+                    ● ACTIVO
+                  </span>
+                  <button class="btn-bo-secondary" onclick="limpiarHistorial()" style="font-size:.8rem;padding:4px 10px;">
+                    <i class="bi bi-trash me-1"></i> Limpiar
+                  </button>
+                </div>
+              </div>
+
+              <div id="historial-lista" style="max-height:520px;overflow-y:auto;">
+                <div id="historial-empty" style="padding:40px;text-align:center;color:#555;">
+                  <i class="bi bi-qr-code" style="font-size:2rem;display:block;margin-bottom:8px;"></i>
+                  Comenzá a escanear entradas
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="/backoffice/assets/js/bo.js"></script>
+  <script>
+    let scanner = null;
+    let eventoActivo = null;
+    let procesando = false;
+    let historial = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+      cargarEventos();
+      document.getElementById('input-qr').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') procesarManual();
+      });
+    });
+
+    // ─── Eventos ──────────────────────────────────────
+    async function cargarEventos() {
+      try {
+        const data = await boFetch('/api/admin/eventos?limit=50');
+        const sel = document.getElementById('sel-evento');
+        (data.eventos || []).forEach((ev) => {
+          const opt = document.createElement('option');
+          opt.value = ev.id;
+          opt.textContent = `${ev.nombre} — ${boFecha(ev.fecha)}`;
+          sel.appendChild(opt);
+        });
+      } catch (err) {
+        boAlert('Error al cargar eventos: ' + err.message);
+      }
+    }
+
+    async function cambiarEvento() {
+      const id = parseInt(document.getElementById('sel-evento').value);
+      if (!id) { eventoActivo = null; actualizarContadores(0, 0); return; }
+      try {
+        eventoActivo = await boFetch(`/api/admin/eventos/${id}`);
+        await refrescarContadores();
+      } catch (err) {
+        boAlert('Error al cargar evento: ' + err.message);
+      }
+    }
+
+    async function refrescarContadores() {
+      if (!eventoActivo) return;
+      try {
+        const data = await boFetch(`/api/admin/compras?eventoId=${eventoActivo.id}&limit=500`);
+        const compras = data.compras || [];
+        const todasEntradas = compras
+          .filter(c => c.mpEstado === 'approved')
+          .reduce((s, c) => s + c.cantidadEntradas, 0);
+
+        // Contar validadas consultando el evento completo
+        const eventoData = await boFetch(`/api/admin/eventos/${eventoActivo.id}`);
+        // Aproximación: contar desde compras aprobadas
+        // Para conteo exacto, consultamos todas las entradas validadas vía compras
+        let validadas = 0;
+        for (const compra of compras.filter(c => c.mpEstado === 'approved')) {
+          const c = await boFetch(`/api/admin/compras/${compra.id}`);
+          validadas += (c.entradas || []).filter(e => e.validada).length;
+        }
+        actualizarContadores(validadas, todasEntradas);
+      } catch (_) {}
+    }
+
+    function actualizarContadores(validadas, total) {
+      document.getElementById('cnt-validadas').textContent = validadas;
+      document.getElementById('cnt-total').textContent = total;
+      document.getElementById('cnt-pendientes').textContent = Math.max(0, total - validadas);
+    }
+
+    // ─── Cámara ───────────────────────────────────────
+    async function iniciarCamara() {
+      if (scanner) return;
+      document.getElementById('cam-placeholder').style.display = 'none';
+      document.getElementById('reader').style.display = 'block';
+      document.getElementById('btn-start').style.display = 'none';
+      document.getElementById('btn-stop').style.display = '';
+      document.getElementById('scanning-badge').style.display = '';
+
+      scanner = new Html5Qrcode('reader');
+      try {
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 260, height: 260 } },
+          onQRScanned,
+          () => {}
+        );
+      } catch (err) {
+        // Fallback: try any camera
+        try {
+          await scanner.start(
+            { facingMode: 'user' },
+            { fps: 10, qrbox: { width: 260, height: 260 } },
+            onQRScanned,
+            () => {}
+          );
+        } catch (err2) {
+          boAlert('No se pudo acceder a la cámara: ' + err2.message);
+          await detenerCamara();
+        }
+      }
+    }
+
+    async function detenerCamara() {
+      if (scanner) {
+        try { await scanner.stop(); } catch (_) {}
+        scanner.clear();
+        scanner = null;
+      }
+      document.getElementById('reader').style.display = 'none';
+      document.getElementById('cam-placeholder').style.display = 'flex';
+      document.getElementById('btn-start').style.display = '';
+      document.getElementById('btn-stop').style.display = 'none';
+      document.getElementById('scanning-badge').style.display = 'none';
+    }
+
+    // ─── Procesamiento QR ─────────────────────────────
+    async function onQRScanned(codigoQR) {
+      if (procesando) return;
+      // Evitar re-escanear el mismo código en 3 segundos
+      if (historial.length && historial[0].codigo === codigoQR) {
+        const last = historial[0];
+        if (Date.now() - last.ts < 3000) return;
+      }
+      await procesarCodigo(codigoQR);
+    }
+
+    async function procesarManual() {
+      const val = document.getElementById('input-qr').value.trim();
+      if (!val) return;
+      document.getElementById('input-qr').value = '';
+      await procesarCodigo(val);
+    }
+
+    async function procesarCodigo(codigoQR) {
+      if (procesando) return;
+      procesando = true;
+
+      try {
+        const res = await fetch('/api/admin/entradas/validar-qr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ codigoQR }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.valida) {
+          mostrarResultado('ok', data.entrada);
+          agregarAlHistorial('ok', data.entrada, codigoQR);
+          actualizarContadorIncremento();
+          vibracion([100]);
+        } else if (data.codigo === 'ALREADY_USED') {
+          mostrarResultado('warn', data.entrada, 'Entrada ya utilizada');
+          agregarAlHistorial('warn', data.entrada, codigoQR);
+          vibracion([80, 40, 80]);
+        } else if (data.codigo === 'NOT_FOUND') {
+          mostrarResultadoError('QR no reconocido — código inválido');
+          agregarAlHistorialError('error', codigoQR, 'QR no reconocido');
+          vibracion([200]);
+        } else if (data.codigo === 'NOT_PAID') {
+          mostrarResultadoError('Compra no aprobada — pago pendiente');
+          agregarAlHistorialError('error', codigoQR, 'Compra sin pago');
+          vibracion([200]);
+        } else {
+          mostrarResultadoError(data.error || 'Error desconocido');
+          agregarAlHistorialError('error', codigoQR, data.error || 'Error');
+          vibracion([200]);
+        }
+      } catch (err) {
+        mostrarResultadoError('Error de conexión: ' + err.message);
+      } finally {
+        procesando = false;
+      }
+    }
+
+    // ─── UI Resultado ─────────────────────────────────
+    function mostrarResultado(tipo, entrada, msgExtra) {
+      const c = entrada.compra;
+      const ev = c.evento;
+      const wrap = document.getElementById('ultimo-resultado');
+      wrap.style.display = 'block';
+      wrap.className = '';
+
+      const icono = tipo === 'ok' ? '✅' : '⚠️';
+      const titulo = tipo === 'ok' ? 'ENTRADA VÁLIDA' : 'ENTRADA YA USADA';
+      const color = tipo === 'ok' ? '#48bb78' : '#f6c90e';
+      const bg = tipo === 'ok' ? '#0d2b1a' : '#2b1e0d';
+      const border = tipo === 'ok' ? '#2d5a27' : '#6b4c00';
+
+      wrap.innerHTML = `
+        <div style="background:${bg};border:1px solid ${border};border-radius:10px;padding:18px 20px;" class="${tipo === 'ok' ? 'flash-ok' : 'flash-error'}">
+          <div style="font-size:1.5rem;font-weight:800;color:${color};letter-spacing:2px;margin-bottom:8px;">${icono} ${titulo}</div>
+          ${msgExtra ? `<div style="color:#f6c90e;font-size:.85rem;margin-bottom:8px;">${msgExtra}</div>` : ''}
+          <div style="font-size:1rem;font-weight:600;">${c.nombre} ${c.apellido}</div>
+          <div style="color:#888;font-size:.85rem;">${c.email}</div>
+          <div style="color:#aaa;font-size:.82rem;margin-top:6px;">📅 ${ev.nombre}</div>
+          <div style="color:#666;font-size:.78rem;margin-top:4px;">
+            Compra #${c.id} · Entrada #${entrada.id}
+            ${entrada.validadaAt ? `· Validada ${boFechaHora(entrada.validadaAt)}` : ''}
+          </div>
+        </div>`;
+
+      // Auto-limpiar después de 6s si fue ok
+      if (tipo === 'ok') setTimeout(() => { wrap.style.display = 'none'; }, 6000);
+    }
+
+    function mostrarResultadoError(msg) {
+      const wrap = document.getElementById('ultimo-resultado');
+      wrap.style.display = 'block';
+      wrap.innerHTML = `
+        <div style="background:#2b0d0d;border:1px solid #6b0d0d;border-radius:10px;padding:18px 20px;" class="flash-error">
+          <div style="font-size:1.3rem;font-weight:800;color:#fc8181;letter-spacing:2px;">❌ INVÁLIDO</div>
+          <div style="color:#fc8181;font-size:.9rem;margin-top:6px;">${msg}</div>
+        </div>`;
+      setTimeout(() => { wrap.style.display = 'none'; }, 5000);
+    }
+
+    // ─── Historial ────────────────────────────────────
+    function agregarAlHistorial(tipo, entrada, codigoQR) {
+      const c = entrada.compra;
+      const item = {
+        tipo, codigo: codigoQR, ts: Date.now(),
+        nombre: `${c.nombre} ${c.apellido}`,
+        email: c.email,
+        compraId: c.id,
+        entradaId: entrada.id,
+        hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      };
+      historial.unshift(item);
+      renderHistorial();
+    }
+
+    function agregarAlHistorialError(tipo, codigoQR, msg) {
+      const item = {
+        tipo, codigo: codigoQR, ts: Date.now(),
+        nombre: msg,
+        email: '',
+        hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      };
+      historial.unshift(item);
+      renderHistorial();
+    }
+
+    function renderHistorial() {
+      const lista = document.getElementById('historial-lista');
+      const empty = document.getElementById('historial-empty');
+
+      if (!historial.length) {
+        if (empty) empty.style.display = 'block';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+
+      const iconos = { ok: '✅', warn: '⚠️', error: '❌' };
+      lista.innerHTML = historial.map((item) => `
+        <div class="scan-row">
+          <div class="scan-icon">${iconos[item.tipo] || '•'}</div>
+          <div class="scan-info">
+            <div class="scan-name">${item.nombre}</div>
+            <div class="scan-meta">
+              ${item.email ? item.email + ' · ' : ''}
+              ${item.entradaId ? `Entrada #${item.entradaId} · Compra #${item.compraId}` : ''}
+            </div>
+          </div>
+          <div class="scan-time">${item.hora}</div>
+        </div>`
+      ).join('');
+    }
+
+    function limpiarHistorial() {
+      historial = [];
+      const lista = document.getElementById('historial-lista');
+      lista.innerHTML = `<div id="historial-empty" style="padding:40px;text-align:center;color:#555;">
+        <i class="bi bi-qr-code" style="font-size:2rem;display:block;margin-bottom:8px;"></i>
+        Comenzá a escanear entradas
+      </div>`;
+    }
+
+    function actualizarContadorIncremento() {
+      const el = document.getElementById('cnt-validadas');
+      const pend = document.getElementById('cnt-pendientes');
+      const v = parseInt(el.textContent || '0') + 1;
+      el.textContent = v;
+      const t = parseInt(document.getElementById('cnt-total').textContent || '0');
+      pend.textContent = Math.max(0, t - v);
+    }
+
+    function vibracion(patron) {
+      if (navigator.vibrate) navigator.vibrate(patron);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+# Secrets — NUNCA incluir en la imagen
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Git
+.git
+.gitignore
+.gitlab-ci.yml
+
+# Dependencies (se instalan en el build)
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Databases locales
+prisma/dev.db
+prisma/dev.db-journal
+prisma/prod.db
+prisma/prod.db-journal
+
+# Documentación y auditorías (no van a prod)
+docs/audit
+docs/audit/**
+docs/*.pdf
+docs/*.html
+docs/lighthouse-*
+DEPLOY.md
+README.md
+
+# IDE / sistema
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist
+build
+.cache

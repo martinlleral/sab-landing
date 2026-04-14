@@ -1,0 +1,75 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sab-app
+    volumes:
+      - db-data:/app/prisma
+      - uploads-data:/app/public/assets/img/uploads
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - DATABASE_URL=file:/app/prisma/prod.db
+      - SESSION_SECRET=${SESSION_SECRET}
+      - MP_ACCESS_TOKEN=${MP_ACCESS_TOKEN}
+      - MP_PUBLIC_KEY=${MP_PUBLIC_KEY}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Sindicato Argentino de Boleros}
+      - BASE_URL=${BASE_URL:-https://sindicatoargentinodeboleros.com.ar}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_PASS=${ADMIN_PASS:-}
+      - PORT=3000
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - web
+
+  nginx:
+    image: nginx:alpine
+    container_name: sab-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/app.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - web
+
+volumes:
+  db-data:
+  uploads-data:
+
+networks:
+  web:
+    driver: bridge

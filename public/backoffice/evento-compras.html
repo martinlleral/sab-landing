@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Compras del Evento — SAB Backoffice</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/backoffice/assets/css/bo.css">
+</head>
+<body>
+  <div class="bo-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="bo-sidebar" id="sidebar">
+      <div class="bo-sidebar-brand">S.A. <span>BOLEROS</span></div>
+      <nav class="bo-nav">
+        <a href="/backoffice/dashboard.html" class="bo-nav-link">
+          <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <a href="/backoffice/home-cms.html" class="bo-nav-link">
+          <i class="bi bi-house-gear"></i> Home CMS
+        </a>
+        <a href="/backoffice/eventos-lista.html" class="bo-nav-link active">
+          <i class="bi bi-calendar-event"></i> Eventos
+        </a>
+        <a href="/backoffice/lector-qr.html" class="bo-nav-link">
+          <i class="bi bi-qr-code-scan"></i> Lector QR
+        </a>
+        <div class="bo-nav-divider"></div>
+        <a href="#" class="bo-nav-link text-danger" onclick="handleLogout()">
+          <i class="bi bi-box-arrow-right"></i> Cerrar sesión
+        </a>
+      </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="bo-main">
+      <header class="bo-topbar">
+        <button class="bo-sidebar-toggle" onclick="toggleSidebar()">
+          <i class="bi bi-list fs-4"></i>
+        </button>
+        <h1 class="bo-page-title" id="page-title">Compras del Evento</h1>
+        <div class="bo-topbar-user" id="topbar-user">—</div>
+      </header>
+
+      <div class="bo-content">
+
+        <div id="bo-alert" class="bo-alert"></div>
+
+        <!-- Info del evento -->
+        <div class="bo-card mb-4" id="evento-info-card" style="display:none;">
+          <div class="bo-card-body">
+            <div class="row align-items-center g-3">
+              <div class="col-auto">
+                <img id="evento-flyer" src="" alt="Flyer"
+                  style="width:80px; height:80px; object-fit:cover; border-radius:8px; border:1px solid #2a2a2a; display:none;">
+                <div id="evento-flyer-placeholder"
+                  style="width:80px; height:80px; background:#1e1e1e; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:2rem;">
+                  🎵
+                </div>
+              </div>
+              <div class="col">
+                <div id="evento-nombre" style="font-size:1.2rem; font-weight:700; letter-spacing:1px; text-transform:uppercase;"></div>
+                <div id="evento-fecha" style="color:#888; font-size:0.9rem; margin-top:4px;"></div>
+                <div id="evento-precio" style="color:#e63946; font-size:1rem; font-weight:600; margin-top:4px;"></div>
+              </div>
+              <div class="col-auto">
+                <div style="text-align:center; background:#1e1e1e; border:1px solid #2a2a2a; border-radius:8px; padding:12px 20px;">
+                  <div id="stat-vendidas" style="font-size:1.8rem; font-weight:700; color:#f6c90e;">—</div>
+                  <div style="font-size:0.75rem; color:#888; letter-spacing:1px; text-transform:uppercase;">Entradas vendidas</div>
+                </div>
+              </div>
+              <div class="col-auto">
+                <div style="text-align:center; background:#1e1e1e; border:1px solid #2a2a2a; border-radius:8px; padding:12px 20px;">
+                  <div id="stat-recaudado" style="font-size:1.8rem; font-weight:700; color:#48bb78;">—</div>
+                  <div style="font-size:0.75rem; color:#888; letter-spacing:1px; text-transform:uppercase;">Recaudado</div>
+                </div>
+              </div>
+              <div class="col-auto">
+                <a id="btn-editar-evento" href="#" class="btn-bo-secondary">
+                  <i class="bi bi-pencil me-1"></i> Editar evento
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de compras -->
+        <div class="bo-card">
+          <div class="bo-card-header">
+            <h5 class="bo-card-title"><i class="bi bi-bag-check me-2"></i>Listado de Compras</h5>
+            <div class="d-flex gap-2 align-items-center">
+              <span id="filtro-estado-label" style="font-size:0.8rem; color:#888;">Filtrar:</span>
+              <select id="filtro-estado" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;" onchange="aplicarFiltro()">
+                <option value="">Todos</option>
+                <option value="approved">Aprobados</option>
+                <option value="pending">Pendientes</option>
+                <option value="rejected">Rechazados</option>
+              </select>
+              <button class="btn-bo-secondary" onclick="loadCompras(currentPage)" title="Recargar">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+              <button class="btn-bo-secondary" style="color:#fc8181; border-color:#fc8181;" onclick="eliminarPendientes()" title="Eliminar todas las compras pendientes">
+                <i class="bi bi-trash me-1"></i> Limpiar pendientes
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="bo-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Comprador</th>
+                  <th>Email</th>
+                  <th>Teléfono</th>
+                  <th>Cant.</th>
+                  <th>Total</th>
+                  <th>Estado MP</th>
+                  <th>Fecha</th>
+                  <th>Entradas</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="compras-body">
+                <tr><td colspan="9" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="bo-pagination" id="paginacion"></div>
+        </div>
+
+        <!-- Modal de entradas de una compra -->
+        <div id="modal-entradas" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1050; align-items:center; justify-content:center;">
+          <div style="background:#141414; border:1px solid #2a2a2a; border-radius:10px; max-width:600px; width:90%; max-height:80vh; overflow-y:auto;">
+            <div style="padding:16px 20px; border-bottom:1px solid #2a2a2a; display:flex; align-items:center; justify-content:space-between;">
+              <h5 style="margin:0; font-size:0.95rem; text-transform:uppercase; letter-spacing:1px;">Entradas de la Compra</h5>
+              <button onclick="cerrarModal()" style="background:none; border:none; color:#888; font-size:1.5rem; cursor:pointer; line-height:1;">&times;</button>
+            </div>
+            <div id="modal-entradas-content" style="padding:20px;"></div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/backoffice/assets/js/bo.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const eventoId = parseInt(params.get('id'));
+    let currentPage = 1;
+    let todasLasCompras = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!eventoId) {
+        boAlert('No se especificó un evento. Volvé a la lista.', 'error');
+        return;
+      }
+      loadEvento();
+      loadCompras(1);
+    });
+
+    async function loadEvento() {
+      try {
+        const ev = await boFetch(`/api/admin/eventos/${eventoId}`);
+        document.getElementById('page-title').textContent = `Compras: ${ev.nombre}`;
+        document.getElementById('evento-nombre').textContent = ev.nombre;
+        document.getElementById('evento-fecha').textContent =
+          `📅 ${boFecha(ev.fecha)}  ⏰ ${ev.hora}${ev.invitado ? '  🎤 ' + ev.invitado : ''}`;
+        document.getElementById('evento-precio').textContent = `Precio: ${boPrecio(ev.precioEntrada)} por entrada`;
+
+        if (ev.flyerUrl) {
+          const img = document.getElementById('evento-flyer');
+          img.src = ev.flyerUrl;
+          img.style.display = 'block';
+          document.getElementById('evento-flyer-placeholder').style.display = 'none';
+        }
+
+        document.getElementById('btn-editar-evento').href = `/backoffice/evento-detalle.html?id=${ev.id}`;
+        document.getElementById('evento-info-card').style.display = 'block';
+      } catch (err) {
+        boAlert('Error al cargar el evento: ' + err.message);
+      }
+    }
+
+    async function loadCompras(page) {
+      currentPage = page;
+      try {
+        const data = await boFetch(`/api/admin/compras?eventoId=${eventoId}&page=${page}&limit=20`);
+        todasLasCompras = data.compras || [];
+        aplicarFiltro();
+        calcularStats(data.compras || []);
+        buildPagination(document.getElementById('paginacion'), data.page, data.totalPages, loadCompras);
+      } catch (err) {
+        document.getElementById('compras-body').innerHTML =
+          `<tr><td colspan="9" class="text-center py-4" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    function calcularStats(compras) {
+      const aprobadas = compras.filter(c => c.mpEstado === 'approved');
+      const totalEntradas = aprobadas.reduce((s, c) => s + c.cantidadEntradas, 0);
+      const totalRecaudado = aprobadas.reduce((s, c) => s + c.totalPagado, 0);
+      document.getElementById('stat-vendidas').textContent = totalEntradas;
+      document.getElementById('stat-recaudado').textContent = boPrecio(totalRecaudado);
+    }
+
+    function aplicarFiltro() {
+      const filtro = document.getElementById('filtro-estado').value;
+      const compras = filtro
+        ? todasLasCompras.filter(c => c.mpEstado === filtro)
+        : todasLasCompras;
+      renderTabla(compras);
+    }
+
+    function renderTabla(compras) {
+      const tbody = document.getElementById('compras-body');
+      if (!compras.length) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4" style="color:#666;">No hay compras con este filtro</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = compras.map((c) => `
+        <tr>
+          <td style="color:#666;">${c.id}</td>
+          <td style="font-weight:500;">${c.nombre} ${c.apellido}</td>
+          <td style="color:#888; font-size:0.85rem;">${c.email}</td>
+          <td style="color:#888; font-size:0.85rem;">${c.telefono || '—'}</td>
+          <td style="text-align:center;">
+            <span style="font-weight:700; font-size:1.1rem; color:#f6c90e;">${c.cantidadEntradas}</span>
+          </td>
+          <td style="font-weight:600;">${boPrecio(c.totalPagado)}</td>
+          <td><span class="badge-estado ${c.mpEstado}">${c.mpEstado}</span></td>
+          <td style="color:#888; font-size:0.85rem;">${boFechaHora(c.createdAt)}</td>
+          <td>
+            ${c.mpEstado === 'approved'
+              ? `<button class="btn-bo-secondary" onclick="verEntradas(${c.id})" title="Ver entradas QR">
+                   <i class="bi bi-qr-code"></i> Ver QRs
+                 </button>`
+              : '<span style="color:#555; font-size:0.8rem;">—</span>'
+            }
+          </td>
+          <td>
+            ${c.mpEstado !== 'approved'
+              ? `<button class="btn-bo-secondary" style="color:#fc8181; border-color:#fc8181; padding:4px 8px; font-size:0.8rem;" onclick="eliminarCompra(${c.id})" title="Eliminar compra">
+                   <i class="bi bi-trash"></i>
+                 </button>`
+              : ''
+            }
+          </td>
+        </tr>`
+      ).join('');
+    }
+
+    async function verEntradas(compraId) {
+      const modal = document.getElementById('modal-entradas');
+      const content = document.getElementById('modal-entradas-content');
+      content.innerHTML = '<p style="color:#888; text-align:center;">Cargando entradas...</p>';
+      modal.style.display = 'flex';
+
+      try {
+        const compra = await boFetch(`/api/admin/compras/${compraId}`);
+        const entradas = compra.entradas || [];
+
+        if (!entradas.length) {
+          content.innerHTML = '<p style="color:#888; text-align:center;">Sin entradas generadas aún.</p>';
+          return;
+        }
+
+        content.innerHTML = `
+          <p style="color:#888; margin-bottom:16px; font-size:0.9rem;">
+            Compra #${compra.id} — ${compra.nombre} ${compra.apellido} — ${compra.email}
+          </p>
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:12px;">
+            ${entradas.map((e, i) => `
+              <div style="background:#1e1e1e; border:1px solid ${e.validada ? '#2d5a27' : '#2a2a2a'}; border-radius:8px; padding:12px; text-align:center;">
+                <div style="font-size:0.75rem; color:#888; margin-bottom:6px;">Entrada #${i + 1}</div>
+                ${e.qrImageUrl
+                  ? `<img src="${e.qrImageUrl}" alt="QR" style="width:120px; height:120px; border-radius:4px;">`
+                  : '<div style="width:120px;height:120px;background:#111;border-radius:4px;margin:0 auto;display:flex;align-items:center;justify-content:center;color:#555;">Sin QR</div>'
+                }
+                <div style="margin-top:8px;">
+                  <span class="badge-estado ${e.validada ? 'approved' : 'pending'}" style="font-size:0.7rem;">
+                    ${e.validada ? '✓ Validada' : 'Pendiente'}
+                  </span>
+                </div>
+                ${e.validada && e.validadaAt
+                  ? `<div style="font-size:0.7rem; color:#555; margin-top:4px;">${boFechaHora(e.validadaAt)}</div>`
+                  : ''
+                }
+                ${!e.validada
+                  ? `<button onclick="validarEntrada(${e.id}, this)" class="btn-bo-secondary" style="margin-top:8px; font-size:0.75rem; padding:4px 10px;">
+                       Validar
+                     </button>`
+                  : ''
+                }
+              </div>
+            `).join('')}
+          </div>`;
+      } catch (err) {
+        content.innerHTML = `<p style="color:#fc8181;">Error: ${err.message}</p>`;
+      }
+    }
+
+    async function validarEntrada(entradaId, btn) {
+      if (!boConfirm('¿Marcar esta entrada como validada?')) return;
+      btn.disabled = true;
+      try {
+        await boFetch(`/api/admin/entradas/${entradaId}/validar`, { method: 'PUT' });
+        btn.closest('div').querySelector('.badge-estado').className = 'badge-estado approved';
+        btn.closest('div').querySelector('.badge-estado').textContent = '✓ Validada';
+        btn.remove();
+      } catch (err) {
+        boAlert('Error al validar: ' + err.message);
+        btn.disabled = false;
+      }
+    }
+
+    async function eliminarCompra(id) {
+      if (!confirm('¿Eliminar esta compra pendiente? Esta acción no se puede deshacer.')) return;
+      try {
+        await boFetch(`/api/admin/compras/${id}`, { method: 'DELETE' });
+        boAlert('Compra eliminada correctamente', 'success');
+        loadCompras(currentPage);
+      } catch (err) {
+        boAlert('Error al eliminar: ' + err.message);
+      }
+    }
+
+    async function eliminarPendientes() {
+      const pendientes = todasLasCompras.filter(c => c.mpEstado !== 'approved');
+      if (!pendientes.length) {
+        boAlert('No hay compras pendientes para eliminar', 'info');
+        return;
+      }
+      if (!confirm(`¿Eliminar ${pendientes.length} compra(s) no aprobadas? Esta acción no se puede deshacer.`)) return;
+      try {
+        const data = await boFetch(`/api/admin/compras/pendientes?eventoId=${eventoId}`, { method: 'DELETE' });
+        boAlert(`${data.eliminadas} compra(s) eliminada(s) correctamente`, 'success');
+        loadCompras(currentPage);
+      } catch (err) {
+        boAlert('Error al eliminar pendientes: ' + err.message);
+      }
+    }
+
+    function cerrarModal() {
+      document.getElementById('modal-entradas').style.display = 'none';
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') cerrarModal();
+    });
+  </script>
+</body>
+</html>

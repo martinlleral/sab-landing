@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eventos — SAB Backoffice</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/backoffice/assets/css/bo.css">
+</head>
+<body>
+  <div class="bo-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="bo-sidebar" id="sidebar">
+      <div class="bo-sidebar-brand">S.A. <span>BOLEROS</span></div>
+      <nav class="bo-nav">
+        <a href="/backoffice/dashboard.html" class="bo-nav-link">
+          <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <a href="/backoffice/home-cms.html" class="bo-nav-link">
+          <i class="bi bi-house-gear"></i> Home CMS
+        </a>
+        <a href="/backoffice/eventos-lista.html" class="bo-nav-link active">
+          <i class="bi bi-calendar-event"></i> Eventos
+        </a>
+        <a href="/backoffice/lector-qr.html" class="bo-nav-link">
+          <i class="bi bi-qr-code-scan"></i> Lector QR
+        </a>
+        <div class="bo-nav-divider"></div>
+        <a href="#" class="bo-nav-link text-danger" onclick="handleLogout()">
+          <i class="bi bi-box-arrow-right"></i> Cerrar sesión
+        </a>
+      </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="bo-main">
+      <header class="bo-topbar">
+        <button class="bo-sidebar-toggle" onclick="toggleSidebar()">
+          <i class="bi bi-list fs-4"></i>
+        </button>
+        <h1 class="bo-page-title">Eventos Pasados</h1>
+        <div class="bo-topbar-user" id="topbar-user">—</div>
+      </header>
+
+      <div class="bo-content">
+
+        <div id="bo-alert" class="bo-alert"></div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <p style="color:#888; font-size:0.9rem; margin:0;">
+            Lista de eventos pasados. Para crear uno nuevo, usá el botón de la derecha.
+          </p>
+          <a href="/backoffice/evento-detalle.html?modo=nuevo" class="btn-bo-primary">
+            <i class="bi bi-plus-lg me-1"></i> Nuevo Evento
+          </a>
+        </div>
+
+        <div class="bo-card">
+          <div class="bo-card-header">
+            <h5 class="bo-card-title">Todos los Eventos</h5>
+            <div class="d-flex gap-2">
+              <button class="btn-bo-secondary" onclick="loadEventos(currentPage)" title="Actualizar">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="bo-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Flyer</th>
+                  <th>Nombre</th>
+                  <th>Fecha</th>
+                  <th>Precio</th>
+                  <th>Vendidas</th>
+                  <th>Publicado</th>
+                  <th>Destacado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="eventos-body">
+                <tr><td colspan="9" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="bo-pagination" id="paginacion"></div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/backoffice/assets/js/bo.js"></script>
+  <script>
+    let currentPage = 1;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadEventos(1);
+    });
+
+    async function loadEventos(page) {
+      currentPage = page;
+      try {
+        const data = await boFetch(`/api/admin/eventos?page=${page}&limit=15`);
+        renderTabla(data.eventos);
+        buildPagination(
+          document.getElementById('paginacion'),
+          data.page,
+          data.totalPages,
+          loadEventos
+        );
+      } catch (err) {
+        document.getElementById('eventos-body').innerHTML =
+          `<tr><td colspan="9" class="text-center py-4" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    function renderTabla(eventos) {
+      const tbody = document.getElementById('eventos-body');
+      if (!eventos || !eventos.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4" style="color:#666;">No hay eventos registrados</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = eventos.map((ev) => `
+        <tr>
+          <td style="color:#666;">${ev.id}</td>
+          <td>
+            ${ev.flyerUrl
+              ? `<img src="${ev.flyerUrl}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid #2a2a2a;">`
+              : `<div style="width:40px;height:40px;background:#1e1e1e;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🎵</div>`
+            }
+          </td>
+          <td style="font-weight:500;">${ev.nombre}</td>
+          <td style="color:#888;">${boFecha(ev.fecha)}</td>
+          <td>${boPrecio(ev.precioEntrada)}</td>
+          <td>
+            <span style="color:#f6c90e;">${ev.cantidadVendida}</span>
+            <span style="color:#555;"> / ${ev.cantidadDisponible}</span>
+          </td>
+          <td>
+            <span class="badge-estado ${ev.estaPublicado ? 'approved' : 'rejected'}">
+              ${ev.estaPublicado ? 'Sí' : 'No'}
+            </span>
+          </td>
+          <td>
+            <span class="badge-estado ${ev.esDestacado ? 'approved' : 'pending'}">
+              ${ev.esDestacado ? 'Sí' : 'No'}
+            </span>
+          </td>
+          <td>
+            <div class="d-flex gap-2 flex-wrap">
+              <a href="/backoffice/evento-detalle.html?id=${ev.id}" class="btn-bo-secondary" title="Editar evento">
+                <i class="bi bi-pencil"></i> Editar
+              </a>
+              <a href="/backoffice/evento-compras.html?id=${ev.id}" class="btn-bo-secondary" style="color:#f6c90e; border-color:#f6c90e30;" title="Ver compras">
+                <i class="bi bi-bag-check"></i> Compras
+              </a>
+              <button class="btn-bo-danger" onclick="eliminarEvento(${ev.id}, '${ev.nombre}')" title="Eliminar">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function eliminarEvento(id, nombre) {
+      if (!boConfirm(`¿Eliminar el evento "${nombre}"? Esta acción no se puede deshacer.`)) return;
+
+      try {
+        await boFetch(`/api/admin/eventos/${id}`, { method: 'DELETE' });
+        boAlert(`✅ Evento eliminado correctamente`, 'success');
+        loadEventos(currentPage);
+      } catch (err) {
+        boAlert('Error al eliminar: ' + err.message);
+      }
+    }
+  </script>
+</body>
+</html>

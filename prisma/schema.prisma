@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Home {
+  id          Int      @id @default(autoincrement())
+  slider1Url  String   @default("")
+  slider2Url  String   @default("")
+  slider3Url  String   @default("")
+  textoEvento String   @default("")
+  youtubeUrl  String   @default("")
+  updatedAt   DateTime @updatedAt
+}
+
+model Evento {
+  id                 Int      @id @default(autoincrement())
+  nombre             String
+  descripcion        String
+  fecha              DateTime
+  hora               String
+  invitado           String   @default("")
+  precioEntrada      Int
+  cantidadDisponible Int
+  cantidadVendida    Int      @default(0)
+  flyerUrl           String   @default("")
+  esDestacado        Boolean  @default(false)
+  estaPublicado      Boolean  @default(false)
+  esExterno          Boolean  @default(false)
+  linkExterno        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  compras            Compra[]
+}
+
+model Compra {
+  id               Int      @id @default(autoincrement())
+  eventoId         Int
+  evento           Evento   @relation(fields: [eventoId], references: [id])
+  email            String
+  nombre           String
+  apellido         String
+  telefono         String   @default("")
+  cantidadEntradas Int
+  precioUnitario   Int
+  totalPagado      Int
+  mpPreferenciaId  String   @default("")
+  mpPagoId         String   @default("")
+  mpEstado         String   @default("pending")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  entradas         Entrada[]
+}
+
+model Entrada {
+  id         Int       @id @default(autoincrement())
+  compraId   Int
+  compra     Compra    @relation(fields: [compraId], references: [id])
+  codigoQR   String    @unique
+  qrImageUrl String
+  validada   Boolean   @default(false)
+  validadaAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  apellido  String
+  email     String   @unique
+  telefono  String   @default("")
+  password  String
+  rol       Int      @default(2)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

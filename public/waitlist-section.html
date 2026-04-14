@@ -1,0 +1,610 @@
+<!-- ============================================
+     WAITLIST — SUMATE AL SINDICATO
+     ============================================ -->
+<style>
+  /* Waitlist Section */
+  #waitlist {
+    position: relative;
+    padding: 80px 0 60px;
+    background: linear-gradient(175deg, #0a0a0a 0%, #12090c 40%, #0a0a0a 100%);
+    overflow: hidden;
+  }
+
+  #waitlist::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #c4384b44, transparent);
+  }
+
+  .wl-container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Header */
+  .wl-header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .wl-eyebrow {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #c4384b;
+    margin-bottom: 12px;
+  }
+
+  .wl-title {
+    font-family: 'Oswald', sans-serif;
+    font-size: clamp(2rem, 6vw, 3rem);
+    font-weight: 700;
+    color: #f0ece8;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    line-height: 1.1;
+    margin-bottom: 20px;
+  }
+
+  .wl-subtitle {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.95rem;
+    color: #b0aaa2;
+    line-height: 1.7;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* Form container */
+  .wl-form-wrap {
+    background: #141414;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    padding: 36px 32px;
+    position: relative;
+  }
+
+  .wl-form-wrap::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 40px;
+    right: 40px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #c4384b, transparent);
+    border-radius: 2px;
+  }
+
+  /* Form fields */
+  .wl-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 500px) {
+    .wl-row { grid-template-columns: 1fr; }
+    .wl-form-wrap { padding: 28px 20px; }
+  }
+
+  .wl-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .wl-field.full {
+    grid-column: 1 / -1;
+  }
+
+  .wl-label {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #787270;
+  }
+
+  .wl-input {
+    background: #0a0a0a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 12px 14px;
+    color: #f0ece8;
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.9rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+  }
+
+  .wl-input::placeholder {
+    color: #4a4a4a;
+  }
+
+  .wl-input:focus {
+    border-color: #c4384b;
+    box-shadow: 0 0 0 3px rgba(196, 56, 75, 0.1);
+  }
+
+  /* Radio group */
+  .wl-question {
+    margin-bottom: 24px;
+  }
+
+  .wl-question-label {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.85rem;
+    color: #f0ece8;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  .wl-radio-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .wl-radio-option {
+    position: relative;
+  }
+
+  .wl-radio-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .wl-radio-option label {
+    display: block;
+    padding: 10px 18px;
+    background: #0a0a0a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    color: #b0aaa2;
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+
+  .wl-radio-option input:checked + label {
+    border-color: #c4384b;
+    color: #f0ece8;
+    background: rgba(196, 56, 75, 0.08);
+  }
+
+  .wl-radio-option label:hover {
+    border-color: #4a4a4a;
+    color: #f0ece8;
+  }
+
+  /* Checkbox group */
+  .wl-check-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  @media (max-width: 500px) {
+    .wl-check-grid { grid-template-columns: 1fr; }
+  }
+
+  .wl-check-option {
+    position: relative;
+  }
+
+  .wl-check-option input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .wl-check-option label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: #0a0a0a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    color: #b0aaa2;
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+    line-height: 1.3;
+  }
+
+  .wl-check-option label i {
+    font-size: 16px;
+    color: #4a4a4a;
+    flex-shrink: 0;
+    transition: color 0.2s;
+  }
+
+  .wl-check-option input:checked + label {
+    border-color: #c4384b;
+    color: #f0ece8;
+    background: rgba(196, 56, 75, 0.08);
+  }
+
+  .wl-check-option input:checked + label i {
+    color: #c4384b;
+  }
+
+  .wl-check-option label:hover {
+    border-color: #4a4a4a;
+  }
+
+  /* Submit */
+  .wl-submit-wrap {
+    margin-top: 28px;
+    text-align: center;
+  }
+
+  .wl-btn {
+    display: inline-block;
+    background: var(--color-accent, #e63946);
+    color: #fff;
+    font-family: 'Oswald', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 4px;
+    padding: 14px 48px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .wl-btn:hover {
+    background: var(--color-accent-hover, #c1121f);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(196, 56, 75, 0.25);
+  }
+
+  .wl-btn:active {
+    transform: translateY(0);
+  }
+
+  .wl-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .wl-btn .spinner-border {
+    width: 16px;
+    height: 16px;
+    border-width: 2px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  .wl-note {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.72rem;
+    color: #4a4a4a;
+    margin-top: 12px;
+    text-align: center;
+  }
+
+  /* Counter */
+  .wl-counter {
+    text-align: center;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #2a2a2a;
+  }
+
+  .wl-counter-number {
+    font-family: 'Oswald', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #f0ece8;
+    line-height: 1;
+  }
+
+  .wl-counter-label {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.8rem;
+    color: #787270;
+    margin-top: 4px;
+  }
+
+  /* Success state */
+  .wl-success {
+    display: none;
+    text-align: center;
+    padding: 40px 20px;
+    animation: wlFadeIn 0.5s ease;
+  }
+
+  .wl-success.visible {
+    display: block;
+  }
+
+  .wl-success-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(196, 56, 75, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+  }
+
+  .wl-success-icon i {
+    font-size: 28px;
+    color: #c4384b;
+  }
+
+  .wl-success-title {
+    font-family: 'Oswald', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #f0ece8;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .wl-success-text {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.9rem;
+    color: #b0aaa2;
+    line-height: 1.6;
+  }
+
+  /* Error */
+  .wl-error {
+    background: rgba(196, 56, 75, 0.1);
+    border: 1px solid rgba(196, 56, 75, 0.3);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.82rem;
+    color: #e88;
+    display: none;
+  }
+
+  .wl-error.visible {
+    display: block;
+    animation: wlFadeIn 0.3s ease;
+  }
+
+  @keyframes wlFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+
+<section id="waitlist">
+  <div class="wl-container">
+
+    <!-- Header -->
+    <div class="wl-header">
+      <div class="wl-eyebrow">Próximamente</div>
+      <h2 class="wl-title">Sumate al Sindicato</h2>
+      <p class="wl-subtitle">
+        Estamos armando un sistema de socios para quienes quieran ser parte del SAB más allá de los miércoles. Dejá tus datos y sé de lxs primerxs.
+      </p>
+    </div>
+
+    <!-- Form -->
+    <div class="wl-form-wrap">
+
+      <div id="wl-error" class="wl-error"></div>
+
+      <form id="wl-form" autocomplete="on">
+        <!-- Name + Email -->
+        <div class="wl-row">
+          <div class="wl-field">
+            <label class="wl-label" for="wl-nombre">Nombre</label>
+            <input class="wl-input" type="text" id="wl-nombre" name="nombre" placeholder="Tu nombre" required autocomplete="given-name">
+          </div>
+          <div class="wl-field">
+            <label class="wl-label" for="wl-email">Email</label>
+            <input class="wl-input" type="email" id="wl-email" name="email" placeholder="tu@email.com" required autocomplete="email">
+          </div>
+        </div>
+
+        <!-- Relación -->
+        <div class="wl-question">
+          <span class="wl-question-label">¿Qué relación tenés con el SAB?</span>
+          <div class="wl-radio-group">
+            <div class="wl-radio-option">
+              <input type="radio" name="relacion" id="rel-siempre" value="siempre" required>
+              <label for="rel-siempre">Voy siempre</label>
+            </div>
+            <div class="wl-radio-option">
+              <input type="radio" name="relacion" id="rel-algunas" value="algunas_veces">
+              <label for="rel-algunas">Fui algunas veces</label>
+            </div>
+            <div class="wl-radio-option">
+              <input type="radio" name="relacion" id="rel-nunca" value="nunca">
+              <label for="rel-nunca">Todavía no fui</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Beneficios -->
+        <div class="wl-question">
+          <span class="wl-question-label">¿Qué te gustaría recibir como socio/a?</span>
+          <div class="wl-check-grid">
+            <div class="wl-check-option">
+              <input type="checkbox" id="chk-early" name="quiere_early_access">
+              <label for="chk-early">
+                <i class="bi bi-lightning-charge-fill"></i>
+                Comprar entradas antes que el público
+              </label>
+            </div>
+            <div class="wl-check-option">
+              <input type="checkbox" id="chk-desc" name="quiere_descuentos">
+              <label for="chk-desc">
+                <i class="bi bi-tag-fill"></i>
+                Descuentos en entradas
+              </label>
+            </div>
+            <div class="wl-check-option">
+              <input type="checkbox" id="chk-back" name="quiere_backstage">
+              <label for="chk-back">
+                <i class="bi bi-camera-reels-fill"></i>
+                Contenido del backstage
+              </label>
+            </div>
+            <div class="wl-check-option">
+              <input type="checkbox" id="chk-com" name="quiere_comunidad">
+              <label for="chk-com">
+                <i class="bi bi-people-fill"></i>
+                Ser parte de la comunidad
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="wl-submit-wrap">
+          <button type="submit" class="wl-btn" id="wl-btn">
+            QUIERO ESTAR
+          </button>
+          <p class="wl-note">Sin compromiso. No te vamos a cobrar nada.</p>
+        </div>
+      </form>
+
+      <!-- Success -->
+      <div id="wl-success" class="wl-success">
+        <div class="wl-success-icon">
+          <i class="bi bi-heart-fill"></i>
+        </div>
+        <div class="wl-success-title">¡Gracias por sumarte!</div>
+        <p class="wl-success-text">Te vamos a avisar cuando lancemos.<br>Mientras tanto, seguinos en nuestras redes.</p>
+      </div>
+
+      <!-- Counter -->
+      <div class="wl-counter">
+        <div class="wl-counter-number" id="wl-count">—</div>
+        <div class="wl-counter-label">personas ya se sumaron</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<script>
+(function() {
+  const SUPABASE_URL = 'https://ugvlzjbsulrkdjtapozn.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVndmx6amJzdWxya2RqdGFwb3puIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NjEzNjksImV4cCI6MjA5MTMzNzM2OX0.dB_LHqIp9ViBpy5KkbMJwRdbwTLkgbEnsdv7u_0rOkU';
+  const API = `${SUPABASE_URL}/rest/v1/waitlist_socios`;
+  const HEADERS = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=minimal'
+  };
+
+  // Load count
+  async function loadCount() {
+    try {
+      const res = await fetch(`${API}?select=id`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+      });
+      // Use HEAD with count for efficiency, fallback to array length
+      const data = await res.json();
+      const el = document.getElementById('wl-count');
+      if (el) el.textContent = data.length || 0;
+    } catch(e) {
+      console.warn('Waitlist count error:', e);
+    }
+  }
+
+  // Submit
+  const form = document.getElementById('wl-form');
+  if (!form) return;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('wl-btn');
+    const errEl = document.getElementById('wl-error');
+
+    // Disable
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> ENVIANDO...';
+    errEl.classList.remove('visible');
+
+    // Collect
+    const nombre = document.getElementById('wl-nombre').value.trim();
+    const email = document.getElementById('wl-email').value.trim();
+    const relacion = form.querySelector('input[name="relacion"]:checked');
+
+    if (!nombre || !email || !relacion) {
+      errEl.textContent = 'Completá todos los campos obligatorios.';
+      errEl.classList.add('visible');
+      btn.disabled = false;
+      btn.textContent = 'QUIERO ESTAR';
+      return;
+    }
+
+    const payload = {
+      nombre,
+      email,
+      relacion: relacion.value,
+      quiere_early_access: document.getElementById('chk-early').checked,
+      quiere_descuentos: document.getElementById('chk-desc').checked,
+      quiere_backstage: document.getElementById('chk-back').checked,
+      quiere_comunidad: document.getElementById('chk-com').checked,
+      fuente: 'landing'
+    };
+
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: HEADERS,
+        body: JSON.stringify(payload)
+      });
+
+      if (res.status === 409 || res.status === 400) {
+        errEl.textContent = 'Este email ya está registrado. ¡Ya estás en la lista!';
+        errEl.classList.add('visible');
+        btn.disabled = false;
+        btn.textContent = 'QUIERO ESTAR';
+        return;
+      }
+
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+
+      // Success
+      form.style.display = 'none';
+      errEl.classList.remove('visible');
+      document.getElementById('wl-success').classList.add('visible');
+      loadCount();
+    } catch(err) {
+      errEl.textContent = 'Hubo un error. Intentá de nuevo en unos segundos.';
+      errEl.classList.add('visible');
+      btn.disabled = false;
+      btn.textContent = 'QUIERO ESTAR';
+      console.error('Waitlist submit error:', err);
+    }
+  });
+
+  // Init
+  loadCount();
+})();
+</script>
