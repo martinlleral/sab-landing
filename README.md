@@ -2,8 +2,24 @@
 
 Landing page + ticketera propia + sistema de suscripciones para el **Sindicato Argentino de Boleros**, orquesta cooperativa de 21 músicos y músicas de La Plata, Argentina.
 
+> **Basado en el trabajo original de Luciano Menez** ([@lucianomenez](https://gitlab.com/lucianomenez) en GitLab), quien desarrolló el stack completo de la ticketera en 2025. Este repositorio es la continuación del proyecto: mantenimiento, extensiones y migración a infraestructura propia del SAB a partir de 2026.
+
 Sitio en producción: [sindicatoargentinodeboleros.com.ar](https://sindicatoargentinodeboleros.com.ar)
 Instagram: [@sindicatoargentinodeboleros](https://www.instagram.com/sindicatoargentinodeboleros/)
+
+---
+
+## Historia del proyecto
+
+Este proyecto es un ejemplo concreto de **trabajo colaborativo en capas**:
+
+- **2025** — Luciano Menez desarrolla desde cero la ticketera propia del SAB: Node.js + Express + Prisma + SQLite, integración MercadoPago, generación de QR únicos antifraude, sistema de mails transaccionales, backoffice admin completo con CMS de home/eventos, lector de QR en puerta, y pipeline de deploy con Docker + GitLab CI. Lucho hace todo esto **de onda** (pro bono) como aporte al SAB — un trabajo serio que evitó que el sindicato tuviera que pagar comisiones de Passline/Eventbrite y le dio independencia tecnológica real.
+
+- **Abril 2026** — El proyecto pasa a manos de Martín Lleral, que toma el mantenimiento + extensiones como parte de un Sprint 2: agregar sistema de suscripciones, waitlist con encuesta de research, fixes de seguridad y accesibilidad, migración de infraestructura a una cuenta DigitalOcean propia del SAB, y publicación del código como open source con licencia MIT.
+
+La mayor parte del código de la ticketera — el corazón funcional del sistema — es obra de Lucho. Las extensiones de este repo (waitlist, sección "Quiénes somos", fixes de seguridad, runbook de deploy, auditorías) son contribuciones posteriores de Martín. Ambos trabajos existen en el mismo árbol y ambas autorías están reconocidas en el [`LICENSE`](LICENSE).
+
+Publicamos bajo MIT License con el espíritu de que **otras cooperativas musicales argentinas o latinoamericanas puedan adaptar este sistema para sus propios ciclos**, sin tener que reconstruir desde cero lo que Lucho ya dejó muy bien hecho.
 
 ---
 
@@ -112,16 +128,47 @@ Ver [`docs/TODO-deploy.md`](docs/TODO-deploy.md) para la lista completa cataloga
 
 ## Contribuir
 
-Issues, pull requests y sugerencias son bienvenidas. Si sos parte de otra cooperativa musical argentina y querés adaptar este código para tu propia ticketera, abrí un issue y te damos una mano — para eso hacemos open source.
+Issues, pull requests y sugerencias son bienvenidas. Si sos parte de otra cooperativa musical argentina o latinoamericana y querés adaptar este código para tu propia ticketera, abrí un issue y te damos una mano — para eso hacemos open source, y para eso Lucho decidió compartir lo que hizo en su momento.
 
 ## Créditos
 
-- **Sindicato Argentino de Boleros** — la orquesta cooperativa que inspira todo esto
-- **Lucho Menez** — desarrollador original del stack y del sistema de ticketera
-- **Martín Lleral** — mantenedor actual, auditorías, migración a infraestructura propia del SAB, sistema de suscripciones
+### Sindicato Argentino de Boleros
+La orquesta cooperativa que inspira todo esto. 21 músicos y músicas, ciclo **Amor de Miércoles** en La Plata, giras por la costa atlántica y el país, colaboraciones con Juan Carlos Baglietto, Teresa Parodi, Lula Bertoldi (Eruca Sativa), Chico Trujillo, Sara Hebe, Miss Bolivia y muchxs más. Todo el contenido, la música, la identidad y la dirección del proyecto son del SAB.
+[@sindicatoargentinodeboleros](https://www.instagram.com/sindicatoargentinodeboleros/)
+
+### Luciano Menez — autor original del stack técnico
+GitLab: [@lucianomenez](https://gitlab.com/lucianomenez)
+
+Lucho desarrolló desde cero la ticketera propia del SAB en 2025, como aporte pro bono al sindicato. Su trabajo incluye:
+- Toda la arquitectura backend (Node.js + Express + Prisma)
+- El sistema de venta de entradas con integración MercadoPago
+- La generación y validación de códigos QR únicos antifraude
+- El backoffice admin completo con CMS de home/eventos, gestión de compras, lector QR en puerta
+- El pipeline de deploy con Docker + GitLab CI
+- La configuración inicial del dominio y SSL
+
+**La mayor parte del código de este repositorio es obra suya.** Sin ese primer esfuerzo, nada de lo que vino después habría existido.
+
+### Martín Lleral — mantenimiento y extensiones
+GitHub: [@martinlleral](https://github.com/martinlleral)
+
+Tomó el proyecto en abril 2026 como parte de un Sprint 2 + Sprint 3 con el SAB. Contribuciones posteriores:
+- Auditoría técnica completa (panel de 7 expertos) y auditorías de Sprint
+- Fixes de seguridad (XSS, CORS, RLS en Supabase, rotación de admin)
+- Sección "Quiénes somos" con historia del SAB, foto grupal, hitos y artistas colaboradores
+- Waitlist con encuesta RFM (research + frecuencia + monetario) conectada a Supabase
+- 6 preguntas de research para diseñar el sistema de socios con evidencia
+- Mejoras de accesibilidad (WCAG AA, landmarks semánticos, aria-labels)
+- Mejoras de SEO (canonical, robots.txt, sitemap.xml, og:image 1200x630, Schema.org MusicGroup + MusicEvent)
+- Migración de infraestructura a una cuenta DigitalOcean propia del SAB (independencia del droplet original)
+- Hardening del droplet (SSH key only, UFW, fail2ban, swap, healthcheck, mem limits, log rotation)
+- Runbook de deploy completo en 5 fases reproducibles
+- Auditoría Playwright con 40 validaciones + 18 capturas de pantalla
+- Publicación del código como open source con licencia MIT
+- Documentación del proyecto (README, TODO, runbooks, este archivo de historia)
 
 ## Licencia
 
-MIT. Ver [`LICENSE`](LICENSE).
+MIT License. Ver [`LICENSE`](LICENSE).
 
-Esto significa que cualquiera puede usar, modificar y distribuir este código (incluso comercialmente), con la única condición de mantener el copyright notice del autor original. Si lo usás para otra cooperativa o proyecto cultural, mencionarnos es opcional pero bien recibido.
+El código original de Luciano Menez se republica bajo esta licencia como continuación natural del espíritu colaborativo con el que fue escrito. Cualquier cooperativa, músico independiente, grupo cultural o proyecto sin fines de lucro puede usar este código, modificarlo, redistribuirlo y adaptarlo a su propio contexto — siempre manteniendo el copyright notice que reconoce a ambos autores. Si lo usás en otro proyecto, mencionarnos es opcional pero bien recibido, y saber que el código sigue viajando es parte de por qué hacemos esto.
