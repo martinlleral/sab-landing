@@ -218,7 +218,30 @@ Hoy si el sitio cae, nadie se entera. El SAB procesa pagos reales. Un outage de 
 
 ---
 
-### 9. Graceful shutdown + endpoint `/healthz` real
+### ~~9. Graceful shutdown + endpoint `/healthz` real~~ ✅ Hecho 15/4
+
+**Resuelto:**
+
+- **`GET /healthz` en `src/server.js`** — hace `prisma.$queryRaw\`SELECT 1\``. Si la consulta funciona responde `{status: 'ok', db: 'up', uptime: N}` con 200; si Prisma falla, loguea y devuelve 503 con `{status: 'error', db: 'down'}`. Registrado antes de `express.static` para que no se shadowee.
+
+- **Graceful shutdown handler** — refactor del SIGTERM/SIGINT listener. Nuevo flujo: `clearInterval(syncPagosPendientes) → server.close() → prisma.$disconnect() → process.exit(0)`. Failsafe interno de 10s con `setTimeout().unref()` en caso de que algo se cuelgue. Previene cortar webhooks MP en vuelo durante `docker compose restart`.
+
+- **`docker-compose.yml` — tres cambios al servicio app:**
+  - `init: true` → tini como PID 1, propaga señales correctamente al proceso Node (sin esto, `docker stop` manda SIGKILL porque Node no captura SIGTERM cuando es PID 1)
+  - `stop_grace_period: 30s` → le da al graceful shutdown hasta 30s antes del SIGKILL forzoso
+  - Healthcheck: `wget /` → `wget -qO- /healthz` (uso GET explícito en vez de `--spider` para evitar HEAD, que Express no siempre resuelve sobre rutas `app.get()`)
+  - `start_period: 40s → 60s` — margen extra para migraciones Prisma frías en el primer boot del container
+
+- **Bonus: wiring de `MP_WEBHOOK_SECRET` + `MP_USER_ID` al container** — las dos env vars que agregamos en el commit del ítem 1 no estaban pasadas del host al container. Corregido con `${MP_WEBHOOK_SECRET:-}` y `${MP_USER_ID:-}`. Sin esto, el webhook seguiría rechazando todo después del deploy porque `config.mercadopago.webhookSecret` quedaría vacío.
+
+**Tests verdes:**
+
+- 2 unit tests del `/healthz` handler (Prisma OK → 200/status:ok/uptime numeric; Prisma fail → 503/db:down)
+- 1 test e2e del shutdown handler con mock de `process.exit` (secuencia correcta: interval cleared → server closed → prisma disconnected → exit(0))
+- Sintaxis de `server.js` con `node -c` → OK
+- Estructura de `docker-compose.yml` validada con Python yaml (init/stop_grace/healthcheck/MP vars presentes)
+
+**Importante para el próximo deploy:** el healthcheck nuevo depende de que `/healthz` responda. Como el endpoint consulta Prisma, si el container arranca con un schema roto o Prisma no conecta, el container nunca queda `healthy` y nginx no le pasa tráfico (por `depends_on: service_healthy`). Es el comportamiento correcto — prefiero un container unhealthy conocido que tráfico a un backend con DB rota — pero hay que validar el primer boot del próximo deploy con `docker compose logs -f sab-app` para confirmar que pasa el health check en ≤60s.
 
 **Severidad:** ALTA · **Experto:** SRE · **Esfuerzo:** 30 min
 
@@ -321,15 +344,13 @@ waitlist_socios   Solo autenticados pueden leer      {authenticated}  SELECT  tr
 
 #### Hallazgos menores del advisor (2 WARN, NO bloqueantes, NO aplicados en esta sesión)
 
-**a) `function_search_path_mutable` — `waitlist_count`**
-
-La función `SECURITY DEFINER` no tiene `search_path` seteado. Supabase recomienda fijarlo explícitamente como hardening contra "search_path hijacking". Impacto actual: nulo (la función solo lee `public.waitlist_socios`, que existe en `public`). Fix trivial, reversible, cero riesgo:
+**a) ~~`function_search_path_mutable` — `waitlist_count`~~ ✅ Aplicado 15/4**
 
 ```sql
 ALTER FUNCTION public.waitlist_count() SET search_path = public, pg_temp;
 ```
 
-→ **Pendiente de tu OK** para aplicar. 1 minuto de trabajo + re-verificar advisor.
+Confirmado en `pg_proc.proconfig`: `["search_path=public, pg_temp"]`. Advisor re-corrido, el WARN desapareció del listado. Test post-aplicación: `POST /rpc/waitlist_count` con anon key sigue devolviendo `21` (HTTP 200). Cero disrupción.
 
 **b) `rls_policy_always_true` — policy INSERT de `waitlist_socios`**
 

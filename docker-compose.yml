@@ -4,6 +4,12 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: sab-app
+    # tini como PID 1: reparenta zombies y propaga señales correctamente
+    # al proceso Node, necesario para que SIGTERM llegue al graceful shutdown.
+    init: true
+    # Le damos hasta 30s al graceful shutdown antes de SIGKILL forzoso.
+    # El shutdown handler del app tiene un failsafe interno de 10s.
+    stop_grace_period: 30s
     volumes:
       - db-data:/app/prisma
       - uploads-data:/app/public/assets/img/uploads
@@ -13,6 +19,8 @@ services:
       - SESSION_SECRET=${SESSION_SECRET}
       - MP_ACCESS_TOKEN=${MP_ACCESS_TOKEN}
       - MP_PUBLIC_KEY=${MP_PUBLIC_KEY}
+      - MP_WEBHOOK_SECRET=${MP_WEBHOOK_SECRET:-}
+      - MP_USER_ID=${MP_USER_ID:-}
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER}
@@ -29,12 +37,17 @@ services:
       resources:
         limits:
           memory: 400M
+    # /healthz valida que Prisma puede consultar SQLite (SELECT 1). Antes
+    # apuntaba a "/" que solo probaba que Node respondía — no detectaba
+    # si el pool de Prisma se había roto.
+    # Uso -qO- (GET + descartar body) en vez de --spider para forzar GET;
+    # --spider hace HEAD y Express no siempre resuelve HEAD sobre rutas GET.
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/healthz > /dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 60s
     logging:
       driver: json-file
       options:

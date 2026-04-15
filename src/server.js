@@ -68,6 +68,24 @@ app.use(session({
   },
 }));
 
+// Liveness + readiness probe: Prisma $queryRaw SELECT 1.
+// Si la conexión a SQLite se pierde o Prisma entra en estado inconsistente,
+// el endpoint devuelve 503 y Docker marca el container unhealthy → restart.
+// nginx depende de esta healthcheck vía depends_on: service_healthy.
+app.get('/healthz', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({
+      status: 'ok',
+      db: 'up',
+      uptime: Math.round(process.uptime()),
+    });
+  } catch (err) {
+    console.error('[healthz] DB check falló:', err.message);
+    res.status(503).json({ status: 'error', db: 'down' });
+  }
+});
+
 // Archivos estáticos
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -96,18 +114,21 @@ app.use((err, req, res, _next) => {
 });
 
 // Iniciar servidor
+let server;
+let syncInterval;
+
 async function start() {
   try {
     await prisma.$connect();
     console.log('✅ Base de datos conectada');
 
-    app.listen(config.port, () => {
+    server = app.listen(config.port, () => {
       console.log(`🚀 Servidor corriendo en http://localhost:${config.port}`);
       console.log(`📋 Backoffice: http://localhost:${config.port}/backoffice/login.html`);
 
       // Cron: sync pagos pendientes con MP cada 60s
       syncPagosPendientes(); // ejecución inicial
-      setInterval(syncPagosPendientes, 60 * 1000);
+      syncInterval = setInterval(syncPagosPendientes, 60 * 1000);
       console.log('⏱  Cron sync pagos activo (cada 60s)');
     });
   } catch (err) {
@@ -116,9 +137,34 @@ async function start() {
   }
 }
 
-process.on('SIGTERM', async () => {
-  await prisma.$disconnect();
-  process.exit(0);
-});
+// Graceful shutdown: cierra conexiones HTTP en vuelo y Prisma antes de exit.
+// Previene cortes a webhooks MP en pleno procesamiento durante docker compose restart.
+async function shutdown(signal) {
+  console.log(`[${signal}] recibido, iniciando graceful shutdown...`);
+
+  // Failsafe: si algo se cuelga, forzar exit después de 10s.
+  const forceExit = setTimeout(() => {
+    console.error('[shutdown] timeout 10s, forzando exit');
+    process.exit(1);
+  }, 10000);
+  forceExit.unref();
+
+  try {
+    if (syncInterval) clearInterval(syncInterval);
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+      console.log('[shutdown] servidor HTTP cerrado');
+    }
+    await prisma.$disconnect();
+    console.log('[shutdown] Prisma desconectado. Bye.');
+    process.exit(0);
+  } catch (err) {
+    console.error('[shutdown] error durante shutdown:', err);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 start();
