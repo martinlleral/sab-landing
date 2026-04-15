@@ -9,6 +9,8 @@ module.exports = {
   mercadopago: {
     accessToken: process.env.MP_ACCESS_TOKEN || '',
     publicKey: process.env.MP_PUBLIC_KEY || '',
+    webhookSecret: process.env.MP_WEBHOOK_SECRET || '',
+    userId: process.env.MP_USER_ID || '',
   },
   smtp: {
     host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',

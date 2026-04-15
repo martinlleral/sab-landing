@@ -7,7 +7,6 @@ const API = {
   destacado: '/api/eventos/destacado',
   proximos: '/api/eventos/proximos',
   preferencia: '/api/compras/preferencia',
-  status: (id) => `/api/compras/status/${id}`,
 };
 
 let eventoActual = null;

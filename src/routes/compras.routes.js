@@ -6,7 +6,6 @@ const { requireAdmin } = require('../middleware/auth.middleware');
 const publicRouter = express.Router();
 publicRouter.post('/preferencia', controller.crearPreferencia);
 publicRouter.post('/webhook', controller.webhook);
-publicRouter.get('/status/:preferenciaId', controller.getStatus);
 publicRouter.post('/check/:preferenciaId', controller.checkAndProcess);
 
 // Rutas admin: montadas en /api/admin/compras
