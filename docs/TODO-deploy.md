@@ -1,12 +1,24 @@
 # TODO — Deploy & Technical Debt
 
-**Última actualización:** 14/4/2026 (tras auditoría de 3 expertos post-deploy)
-**Estado general:** MVP funcional en producción con hallazgos de seguridad críticos identificados.
-**Score del proyecto:** 5.8 / 10 promedio (SRE 5.5 · Security 4.8 · Tech Writer 7.0)
+**Última actualización:** 15/4/2026 (post hardening crítico + cierre parcial de los 3 bloques)
+**Estado general:** MVP funcional en producción con hardening crítico aplicado. Bloque 1 en 3/6, Bloque 2 en 2/5, Bloque 3 en 5/5.
+**Score del proyecto (14/4, pre-hardening):** 5.8 / 10 promedio (SRE 5.5 · Security 4.8 · Tech Writer 7.0)
 
-> Este archivo es la fuente de verdad de lo que queda pendiente. Actualizado con los hallazgos consolidados de la auditoría de expertos del 14/4/2026 (SRE senior + Application Security Engineer + Technical Writer + OSS advocate).
+> Este archivo es la fuente de verdad de lo que queda pendiente. Actualizado con los hallazgos consolidados de la auditoría de expertos del 14/4/2026 (SRE senior + Application Security Engineer + Technical Writer + OSS advocate), más los cierres del 15/4/2026.
 >
 > **Ir tachando con `~~texto~~` + `✅ Hecho DD/MM` al cerrar cada ítem.**
+
+## Progreso del 15/4 — 8 ítems cerrados
+
+- **Bloque 1 (seguridad crítica):** ítem 1 (webhook MP con firma + validación monto/collector) · ítem 3 (endpoint `/status` eliminado por dead code)
+- **Bloque 2 (resiliencia):** ítem 9 (graceful shutdown + `/healthz` con Prisma check + wiring de `MP_WEBHOOK_SECRET`/`MP_USER_ID` al container) · ítem 11 (RLS de Supabase verificado en vivo con 4 vectores — sin filtración — + fix de `search_path` en `waitlist_count`)
+- **Bloque 3 (calidad del repo):** ítem 13 (fix `ADMIN_USER` → `ADMIN_EMAIL` en ambos `.env.example`) · ítem 14 (5 screenshots curadas + sección "Auditorías y research" en README) · ítem 15 (`CONTRIBUTING.md` + `docs/adaptacion.md` + 3 templates `.github/`) · ítem 16 (5 badges shield.io + diagrama Mermaid de arquitectura en README)
+
+**Pendientes del Bloque 1 que requieren dependencias externas o entorno no disponible en la sesión autónoma:** ítem 2 (rotación de secrets externa) · ítem 4 (upgrade CVEs, requiere test real del flujo Brevo) · ítem 5 (rate limiting, requiere `npm install` local) · ítem 6 (auth hardening, `cookie.secure` espera HTTPS activo).
+
+**Pendientes del Bloque 2 antes de la campaña del 1/5:** ítem 7 (backups automáticos) · ítem 8 (uptime monitoring) · ítem 10 (upgrade del droplet a 1 GB RAM) · sub-ítem 11b (checks de longitud en policy INSERT de `waitlist_socios` — pendiente de definir umbrales con Martín).
+
+**Pendientes del Bloque 3 para portafolio:** ítem 12 (`CASE_STUDY.md` — requiere sesión dedicada con contexto completo cargado).
 
 ---
 
