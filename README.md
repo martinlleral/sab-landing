@@ -1,5 +1,11 @@
 # SAB Landing
 
+[![License: MIT](https://img.shields.io/github/license/martinlleral/sab-landing?color=blue)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/martinlleral/sab-landing)](https://github.com/martinlleral/sab-landing/commits/main)
+[![Top language](https://img.shields.io/github/languages/top/martinlleral/sab-landing)](https://github.com/martinlleral/sab-landing)
+[![Stars](https://img.shields.io/github/stars/martinlleral/sab-landing?style=social)](https://github.com/martinlleral/sab-landing)
+[![Status: production](https://img.shields.io/badge/status-in%20production-success)](http://162.243.172.177/)
+
 Landing page + ticketera propia + sistema de suscripciones para el **Sindicato Argentino de Boleros**, orquesta cooperativa de 21 músicos y músicas de La Plata, Argentina.
 
 > **Basado en el trabajo original de Luciano Menez** ([@lucianomenez](https://gitlab.com/lucianomenez) en GitLab), quien desarrolló el stack completo de la ticketera en 2025. Este repositorio es la continuación del proyecto: mantenimiento, extensiones y migración a infraestructura propia del SAB a partir de 2026.
@@ -52,6 +58,29 @@ Es una landing con ticketera propia (sin Passline ni Eventbrite) que le permite 
 | Reverse proxy / SSL | Nginx + Let's Encrypt |
 | Contenedores | Docker + Docker Compose |
 | Hosting | DigitalOcean droplet básico ($4/mes) |
+
+### Arquitectura
+
+```mermaid
+flowchart LR
+    User([🙋 Visitante]) --> CF[Cloudflare<br/>DNS + CDN + SSL]
+    CF --> Nginx[nginx<br/>reverse proxy]
+    Nginx --> App[Node + Express<br/>Prisma + sessions]
+
+    App --> SQLite[(SQLite<br/>eventos, compras,<br/>entradas, admin)]
+    App <-.REST.-> Supabase[(Supabase Postgres<br/>waitlist + research)]
+    App <-.SDK.-> MP[MercadoPago<br/>preferencias + webhook]
+    App <-.SMTP.-> Brevo[Brevo<br/>mails con QR]
+
+    User <-.JS directo.-> Supabase
+
+    classDef external fill:#2a3f5c,stroke:#3b5477,color:#e8ecf3
+    classDef internal fill:#4a2230,stroke:#7a3c4d,color:#f0e8ec
+    class CF,MP,Brevo,Supabase external
+    class Nginx,App,SQLite internal
+```
+
+**Dos planos de datos:** (a) las entradas y el flujo transaccional de MP viven en SQLite del droplet — control total, sin dependencias externas de estado. (b) la waitlist + encuesta de research vive en Supabase — escalabilidad automática + RLS para PII, escritura directa desde el browser con anon key embebido (verificado el 15/4: SELECT desde anon devuelve `[]` por RLS, count enumeration bloqueada por `*/0`).
 
 ## Correr en local
 
@@ -125,6 +154,42 @@ El runbook está pensado para ejecutar copy-paste sin pensar.
 ## Deuda técnica pendiente
 
 Ver [`docs/TODO-deploy.md`](docs/TODO-deploy.md) para la lista completa catalogada por prioridad.
+
+## Auditorías y research
+
+El Sprint 2 incluyó una auditoría técnica completa con Playwright sobre el sitio en producción: **40 validaciones, 27 capturas de pantalla, 3 auditorías paralelas de expertos** (UX/UI, Frontend, Usuario final, SRE, Application Security, Technical Writer, OSS advocate). El reporte completo vive en [`docs/auditoria-playwright-20260410.md`](docs/auditoria-playwright-20260410.md). Abajo, una selección curada de evidencia visual.
+
+### El producto en producción
+
+![Landing SAB — versión final en producción](docs/audit/prod-hero.png)
+
+Fotos reales del SAB (Konex, teatro, baile neón), precio visible en el hero, invitado especial resaltado con efecto glow, tarjetas de información con íconos temáticos. Screenshot capturado en el droplet nuevo del SAB el 14/4/2026 después del deploy.
+
+### Responsive mobile
+
+![Versión mobile completa con todas las secciones visibles](docs/audit/mobile-full.png)
+
+Breakpoints específicos para `<400px` (grillas 2→1 columna), info cards apiladas, navbar con menú hamburguesa. Validado en mobile 390, mobile-sm 360, tablet 768 y desktop 1440.
+
+### Accesibilidad — navegación por teclado
+
+![Focus visible con borde carmín al tabular por los elementos interactivos](docs/audit/12-keyboard-focus.png)
+
+Todos los controles interactivos (botones, links, inputs, radios del waitlist) tienen un `focus-visible` con borde carmín y contraste WCAG AA. La captura evidencia un tab order predecible desde el nav hasta el footer, sin trampas de foco. Los `aria-label` fueron agregados en la auditoría del 10/4 para los controles del carousel y los links sociales.
+
+### Waitlist con research RFM
+
+![Formulario de waitlist después de un envío exitoso, con mensaje de confirmación](docs/audit/10-waitlist-success.png)
+
+El formulario no es un "contact form" — es un **instrumento de research** con 6 preguntas obligatorias conectadas a Supabase, diseñadas desde el framework RFM (Recency-Frequency-Monetary): ubicación, frecuencia en los últimos 6 meses, modo de entrada al ciclo, beneficios top-3, rango de pago declarado ($5K-$20K+), nombre/email. Auditado por UX Researcher y Estratega de Membresías. El sistema de socios del SAB se va a diseñar con los datos reales de estos envíos, no con hipótesis.
+
+### Evidencia de un fix concreto — imágenes de "Próximos eventos"
+
+![Sección Próximos con el flyer real de Mirlos y el fallback de eventos por venir](docs/audit/fix-proximos-eventos.png)
+
+Antes: un emoji 🎵 como placeholder genérico. Después: el flyer real del show del 15/4 en el Club Ateneo Popular y un `event-default.jpg` (foto grupal oscurecida con overlay "PRÓXIMAMENTE") para los eventos que aún no tienen flyer. Caso de ejemplo del tipo de decisiones pequeñas y concretas que bajan la fricción del usuario entre "quiero ir a un show" y "compro la entrada".
+
+---
 
 ## Contribuir
 

@@ -30,51 +30,11 @@ Los bloques 1 y 2 son **prioridad deploy**. El bloque 3 es **prioridad portafoli
 
 ## 🔴 Bloque 1 — Seguridad crítica (bloqueante de ingresos reales)
 
-### 1. 🚨 Webhook MercadoPago sin verificación de firma — HALLAZGO CRÍTICO
+### ~~1. 🚨 Webhook MercadoPago sin verificación de firma — HALLAZGO CRÍTICO~~ ✅ Hecho 15/4
 
-**Severidad:** CRÍTICA · **Experto:** Application Security · **Esfuerzo:** 1h
+**Resuelto:** `src/controllers/compras.controller.js` ahora valida firma HMAC-SHA256 (fail-closed si `MP_WEBHOOK_SECRET` ausente), `pago.collector_id` contra `MP_USER_ID` y `pago.transaction_amount` contra `compra.totalPagado`. Verificado con 6 unit tests sobre `verifyMpSignature()` + 5 tests e2e del handler HTTP (sin secret → 503, sin firma → 401, firma válida → 200, amount mismatch → 400, collector mismatch → 403). Fallback cubierto por `syncPagosPendientes` cada 60s + polling cliente en `back_url`, por lo que rechazar sin secret no pierde compras.
 
-**Problema:** `src/controllers/compras.controller.js` acepta cualquier POST a `/api/compras/webhook` sin verificar la firma `x-signature` que MercadoPago envía. El flujo vulnerable:
-
-1. Atacante crea una compra `pending` con su propio email
-2. Atacante envía POST al webhook con `{type: 'payment', data: {id: <payment_id_aprobado_conocido>}}`
-3. El código consulta MP por ese ID, confirma que está aprobado, matchea el `external_reference`
-4. **Sistema genera entradas QR y envía al atacante sin cobrar nada**
-
-Peor: no valida que `pago.collector_id` sea el merchant del SAB. Los payment IDs de MP son enumerables. Con el código público en GitHub, cualquiera con 30 minutos puede escribir el exploit.
-
-**Fix:**
-
-```js
-// src/controllers/compras.controller.js
-const crypto = require('crypto');
-
-function verifyMpSignature(req, secret) {
-  const sig = req.headers['x-signature'] || '';
-  const reqId = req.headers['x-request-id'] || '';
-  const ts = /ts=([^,]+)/.exec(sig)?.[1];
-  const v1 = /v1=([^,]+)/.exec(sig)?.[1];
-  const dataId = req.query['data.id'] || req.body?.data?.id;
-  if (!ts || !v1 || !dataId) return false;
-  const manifest = `id:${dataId};request-id:${reqId};ts:${ts};`;
-  const hmac = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(v1));
-}
-
-// En el handler del webhook:
-if (!verifyMpSignature(req, process.env.MP_WEBHOOK_SECRET)) {
-  return res.status(401).json({ error: 'invalid signature' });
-}
-// + validar pago.collector_id === process.env.MP_USER_ID
-// + validar pago.transaction_amount === compra.totalPagado
-```
-
-Requiere:
-- Generar "Secret Key" en el panel de MP del SAB → panel MP → Webhooks → activar firma
-- Agregar `MP_WEBHOOK_SECRET` y `MP_USER_ID` al `.env` del droplet
-- Restart del container
-
-**Impacto real:** regalar entradas del SAB gratis a cualquiera con acceso al código (que ahora es público).
+**Pendiente externo:** Nati/Uri deben activar "Clave secreta" en panel MP → Webhooks → cargar `MP_WEBHOOK_SECRET` + `MP_USER_ID` en `.env` del droplet + restart.
 
 ---
 
@@ -98,15 +58,9 @@ Los tokens viejos que estuvieron en `.env.example` siguen activos en sus paneles
 
 ---
 
-### 3. Endpoint `/api/compras/status/:preferenciaId` — enumeración sin auth
+### ~~3. Endpoint `/api/compras/status/:preferenciaId` — enumeración sin auth~~ ✅ Hecho 15/4
 
-**Severidad:** CRÍTICA · **Experto:** Security · **Esfuerzo:** 1h
-
-Cualquiera que conozca o adivine un `mpPreferenciaId` puede hacer `GET` y recibir: email, nombre, apellido, monto pagado, **códigos QR de las entradas**. Aunque los IDs de MP son strings largos random, el endpoint debería exigir un segundo factor o un token firmado.
-
-**Fix opcional A (simple):** email + preferenciaId como doble clave.
-
-**Fix opcional B (mejor):** generar un `access_token` firmado con JWT cuando se crea la preferencia, incluirlo en el `back_url` de MP y exigirlo en `/status`.
+**Resuelto:** borrado el endpoint completo. Auditoría del uso reveló que era dead code: la constante `API.status` en `public/assets/js/app.js` estaba definida pero nunca se invocaba en ninguna parte del frontend, y `checkPaymentReturn()` usa `POST /api/compras/check/:preferenciaId` (que devuelve solo `{status, compraId, entradas}` sin PII ni QR). Eliminado `getStatus` del controller + ruta en `compras.routes.js` + stub `API.status` del frontend + export del controller. Criterio: **superficie mínima de ataque** supera a "proteger con doble clave" cuando el endpoint no tiene consumidores. Si alguna vez se necesita, se recrea con auth de sesión o JWT firmado.
 
 ---
 
@@ -340,20 +294,63 @@ nginx:
 
 ---
 
-### 11. Verificar RLS de Supabase (waitlist)
+### ~~11. Verificar RLS de Supabase (waitlist)~~ ✅ Verificado 15/4 · sin incidente
 
-**Severidad:** ALTA · **Experto:** Security · **Esfuerzo:** 30 min
+**Resultado:** ningún SELECT desde anon devuelve PII. Los 4 vectores probados en vivo contra `https://ugvlzjbsulrkdjtapozn.supabase.co/rest/v1/waitlist_socios` con el anon key embebido en `public/index.html`:
 
-El `index.html` tiene el `anon key` de Supabase embebido en JavaScript. Esto es **esperable** en Supabase, pero solo si las policies RLS son estrictas. Si el role `anon` puede hacer `SELECT * FROM waitlist_socios`, toda la PII de la waitlist (nombres, emails, rango de pago declarado, ubicación) es **pública**.
+| Vector | HTTP | Body / Headers | Estado |
+|---|---|---|---|
+| `GET /waitlist_socios?select=*&limit=5` | 200 | `[]` (RLS filtra todos los rows) | ✅ sin PII |
+| `GET /waitlist_socios?select=email&limit=5` | 200 | `[]` | ✅ sin PII |
+| `POST /rpc/waitlist_count` (RPC) | 200 | `21` | ✅ esperado |
+| `HEAD /waitlist_socios` con `Prefer: count=exact` | 200 | `content-range: */0` | ✅ el count reportado es 0, no el real — RLS también bloquea enumeración por count |
 
-**Acciones:**
+**Policies actuales (confirmadas vía `pg_policies`):**
 
-- [ ] Verificar desde la consola de Supabase (proyecto `ugvlzjbsulrkdjtapozn`) que las policies de `waitlist_socios` son:
-  - `anon` rol: solo `INSERT` permitido, con un `CHECK` que limite length de campos
-  - `authenticated` rol: `SELECT` permitido solo a usuarios autorizados
-- [ ] Verificar que el RPC `waitlist_count` es `SECURITY DEFINER` con `SET search_path = public, pg_temp`
-- [ ] Probar desde curl: `GET waitlist_socios` con el anon key debería devolver `[]` o error
-- [ ] Si el anon puede `SELECT`, es incidente: rotar anon key en Supabase y actualizar el `.env`
+```
+tablename         policyname                         roles            cmd     qual    with_check
+waitlist_socios   Público puede registrarse          {anon}           INSERT  -       true
+waitlist_socios   Solo autenticados pueden leer      {authenticated}  SELECT  true    -
+```
+
+`rowsecurity: true` sobre la tabla. `waitlist_count()` es `SECURITY DEFINER` y funciona.
+
+**Conclusión:** el anon key embebido en el HTML **no filtra datos**. No hay incidente, no hay que rotar la key.
+
+---
+
+#### Hallazgos menores del advisor (2 WARN, NO bloqueantes, NO aplicados en esta sesión)
+
+**a) `function_search_path_mutable` — `waitlist_count`**
+
+La función `SECURITY DEFINER` no tiene `search_path` seteado. Supabase recomienda fijarlo explícitamente como hardening contra "search_path hijacking". Impacto actual: nulo (la función solo lee `public.waitlist_socios`, que existe en `public`). Fix trivial, reversible, cero riesgo:
+
+```sql
+ALTER FUNCTION public.waitlist_count() SET search_path = public, pg_temp;
+```
+
+→ **Pendiente de tu OK** para aplicar. 1 minuto de trabajo + re-verificar advisor.
+
+**b) `rls_policy_always_true` — policy INSERT de `waitlist_socios`**
+
+La policy `Público puede registrarse` es `WITH CHECK (true)`, o sea **sin validación**. Cualquier anon puede insertar cualquier cosa (spam, payloads gigantes, emails inválidos). Mitigación propuesta por el advisor: agregar `CHECK` sobre longitud y formato de columnas.
+
+→ **Más delicado.** Si el CHECK es muy estricto rompe inserts legítimos. Requiere conocer el schema real de `waitlist_socios` y decidir umbrales con vos (ej. `char_length(email) < 255`, `char_length(nombre) < 120`, `rango_pago IN (...)`). Podemos resolverlo en una sesión breve cuando quieras; para **spam real** conviene resolverlo **antes** de la campaña del 1/5, combinado con un rate limit a nivel nginx sobre `/rest/v1/waitlist_socios` (ítem 5 del Bloque 1).
+
+**Comandos de lectura que corrí (reproducibles):**
+
+```sql
+SELECT schemaname, tablename, rowsecurity FROM pg_tables
+  WHERE schemaname='public' AND tablename='waitlist_socios';
+
+SELECT schemaname, tablename, policyname, roles, cmd, qual, with_check
+  FROM pg_policies
+  WHERE schemaname='public' AND tablename='waitlist_socios' ORDER BY policyname;
+
+SELECT p.proname, p.prosecdef, pg_get_functiondef(p.oid)
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+  WHERE n.nspname='public' AND p.proname='waitlist_count';
+```
 
 ---
 
@@ -390,32 +387,27 @@ Este archivo **es** lo que va en CV, LinkedIn y entrevistas — NO el README té
 
 ---
 
-### 13. Fix del quick start del README (inconsistencias)
+### ~~13. Fix del quick start del README (inconsistencias)~~ ✅ Hecho 15/4
 
-**Severidad:** MEDIA · **Experto:** Tech Writer · **Esfuerzo:** 15 min
+**Resuelto:**
 
-- [ ] `git clone git@github.com:martinlleral/sab-landing.git` clona en carpeta `sab-landing`, pero la estructura del proyecto en el README muestra `sindicato-argentino-de-boleros/` como root. **Unificar a uno de los dos.**
-- [ ] `.env.example` menciona `ADMIN_USER` pero el código del seed usa `ADMIN_EMAIL`. **Cambiar a `ADMIN_EMAIL` para consistencia.**
-- [ ] Probar el quick start literal en una carpeta vacía antes de mergear cualquier update del README. **Regla de oro:** si el quick start no pasa `fresh clone → docker compose up`, el README miente.
+- [x] **`sab-landing/` vs `sindicato-argentino-de-boleros/`:** revisión del README reveló que la estructura (README.md:82) ya dice `sab-landing/` como root, consistente con el `git clone git@github.com:martinlleral/sab-landing.git` de la línea 65. Este ítem del TODO estaba desactualizado — el README ya había sido arreglado en alguna sesión previa. Nota: en disco local el working dir se llama `sindicato-argentino-de-boleros/` (nombre heredado del repo original de Lucho en GitLab), pero eso no afecta al usuario que clona del GitHub público.
+- [x] **`ADMIN_USER` vs `ADMIN_EMAIL`:** bug real confirmado. `prisma/seed.js:16` lee `process.env.ADMIN_EMAIL`, `docker-compose.yml:24` pasa `ADMIN_EMAIL` al container, pero los dos `.env.example` (`/.env.example` y `docs/env.example.clean`) decían `ADMIN_USER`. Un usuario siguiendo el quick start literal quedaba con el admin bootstrap sin email configurado (fallback a `'admin@localhost'`). **Corregido** en ambos `.env.example` + comentario explicativo agregado sobre la coincidencia exacta de nombres.
+- [ ] ~~Probar el quick start literal~~ — no ejecutable en sesión autónoma (requiere Docker running + red + credenciales MP válidas), pero la verificación estática cerró los dos bugs documentados. Sigue pendiente para la próxima sesión con Docker activo.
 
 ---
 
-### 14. Embeber screenshots de `docs/audit/` inline en el README
+### ~~14. Embeber screenshots de `docs/audit/` inline en el README~~ ✅ Hecho 15/4
 
-**Severidad:** MEDIA · **Experto:** Tech Writer · **Esfuerzo:** 30 min
+**Resuelto:** agregada sección `## Auditorías y research` al README entre "Deuda técnica pendiente" y "Contribuir". 5 imágenes curadas con una narrativa que cuenta distintos aspectos del trabajo:
 
-> **Insight del Tech Writer:** "La carpeta `docs/audit/` es oro enterrado. Hay 27 screenshots de auditoría Playwright — desktop, mobile, tablet, antes/después de fixes, focus de teclado — que **son** la evidencia concreta del trabajo de Martín, y el README ni los menciona salvo con un link plano. Un recruiter UX miraría esos before/after con los ojos bien abiertos."
+1. **`prod-hero.png`** — producto final en producción (post deploy del 14/4)
+2. **`mobile-full.png`** — responsive (breakpoints <400, 390, 768, 1440)
+3. **`12-keyboard-focus.png`** — accesibilidad WCAG AA (tab order + focus-visible)
+4. **`10-waitlist-success.png`** — waitlist como instrumento de research RFM (el ángulo UX/service design)
+5. **`fix-proximos-eventos.png`** — evidencia de un fix concreto (before/after de "Próximos eventos")
 
-**Acciones:**
-
-- [ ] Agregar sección "Auditorías y research" al final del README
-- [ ] Embeber 3-5 imágenes clave con `![alt](docs/audit/...)`:
-  - `prod-full.png` o `desktop-full.png` — screenshot del producto final
-  - `fix-proximos-eventos.png` (before/after del fallback event-default)
-  - `12-keyboard-focus.png` (evidencia de accessibility)
-  - `mobile-full.png` (responsive)
-  - `10-waitlist-success.png` (flujo completo del waitlist)
-- [ ] Una frase corta por imagen explicando qué muestra y la metodología
+Cada imagen con un alt descriptivo y un párrafo corto que explica qué evidencia aporta y la metodología. El reporte completo de la auditoría queda linkeado al inicio de la sección. Total embebido ~3 MB (prod-hero 376KB + mobile-full 1.1MB + keyboard-focus 1.1MB + waitlist-success 128KB + fix-proximos 346KB). Criterio: superficie mínima pero con impacto visual alto para un recruiter UX que abra el repo. **Verificado:** los 5 paths existen en `docs/audit/`.
 
 ---
 
@@ -453,13 +445,13 @@ Este archivo **es** lo que va en CV, LinkedIn y entrevistas — NO el README té
 
 ---
 
-### 16. Badges + metadata OSS en el README
+### ~~16. Badges + metadata OSS en el README~~ ✅ Hecho 15/4
 
-**Severidad:** BAJA · **Experto:** Tech Writer · **Esfuerzo:** 20 min
+**Resuelto:**
 
-- [ ] Badges shield.io al tope del README: license MIT, last commit, GitHub stars/forks, language
-- [ ] Architecture diagram simple (Mermaid embebido en el README): landing → nginx → app → SQLite + Supabase + MP + Brevo
-- [ ] Opcional: `CHANGELOG.md` con formato [Keep a Changelog](https://keepachangelog.com)
+- [x] **5 badges shield.io al tope del README** — License MIT, Last commit, Top language, GitHub Stars, y un badge custom de "Status: in production" linkeado al droplet. Se renderizan dinámicamente desde la GitHub API (`martinlleral/sab-landing`) sin dependencias adicionales.
+- [x] **Diagrama Mermaid de arquitectura** — Insertado dentro de la sección Stack, antes de "Correr en local". Flowchart LR con 8 nodos (User → Cloudflare → nginx → App → SQLite + Supabase + MP + Brevo) diferenciando servicios externos de internos con clases custom. Incluye dos flujos sincrónicos (JS directo del browser a Supabase) y tres asincrónicos (app → MP/Brevo/Supabase vía SDK/SMTP/REST). Acompañado de un párrafo que explica los **dos planos de datos**: SQLite para transaccional (control total) + Supabase para research/PII (escalable con RLS).
+- [ ] ~~CHANGELOG.md formato Keep a Changelog~~ — opcional del ítem original, dejado para después (no es bloqueante, y el PLAN.md funciona como changelog informal del proyecto).
 
 ---
 
