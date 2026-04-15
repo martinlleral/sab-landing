@@ -44,3 +44,7 @@ logs/
 
 # Backups de git reset
 .git.backup/
+
+# Docs operativas con info interna de stakeholders — NUNCA commitear
+docs/pendientes-externos.md
+docs/**/stakeholders*.md
