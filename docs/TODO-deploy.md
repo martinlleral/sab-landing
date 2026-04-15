@@ -432,7 +432,35 @@ Cada imagen con un alt descriptivo y un párrafo corto que explica qué evidenci
 
 ---
 
-### 15. Agregar `CONTRIBUTING.md` + issue templates + `docs/adaptacion.md`
+### ~~15. Agregar `CONTRIBUTING.md` + issue templates + `docs/adaptacion.md`~~ ✅ Hecho 15/4
+
+**Resuelto:** 5 archivos nuevos que completan el posicionamiento "forkeable por otras cooperativas":
+
+1. **`CONTRIBUTING.md`** en la raíz (~90 líneas) — guía de contribución en español, con tipos de PR que encajan y los que no, cómo abrir issues, estilo de commits, tests (documenta la ausencia actual), código de conducta implícito y ético. Apunta a cooperativas y proyectos culturales pequeños como audiencia primaria, no a dev open source tradicional.
+
+2. **`docs/adaptacion.md`** (~170 líneas) — checklist de 12 puntos **concretos con archivos y líneas exactos** para adaptar el fork a otra cooperativa:
+   - Nombre del proyecto (package.json, README, LICENSE — con aclaración de mantener crédito a Lucho)
+   - Título + descripción + og:* + twitter:*
+   - Schema.org MusicGroup (SEO, con link al Rich Results Test)
+   - Colores + tipografía (app.css)
+   - Logo, favicon, og:image
+   - Fotos del slider (con optimización a <300KB)
+   - Variables de `.env` completas (incluyendo `MP_WEBHOOK_SECRET` + `MP_USER_ID` del commit del webhook)
+   - Footer + redes sociales
+   - Mapa Google Maps
+   - Eventos del seed
+   - MP + webhook (con pasos literales del panel)
+   - Textos del mail de confirmación (`brevo.service.js`)
+   - Sección final de **post-adaptación — qué validar antes de lanzar** (Lighthouse, Rich Results, OpenGraph preview, mobile test con 3 personas)
+   - Incluye una sección "Antes de forkear — decisiones a tomar" con 5 preguntas gating que evitan que alguien forkee sin MP del proyecto, dominio, etc.
+
+3. **`.github/ISSUE_TEMPLATE/bug_report.md`** — template estructurado para reportar bugs (contexto, pasos, entorno con commit/rama/URL, logs con aclaración de `<REDACTED>` para secrets, severidad).
+
+4. **`.github/ISSUE_TEMPLATE/adaptar_a_mi_cooperativa.md`** — template específico para cooperativas que quieren forkear. Incluye el checklist de 12 puntos del `docs/adaptacion.md` como confirmación de progreso + preguntas sobre si tienen MP/dominio/servidor + opción "solo orientación" vs "implementación paga". El label `adaptar-a-mi-cooperativa` queda asociado.
+
+5. **`.github/pull_request_template.md`** — checklist para PRs con: qué cambia (efecto, no diff), por qué, cómo se probó (unit/smoke/Playwright/prod), checklist de commit style + docs + secrets + env vars + tests del webhook, riesgo + reversibilidad, notas para el reviewer.
+
+**Criterio:** estos archivos NO son boilerplate copiado — están escritos con la voz del repo (cálida pero concreta, en español latino) y apuntan específicamente a cooperativas musicales / proyectos culturales chicos. Un fork de Dependabot o una PR de "migrar a TypeScript" van a ser rechazados según `CONTRIBUTING.md`; una PR de rate limiting o traducción al portugués van a encajar. El objetivo no es atraer contribuciones al vacío sino filtrar las que sirven al posicionamiento del proyecto.
 
 **Severidad:** MEDIA · **Experto:** Tech Writer + OSS · **Esfuerzo:** 1h
 
