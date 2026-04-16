@@ -1,7 +1,7 @@
 # TODO — Deploy & Technical Debt
 
-**Última actualización:** 15/4/2026 (post hardening crítico + cierre parcial de los 3 bloques)
-**Estado general:** MVP funcional en producción con hardening crítico aplicado. Bloque 1 en 3/6, Bloque 2 en 2/5, Bloque 3 en 5/5.
+**Última actualización:** 16/4/2026 (post auditoría de integridad con 7 expertos)
+**Estado general:** MVP en producción con hardening parcial. Auditoría del 16/4 identificó hallazgos adicionales en seguridad, resiliencia, documentación y portafolio.
 **Score del proyecto (14/4, pre-hardening):** 5.8 / 10 promedio (SRE 5.5 · Security 4.8 · Tech Writer 7.0)
 
 > Este archivo es la fuente de verdad de lo que queda pendiente. Actualizado con los hallazgos consolidados de la auditoría de expertos del 14/4/2026 (SRE senior + Application Security Engineer + Technical Writer + OSS advocate), más los cierres del 15/4/2026.
@@ -19,6 +19,131 @@
 **Pendientes del Bloque 2 antes de la campaña del 1/5:** ítem 7 (backups automáticos) · ítem 8 (uptime monitoring) · ítem 10 (upgrade del droplet a 1 GB RAM) · sub-ítem 11b (checks de longitud en policy INSERT de `waitlist_socios` — pendiente de definir umbrales con Martín).
 
 **Pendientes del Bloque 3 para portafolio:** ítem 12 (`CASE_STUDY.md` — requiere sesión dedicada con contexto completo cargado).
+
+---
+
+## 🔍 Auditoría de integridad — 16/4/2026
+
+Panel de 7 expertos revisó el repo completo. **Hallazgos de seguridad e infraestructura documentados internamente** (se publican tachados una vez fixeados). Hallazgos de docs, portafolio y community listados abajo.
+
+### 🔴 P0 — Seguridad pre-deploy (4 ítems, ~30 min)
+
+Ítems 17-20 documentados internamente. Cubren: bug latente en verificación de firma, validación faltante en job de sync, fail-fast de configuración en producción, y verificación de config de reverse proxy.
+
+---
+
+### 🟡 P1 — Antes de la campaña del 1/5
+
+#### 21. Badge de status: cambiar dirección temporal por dominio definitivo
+
+**Experto:** OSS + Tech Writer · **Esfuerzo:** 2 min
+
+- [ ] Actualizar link del badge en README al dominio definitivo cuando esté activo
+
+---
+
+#### 22. Agregar `ALLOWED_ORIGINS` a ambos `.env.example`
+
+**Experto:** Tech Writer · **Esfuerzo:** 5 min
+
+Variable usada en el código pero no documentada en los templates de env.
+
+- [ ] Agregar `ALLOWED_ORIGINS=` con comentario a `.env.example` y `docs/env.example.clean`
+
+---
+
+#### 23-24. Ajustes de infraestructura (2 ítems)
+
+Documentados internamente: ajuste de memory limits del container y ventana temporal del job de sincronización.
+
+---
+
+#### 25. Resolver link roto a `docs/auditoria-playwright-20260410.md`
+
+**Experto:** Tech Writer · **Esfuerzo:** 10 min
+
+README referencia este archivo pero no existe en el repo. Un click lleva a 404.
+
+- [ ] Agregar el archivo al repo, o cambiar el link por texto tipo "reporte disponible bajo pedido" si fue excluido intencionalmente
+
+---
+
+#### 26. Declarar uso de AI en el README
+
+**Experto:** AI Reviewer · **Severidad:** MEDIA · **Esfuerzo:** 10 min
+
+Los commits dicen "Co-Authored-By: Claude" pero el README no lo menciona. Crea asimetría: quien revisa commits lo ve, quien lee README no. La industria en 2026 converge hacia declarar el uso de AI en la documentación principal.
+
+- [ ] Agregar 3-4 líneas en README (sección "Historia del proyecto" o nueva "Metodología") tipo: "Las extensiones del Sprint 2 fueron desarrolladas usando Claude Code como co-autor técnico. Las decisiones de diseño, prioridades y research son de Martín; la ejecución de código y documentación técnica fueron producidos en pares humano-AI."
+
+---
+
+#### 27. Inconsistencias documentales menores (batch)
+
+**Experto:** Tech Writer · **Severidad:** MEDIA · **Esfuerzo:** 15 min
+
+- [ ] `docker-compose.prod.yml` referenciado en `docs/runbook-deploy.md` pero no existe — aclarar que se usa `docker-compose.yml` directamente
+- [ ] SMTP_HOST default discrepante: compose dice `smtp.gmail.com`, config dice `smtp-relay.brevo.com` — unificar
+- [ ] Número de screenshots: "27" en README y WORKFLOW-LEARNINGS vs "18" en otros docs — unificar a "27" (que es la realidad en `docs/audit/`)
+- [ ] "5 fases" del runbook en README son en realidad 6 (Fase 0 a 5) — aclarar "6 fases (Fase 0 de prerequisites + 5 de ejecución)"
+- [ ] `package.json` description dice "SPA" pero no es SPA, es server-rendered — cambiar a "Ticketera para banda de música"
+- [ ] `adaptacion.md` no menciona `nginx/app.conf` (tiene `server_name` hardcodeado) ni `docker-compose.yml` (`container_name`) — agregar como puntos 13-14
+
+---
+
+### 🟢 P2 — Portafolio (sesión dedicada, ~4h)
+
+#### 12 (enriched). CASE_STUDY.md — brief de la Recruiter UX/SD
+
+**Experto:** Recruiter · **Severidad:** ALTA (portafolio) · **Esfuerzo:** 2-3h
+
+La Recruiter dio un brief detallado. Estructura sugerida: TL;DR → Contexto y desafío → Mi rol → Proceso (Discovery, Research, Decision, Priorización, Handover) → Artefactos visuales (1-2) → Resultados medibles → Reflexión → Stack al final. Extensión: 1200-1800 palabras. Tono: narrativo + bullets + datos concretos.
+
+3 frases gancho que deberían estar:
+1. "Mi trabajo no fue construir la ticketera — fue diseñar la transferencia de un servicio crítico entre dos equipos sin interrumpir a 2.000 fans"
+2. "El formulario de waitlist no es un campo de contacto — es un instrumento de research con 6 preguntas RFM"
+3. "Documentar para el lector, no para uno mismo, es una decisión de diseño"
+
+- [ ] Escribir CASE_STUDY.md con el brief de arriba
+- [ ] Crear 1 artefacto visual (journey map del fan o service blueprint)
+- [ ] Analizar datos reales de la waitlist (aunque sean N=15) con corte preliminar
+
+---
+
+### 🟢 P3 — Community y nice-to-have
+
+#### 28. Video demo + FAQ + cuadro de costos
+
+**Experto:** Gestora Cultural · **Severidad:** MEDIA · **Esfuerzo:** 1h
+
+Lo que convencería a otra cooperativa de forkear: (a) video de 3-5 min mostrando flujo de compra E2E (no profesional, screencast), (b) FAQ de 10 preguntas frecuentes, (c) cuadro de costos mensuales estimados (server + dominio + MP comisión + mail), (d) sección "Esto NO es para vos si..." para filtrar cooperativas sin recursos técnicos.
+
+- [ ] Video screencast del flujo completo (compra → mail con QR → validación en puerta)
+- [ ] FAQ en README o doc separado
+- [ ] Cuadro de costos en `docs/adaptacion.md`
+
+---
+
+#### 29. `CODE_OF_CONDUCT.md` + `good-first-issue` labels
+
+**Experto:** OSS · **Severidad:** BAJA · **Esfuerzo:** 30 min
+
+GitHub detecta automáticamente `CODE_OF_CONDUCT.md` y muestra un badge en la página del repo. Sin él, muestra "This project does not have a code of conduct". Contributor Covenant en español es el estándar.
+
+- [ ] Crear `CODE_OF_CONDUCT.md` con Contributor Covenant en español
+- [ ] Abrir 2-3 issues con label `good first issue` (ej: traducción al inglés, script de adaptación, tests básicos para /healthz)
+
+---
+
+#### 30. Reducir simetría del WORKFLOW-LEARNINGS
+
+**Experto:** AI Reviewer · **Severidad:** BAJA · **Esfuerzo:** 20 min
+
+La estructura perfecta (8 patrones, 5 anti-patterns, 4 decisiones, 19 preguntas) delata coautoría AI para ojos entrenados. Fusionar 2-3 patrones que se solapan (1.3 y 1.4 → "Saneamiento pre-publicación"), agregar 1-2 notas sueltas sin formato, reducir las 19 preguntas a 10-12 esenciales.
+
+- [ ] Fusionar patrones solapados
+- [ ] Agregar notas sueltas / reflexiones informales
+- [ ] Podar preguntas redundantes
 
 ---
 
@@ -562,26 +687,9 @@ Según los expertos, estas decisiones son correctas y no hay que tocarlas:
 
 ---
 
-## Estado actual del droplet (referencia)
+## Estado del droplet
 
-```
-IP pública:       162.243.172.177
-Hostname:         sab-prod
-Region:           NYC1
-OS:               Ubuntu 24.04.3 LTS
-Specs:            1 vCPU / 512 MB RAM (+1 GB swap) / 10 GB SSD / USD 4/mes
-Docker:           29.4.0
-Docker Compose:   5.1.2
-SSH access:       sab@162.243.172.177 con key ed25519 (martinlleral@gmail.com)
-Sudo:             NOPASSWD para sab
-Firewall:         UFW (22, 80, 443)
-Fail2ban:         activo
-Code:             /opt/sab/app/
-.env:             /opt/sab/app/.env (chmod 600)
-Containers:       sab-app (healthy) + sab-nginx
-Mem limits:       app 400M, nginx 50M (ajustar post-upgrade a 300M/32M)
-Logging:          json-file, max-size 10m, max-file 3
-```
+Referencia operativa documentada internamente (no publicada por contener credenciales de acceso y topología de red).
 
 ---
 
