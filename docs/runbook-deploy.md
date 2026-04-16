@@ -11,12 +11,12 @@
 
 | # | Qué | Quién | Estado |
 |---|---|---|---|
-| P1 | Cuenta DigitalOcean creada con mail + tarjeta del SAB | Nati / Uri | ☐ |
+| P1 | Cuenta DigitalOcean creada con mail + tarjeta del SAB | Coordinadora / tesorero | ☐ |
 | P2 | Clave SSH generada y agregada a la cuenta DO del SAB (`ssh-keygen -t ed25519 -C "sab-deploy"`) | Martín | ☐ |
 | P3 | Contacto con Lucho → dump de la DB de producción (`prod.db`) + dump del volumen `uploads-data` | Martín ↔ Lucho | ☐ |
 | P4 | Acceso al panel DNS de Cloudflare (cuenta o token API con permisos sobre `sindicatoargentinodeboleros.com.ar`) | Martín ↔ Lucho | ☐ |
-| P5 | Acceso al panel de MercadoPago del SAB (para regenerar access token) | Nati / Uri | ☐ |
-| P6 | Acceso al panel de Brevo del SAB (para regenerar API key + SMTP) | Nati / Uri → Lucho | ☐ |
+| P5 | Acceso al panel de MercadoPago del SAB (para regenerar access token) | Coordinadora / tesorero | ☐ |
+| P6 | Acceso al panel de Brevo del SAB (para regenerar API key + SMTP) | Coordinadora / tesorero → Lucho | ☐ |
 | P7 | Decisión sobre el repo GitLab: mantener en cuenta de Lucho o transferir a cuenta SAB | Martín ↔ equipo | ☐ |
 
 Si alguno de P1-P6 no está, **no arrancar el runbook**. Sin P7 se puede arrancar pero idealmente se resuelve primero.
@@ -40,7 +40,7 @@ openssl rand -base64 15
 
 | Servicio | Dónde | Qué hacer |
 |---|---|---|
-| **MercadoPago** | https://www.mercadopago.com.ar/developers/panel → Tus integraciones → la app del SAB → Credenciales de producción | Clic "Regenerar" en Access Token y Public Key. Copiar los nuevos. El viejo queda invalidado automáticamente — la ticketera del droplet viejo dejará de procesar pagos. Coordinar con Nati para que esto ocurra en ventana baja (ej. jueves mañana). |
+| **MercadoPago** | https://www.mercadopago.com.ar/developers/panel → Tus integraciones → la app del SAB → Credenciales de producción | Clic "Regenerar" en Access Token y Public Key. Copiar los nuevos. El viejo queda invalidado automáticamente — la ticketera del droplet viejo dejará de procesar pagos. Coordinar con la coordinadora del SAB para que esto ocurra en ventana baja. |
 | **Brevo SMTP** | https://app.brevo.com → SMTP & API → SMTP keys | Borrar la key vieja (`<BREVO_SMTP_USER_VIEJO_YA_ROTADO>`). Crear una nueva → copiar `user` + `password`. |
 | **Brevo API** | https://app.brevo.com → SMTP & API → API keys | Borrar la vieja (`<BREVO_API_KEY_VIEJA>`) si no se usa en código (verificar con `grep -r BREVO_API_KEY src/`). Si no se usa, no regenerar, solo borrar. |
 | **Perfit** | https://app.myperfit.com → API | Borrar la vieja si no se usa (verificar con `grep -r PERFIT src/`). |

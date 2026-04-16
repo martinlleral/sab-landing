@@ -26,9 +26,9 @@
 
 Panel de 7 expertos revisó el repo completo. **Hallazgos de seguridad e infraestructura documentados internamente** (se publican tachados una vez fixeados). Hallazgos de docs, portafolio y community listados abajo.
 
-### 🔴 P0 — Seguridad pre-deploy (4 ítems, ~30 min)
+### ~~🔴 P0 — Seguridad pre-deploy (4 ítems, ~30 min)~~ ✅ Cerrado 16/4
 
-Ítems 17-20 documentados internamente. Cubren: bug latente en verificación de firma, validación faltante en job de sync, fail-fast de configuración en producción, y verificación de config de reverse proxy.
+Ítems 17-20 fixeados y pusheados en commit `8f0383e`. Cubrieron: bug en verificación de firma, validación en job de sync, fail-fast de config en producción, y config segura de reverse proxy HTTP-only.
 
 ---
 
@@ -171,7 +171,7 @@ Los bloques 1 y 2 son **prioridad deploy**. El bloque 3 es **prioridad portafoli
 
 **Resuelto:** `src/controllers/compras.controller.js` ahora valida firma HMAC-SHA256 (fail-closed si `MP_WEBHOOK_SECRET` ausente), `pago.collector_id` contra `MP_USER_ID` y `pago.transaction_amount` contra `compra.totalPagado`. Verificado con 6 unit tests sobre `verifyMpSignature()` + 5 tests e2e del handler HTTP (sin secret → 503, sin firma → 401, firma válida → 200, amount mismatch → 400, collector mismatch → 403). Fallback cubierto por `syncPagosPendientes` cada 60s + polling cliente en `back_url`, por lo que rechazar sin secret no pierde compras.
 
-**Pendiente externo:** Nati/Uri deben activar "Clave secreta" en panel MP → Webhooks → cargar `MP_WEBHOOK_SECRET` + `MP_USER_ID` en `.env` del droplet + restart.
+**Pendiente externo:** coordinadora/tesorero del SAB deben activar "Clave secreta" en panel MP → Webhooks → cargar `MP_WEBHOOK_SECRET` + `MP_USER_ID` en `.env` del droplet + restart.
 
 ---
 
@@ -349,7 +349,7 @@ Hoy si el sitio cae, nadie se entera. El SAB procesa pagos reales. Un outage de 
 - [ ] Cuenta en Uptime Robot (https://uptimerobot.com) — plan gratis: 50 monitors, 5 min interval
 - [ ] Monitor HTTP a `/` con expected content "Sindicato Argentino de Boleros"
 - [ ] Monitor HTTP a `/api/eventos/proximos` con expected 200 + JSON válido
-- [ ] Alerta por mail a Martín + Nati
+- [ ] Alerta por mail a Martín + coordinadora del SAB
 - [ ] Bonus: webhook a Telegram bot para alertas inmediatas
 - [ ] Post-SSL: monitor HTTPS con validación de cert expiración
 
@@ -523,7 +523,7 @@ SELECT p.proname, p.prosecdef, pg_get_functiondef(p.oid)
 **Crear `CASE_STUDY.md`** (1500-2000 palabras) que cuente el proyecto desde la perspectiva de Service Design:
 
 - **Problema del cliente:** 21 músicos de una cooperativa sin interlocutor único, dependencia tecnológica del desarrollador original
-- **Descubrimiento:** reuniones con Euge, Nati, Tebi + panel de 7 expertos en la auditoría inicial
+- **Descubrimiento:** reuniones con co-fundador, coordinadora e interlocutor operativo + panel de 7 expertos en la auditoría inicial
 - **Decisiones de producto:** waitlist con encuesta RFM como instrumento de research (no "form"), criterios de corte para el sistema de socios
 - **Trade-offs:** mantener stack legacy de Lucho vs. migrar a Astro desde cero (decisión justificada con ROI)
 - **Handover como service blueprint:** el `runbook-deploy.md` reconceptualizado como artefacto de Service Design — documenta el flujo operacional de un servicio crítico entre stakeholders
@@ -663,8 +663,8 @@ Cada imagen con un alt descriptivo y un párrafo corto que explica qué evidenci
 
 ## 📡 Pendientes externos (no dependen de trabajo técnico, solo de coordinación)
 
-- [ ] **Gmail App Password** generado por Nati/Tebi desde la cuenta `sindicatoargentinodeboleros@gmail.com` (mensaje listo para mandar en el portapapeles de Martín)
-- [ ] **Rotación MP Access Token** desde panel MercadoPago del SAB (Nati/Uri)
+- [ ] **Gmail App Password** generado por la coordinadora del SAB desde la cuenta del sindicato
+- [ ] **Rotación MP Access Token** desde panel MercadoPago del SAB (coordinadora/tesorero del SAB)
 - [ ] **Lucho cambia los nameservers** en NIC.ar a la cuenta Cloudflare nueva del SAB (mensaje ya preparado en sesiones anteriores)
 - [ ] **Cloudflare account** del SAB con el mail `sindicatoargentinodeboleros@gmail.com`
 - [ ] **Transferencia de titularidad del dominio** — conversación con Lucho aprovechando la fecha de vencimiento
