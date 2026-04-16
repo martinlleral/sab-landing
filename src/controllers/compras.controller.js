@@ -26,7 +26,7 @@ function verifyMpSignature(req, secret) {
   const dataId = req.query['data.id'] || req.body?.data?.id;
   if (!dataId) return { valid: false, reason: 'missing_data_id' };
 
-  const manifest = `id:${String(dataId).toLowerCase()};request-id:${requestId};ts:${ts};`;
+  const manifest = `id:${String(dataId)};request-id:${requestId};ts:${ts};`;
   const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
 
   let expectedBuf, v1Buf;

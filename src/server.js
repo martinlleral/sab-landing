@@ -118,6 +118,11 @@ let server;
 let syncInterval;
 
 async function start() {
+  if (config.nodeEnv === 'production' && config.sessionSecret === 'dev_secret_change_in_production') {
+    console.error('FATAL: SESSION_SECRET no configurado en producción. Setear en .env antes de arrancar.');
+    process.exit(1);
+  }
+
   try {
     await prisma.$connect();
     console.log('✅ Base de datos conectada');
