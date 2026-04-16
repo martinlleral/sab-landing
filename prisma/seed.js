@@ -15,7 +15,7 @@ async function main() {
     // ADMIN_EMAIL y ADMIN_PASS vienen del .env y hay que rotar la pass post-bootstrap.
     const bootstrapEmail = process.env.ADMIN_EMAIL || 'admin@localhost';
     const bootstrapPass = process.env.ADMIN_PASS || 'CAMBIAR_' + Date.now();
-    const hashedPassword = await bcrypt.hash(bootstrapPass, 10);
+    const hashedPassword = await bcrypt.hash(bootstrapPass, 12);
     await prisma.usuario.create({
       data: {
         nombre: 'Admin',

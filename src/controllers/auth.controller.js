@@ -18,7 +18,7 @@ async function login(req, res) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    req.session.usuario = {
+    const userData = {
       id: usuario.id,
       nombre: usuario.nombre,
       apellido: usuario.apellido,
@@ -26,7 +26,14 @@ async function login(req, res) {
       rol: usuario.rol,
     };
 
-    return res.json({ ok: true, usuario: req.session.usuario });
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('Error regenerando sesión:', err);
+        return res.status(500).json({ error: 'Error interno del servidor' });
+      }
+      req.session.usuario = userData;
+      req.session.save(() => res.json({ ok: true, usuario: userData }));
+    });
   } catch (err) {
     console.error('Error en login:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });

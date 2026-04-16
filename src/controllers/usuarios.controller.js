@@ -34,7 +34,7 @@ async function adminCrear(req, res) {
     const existing = await prisma.usuario.findUnique({ where: { email } });
     if (existing) return res.status(400).json({ error: 'Ya existe un usuario con ese email' });
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
     const usuario = await prisma.usuario.create({
       data: {
         nombre,
@@ -69,7 +69,7 @@ async function adminEditar(req, res) {
     if (telefono !== undefined) data.telefono = telefono;
     if (rol !== undefined) data.rol = parseInt(rol);
     if (activo !== undefined) data.activo = activo === 'true' || activo === true;
-    if (password) data.password = await bcrypt.hash(password, 10);
+    if (password) data.password = await bcrypt.hash(password, 12);
 
     const usuario = await prisma.usuario.update({
       where: { id },
