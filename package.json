@@ -1,7 +1,7 @@
 {
   "name": "banda-ticketera",
   "version": "1.0.0",
-  "description": "SPA Ticketera para banda de música",
+  "description": "Ticketera + landing para cooperativas musicales",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

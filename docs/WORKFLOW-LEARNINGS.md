@@ -17,7 +17,7 @@
 - Sirve como contrato para el cliente ("esto es lo que hicimos").
 - Es un artefacto de Service Design reutilizable — transferir un servicio crítico entre stakeholders sin interrumpir al usuario final es literalmente un service blueprint operativo.
 
-**Ejemplo concreto en este proyecto:** `docs/runbook-deploy.md` con 5 fases numeradas (rotación de secrets + crear droplet + deploy + DNS + monitoreo) + checkpoints por fase + rollback explícito.
+**Ejemplo concreto en este proyecto:** `docs/runbook-deploy.md` con 6 fases (Fase 0 de prerequisites + 5 de ejecución) (rotación de secrets + crear droplet + deploy + DNS + monitoreo) + checkpoints por fase + rollback explícito.
 
 **Replicabilidad:** cualquier proyecto con deploy manual merece un runbook. Incluso si después automatizás con CI/CD, el runbook es la spec de lo que el CI debe hacer.
 

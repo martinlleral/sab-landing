@@ -177,7 +177,7 @@ Desde la máquina local de Martín (WSL):
 ```bash
 cd "/mnt/c/Users/Lenovo/Desktop/ASESORÍA IT/SAB/Landing Page/sindicato-argentino-de-boleros"
 
-scp docker-compose.prod.yml sab@$NUEVA_IP:/opt/sab/
+scp docker-compose.yml sab@$NUEVA_IP:/opt/sab/
 scp nginx/app.conf              sab@$NUEVA_IP:/opt/sab/nginx/
 ```
 
@@ -213,14 +213,14 @@ cd /opt/sab
 # porque todavía no tenemos certificados:
 # Opción rápida: usar un app.conf mínimo SOLO con listen 80 → proxy_pass app:3000
 
-docker compose -f docker-compose.prod.yml up -d app
+docker compose -f docker-compose.yml up -d app
 # (solo app, sin nginx aún)
 ```
 
 Verificar que la app corre:
 
 ```bash
-docker compose -f docker-compose.prod.yml logs app --tail 50
+docker compose -f docker-compose.yml logs app --tail 50
 # Debe mostrar: ▶ Ejecutando migraciones... / Iniciando servidor...
 curl http://localhost:3000/
 # Debe devolver HTML
@@ -235,7 +235,7 @@ scp prod.db sab@$NUEVA_IP:/tmp/
 # Cargar en el volumen Docker
 docker cp /tmp/prod.db sab-app:/app/prisma/prod.db
 docker restart sab-app
-docker compose -f docker-compose.prod.yml logs app --tail 20
+docker compose -f docker-compose.yml logs app --tail 20
 
 # Verificar eventos
 curl http://localhost:3000/api/eventos/proximos
@@ -267,7 +267,7 @@ Antes de esto necesitamos el DNS apuntando al droplet nuevo (ver Fase 3). Como e
 sudo apt install -y certbot
 
 # Levantar solo la app (sin nginx) y liberar puerto 80 para certbot
-docker compose -f docker-compose.prod.yml stop nginx 2>/dev/null || true
+docker compose -f docker-compose.yml stop nginx 2>/dev/null || true
 
 sudo certbot certonly --standalone \
   -d sindicatoargentinodeboleros.com.ar \
@@ -279,13 +279,13 @@ sudo certbot certonly --standalone \
 sudo cp -rL /etc/letsencrypt/live /etc/letsencrypt/archive /etc/letsencrypt/renewal /opt/sab/letsencrypt/
 ```
 
-> **Alternativa más simple:** saltar certbot standalone y usar el flujo `--webroot` del certbot del docker-compose.prod.yml. El gotcha es que requiere nginx corriendo con un stub server listening en 80, lo cual requiere DNS ya apuntado. El workaround es lo de arriba: certbot standalone primero, copiar certs al volumen, luego levantar nginx con certbot en modo renewal.
+> **Alternativa más simple:** saltar certbot standalone y usar el flujo `--webroot` del certbot del docker-compose.yml. El gotcha es que requiere nginx corriendo con un stub server listening en 80, lo cual requiere DNS ya apuntado. El workaround es lo de arriba: certbot standalone primero, copiar certs al volumen, luego levantar nginx con certbot en modo renewal.
 
 ### 2.8 Levantar todo el stack
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.yml up -d
+docker compose -f docker-compose.yml ps
 # Debe mostrar 3 servicios healthy: app, nginx, certbot
 ```
 
@@ -429,7 +429,7 @@ Y lo más concluyente: enviarse un mail de prueba desde la app del SAB a una cue
 Dejar ambos droplets corriendo durante 48 horas. El viejo se queda "por si acaso". Si algo falla en el nuevo, revertir el registro A en Cloudflare (vuelve a propagarse en 2 min porque TTL bajo).
 
 Durante las 48h, monitorear:
-- `docker compose -f docker-compose.prod.yml logs -f` en el droplet nuevo
+- `docker compose -f docker-compose.yml logs -f` en el droplet nuevo
 - Test de compra end-to-end (generar una entrada real y que llegue el mail con QR)
 - Waitlist: chequear que el count sube en Supabase al agregar un email real
 
@@ -475,7 +475,7 @@ Hacer un push a `main` y verificar que el pipeline corre end-to-end.
 
 # Mientras tanto, diagnosticar en el droplet nuevo:
 ssh sab@$NUEVA_IP
-docker compose -f /opt/sab/docker-compose.prod.yml logs --tail 100
+docker compose -f /opt/sab/docker-compose.yml logs --tail 100
 ```
 
 ### Rollback de MercadoPago (si rotación de tokens rompió pagos)
@@ -485,7 +485,7 @@ El token viejo ya está invalidado: no hay rollback a los tokens viejos. El fix 
 ```bash
 ssh sab@$NUEVA_IP
 nano /opt/sab/.env   # corregir MP_ACCESS_TOKEN
-docker compose -f /opt/sab/docker-compose.prod.yml restart app
+docker compose -f /opt/sab/docker-compose.yml restart app
 ```
 
 ### Rollback de DB (si un dump corrupto rompió la app)

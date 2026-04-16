@@ -527,7 +527,7 @@ SELECT p.proname, p.prosecdef, pg_get_functiondef(p.oid)
 - **Decisiones de producto:** waitlist con encuesta RFM como instrumento de research (no "form"), criterios de corte para el sistema de socios
 - **Trade-offs:** mantener stack legacy de Lucho vs. migrar a Astro desde cero (decisión justificada con ROI)
 - **Handover como service blueprint:** el `runbook-deploy.md` reconceptualizado como artefacto de Service Design — documenta el flujo operacional de un servicio crítico entre stakeholders
-- **Métricas:** 40 validaciones Playwright, 18 screenshots, $6-8M/año de ahorro estimado vs Passline
+- **Métricas:** 40 validaciones Playwright, 27 screenshots, $6-8M/año de ahorro estimado vs Passline
 - **Post-mortem del Sprint 2:** qué salió bien, qué salió mal, qué aprendimos
 
 Este archivo **es** lo que va en CV, LinkedIn y entrevistas — NO el README técnico.

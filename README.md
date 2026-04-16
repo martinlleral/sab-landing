@@ -4,7 +4,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/martinlleral/sab-landing)](https://github.com/martinlleral/sab-landing/commits/main)
 [![Top language](https://img.shields.io/github/languages/top/martinlleral/sab-landing)](https://github.com/martinlleral/sab-landing)
 [![Stars](https://img.shields.io/github/stars/martinlleral/sab-landing?style=social)](https://github.com/martinlleral/sab-landing)
-[![Status: production](https://img.shields.io/badge/status-in%20production-success)](http://162.243.172.177/)
+[![Status: production](https://img.shields.io/badge/status-in%20production-success)](https://sindicatoargentinodeboleros.com.ar/)
 
 Landing page + ticketera propia + sistema de suscripciones para el **Sindicato Argentino de Boleros**, orquesta cooperativa de 21 músicos y músicas de La Plata, Argentina.
 
@@ -24,6 +24,8 @@ Este proyecto es un ejemplo concreto de **trabajo colaborativo en capas**:
 - **Abril 2026** — El proyecto pasa a manos de Martín Lleral, que toma el mantenimiento + extensiones como parte de un Sprint 2: agregar sistema de suscripciones, waitlist con encuesta de research, fixes de seguridad y accesibilidad, migración de infraestructura a una cuenta DigitalOcean propia del SAB, y publicación del código como open source con licencia MIT.
 
 La mayor parte del código de la ticketera — el corazón funcional del sistema — es obra de Lucho. Las extensiones de este repo (waitlist, sección "Quiénes somos", fixes de seguridad, runbook de deploy, auditorías) son contribuciones posteriores de Martín. Ambos trabajos existen en el mismo árbol y ambas autorías están reconocidas en el [`LICENSE`](LICENSE).
+
+Las extensiones del Sprint 2 fueron desarrolladas usando [Claude Code](https://claude.ai/code) (Anthropic) como co-autor técnico. Las decisiones de diseño, prioridades de seguridad y research son de Martín; la ejecución de código, refactors y documentación técnica fueron producidos en pares humano-AI. Cada commit tiene coautoría explícita (`Co-Authored-By: Claude`).
 
 Publicamos bajo MIT License con el espíritu de que **otras cooperativas musicales argentinas o latinoamericanas puedan adaptar este sistema para sus propios ciclos**, sin tener que reconstruir desde cero lo que Lucho ya dejó muy bien hecho.
 
@@ -127,7 +129,7 @@ sab-landing/
 ├── nginx/
 │   └── app.conf               reverse proxy config
 ├── docs/
-│   ├── runbook-deploy.md      runbook completo de deploy (5 fases)
+│   ├── runbook-deploy.md      runbook completo de deploy (6 fases)
 │   ├── TODO-deploy.md         deuda técnica catalogada por prioridad
 │   ├── auditoria-playwright-*.md   auditorías de UX/A11y/performance
 │   ├── env.example.clean      template de variables
@@ -227,8 +229,8 @@ Tomó el proyecto en abril 2026 como parte de un Sprint 2 + Sprint 3 con el SAB.
 - Mejoras de SEO (canonical, robots.txt, sitemap.xml, og:image 1200x630, Schema.org MusicGroup + MusicEvent)
 - Migración de infraestructura a una cuenta DigitalOcean propia del SAB (independencia del droplet original)
 - Hardening del droplet (SSH key only, UFW, fail2ban, swap, healthcheck, mem limits, log rotation)
-- Runbook de deploy completo en 5 fases reproducibles
-- Auditoría Playwright con 40 validaciones + 18 capturas de pantalla
+- Runbook de deploy completo en 6 fases reproducibles
+- Auditoría Playwright con 40 validaciones + 27 capturas de pantalla
 - Publicación del código como open source con licencia MIT
 - Documentación del proyecto (README, TODO, runbooks, este archivo de historia)
 

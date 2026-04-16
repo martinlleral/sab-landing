@@ -21,7 +21,7 @@ services:
       - MP_PUBLIC_KEY=${MP_PUBLIC_KEY}
       - MP_WEBHOOK_SECRET=${MP_WEBHOOK_SECRET:-}
       - MP_USER_ID=${MP_USER_ID:-}
-      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_HOST=${SMTP_HOST:-smtp-relay.brevo.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASS=${SMTP_PASS}
@@ -36,7 +36,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 400M
+          memory: 300M
     # /healthz valida que Prisma puede consultar SQLite (SELECT 1). Antes
     # apuntaba a "/" que solo probaba que Node respondía — no detectaba
     # si el pool de Prisma se había roto.

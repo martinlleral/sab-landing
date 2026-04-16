@@ -138,6 +138,23 @@ El seed crea eventos de ejemplo que se ven en dev. Cambiá los nombres, fechas y
 
 ---
 
+### 13. Nginx config — dominio del reverse proxy
+
+**Archivo:** `nginx/app.conf`
+
+- `server_name _` → cambiar a tu dominio (ej: `server_name orquesta.ar www.orquesta.ar;`)
+- Cuando tengas SSL, renombrar `nginx/app-ssl.conf` a `nginx/app.conf` y ajustar los paths de los certificados Let's Encrypt al nuevo dominio
+
+### 14. Docker Compose — nombre del container y memory limits
+
+**Archivo:** `docker-compose.yml`
+
+- `container_name: sab-app` → cambiá a algo con el nombre de tu proyecto (ej: `orquesta-app`)
+- `container_name: sab-nginx` → idem (ej: `orquesta-nginx`)
+- Ajustar `memory` limits si tu droplet tiene más o menos RAM que 512MB
+
+---
+
 ## Post-adaptación — qué validar antes de lanzar
 
 1. **Flujo end-to-end en staging:** crear preferencia → pagar con cuenta de test de MP → recibir mail → validar QR en la puerta (el backoffice tiene lector de QR).
