@@ -202,7 +202,7 @@ Cuando las dependencias destrababan (en varias sesiones), cada paso era de 10-30
 
 ### 2.4 Seed de DB con credenciales hardcodeadas
 
-**Problema:** `prisma/seed.js` original creaba un admin con email `admin@banda.com` y password `admin123`. Cuando rotamos las credenciales manualmente en el droplet, el seed volvía a crear el admin débil en el siguiente restart del container.
+**Problema:** `prisma/seed.js` original creaba un admin con un email de ejemplo del tipo `admin@<proyecto>.ejemplo` y una password débil del estilo `admin<número>`. Cuando rotamos las credenciales manualmente en el droplet, el seed volvía a crear el admin débil en el siguiente restart del container. (Las credenciales reales que estaban en el código fueron rotadas el 14/4 — acá usamos placeholders genéricos para no repetir el error descrito en 2.1 en este mismo documento.)
 
 **Fix para futuro:**
 - Seeds idempotentes que chequeen por **existencia** del recurso (ej: "existe algún admin con rol 1"), no por valores específicos (ej: "existe admin con email X").
