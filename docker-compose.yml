@@ -21,7 +21,7 @@ services:
       - MP_PUBLIC_KEY=${MP_PUBLIC_KEY}
       - MP_WEBHOOK_SECRET=${MP_WEBHOOK_SECRET:-}
       - MP_USER_ID=${MP_USER_ID:-}
-      - SMTP_HOST=${SMTP_HOST:-smtp-relay.brevo.com}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASS=${SMTP_PASS}

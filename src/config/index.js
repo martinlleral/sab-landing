@@ -13,7 +13,7 @@ module.exports = {
     userId: process.env.MP_USER_ID || '',
   },
   smtp: {
-    host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT) || 587,
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
