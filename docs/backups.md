@@ -59,15 +59,17 @@ rclone version
 
 ### 4. Configurar el remote "r2"
 
+Opción A — `rclone config` interactivo:
+
 ```bash
 rclone config
 ```
 
-En el prompt interactivo, responder:
+Responder:
 
 - `n` (new remote)
 - Name: `r2`
-- Storage: `s3` (luego elegir provider `Cloudflare R2`)
+- Storage: `s3` (luego elegir provider `Cloudflare`)
 - access_key_id: `<pegar Access Key ID>`
 - secret_access_key: `<pegar Secret Access Key>`
 - region: `auto`
@@ -75,6 +77,34 @@ En el prompt interactivo, responder:
 - Resto: Enter (defaults)
 - Confirm config: `y`
 - Quit: `q`
+
+Opción B — editar el archivo directamente (más rápido):
+
+```bash
+mkdir -p ~/.config/rclone
+nano ~/.config/rclone/rclone.conf
+```
+
+Pegar:
+
+```ini
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id = <Access Key ID>
+secret_access_key = <Secret Access Key>
+region = auto
+endpoint = https://<account-id>.r2.cloudflarestorage.com
+no_check_bucket = true
+```
+
+Ctrl+O → Enter → Ctrl+X. Luego:
+
+```bash
+chmod 600 ~/.config/rclone/rclone.conf
+```
+
+**`no_check_bucket = true` es crítico:** sin esta opción, rclone hace un HEAD al bucket antes de escribir. Con un token scopeado a un solo bucket (sin permisos de `HeadBucket` ni `ListBuckets`), ese HEAD falla con 403 → rclone intenta `CreateBucket` → 403 otra vez → upload falla. Con `no_check_bucket = true`, rclone asume que el bucket existe y va directo al PUT del objeto.
 
 Verificar:
 
