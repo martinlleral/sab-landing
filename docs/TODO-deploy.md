@@ -16,9 +16,10 @@
 
 **Pendientes del Bloque 1 que requieren dependencias externas o entorno no disponible en la sesión autónoma:** ítem 2 (rotación de secrets externa) · ítem 4 (upgrade CVEs, requiere test real del flujo Brevo) · ítem 6 (auth hardening, `cookie.secure` espera HTTPS activo).
 
-## Progreso del 17/4 — 1 ítem cerrado
+## Progreso del 17/4 — 1 ítem cerrado + 4 verificados como resueltos
 
 - **Bloque 1 (seguridad crítica):** ítem 5 (rate limiting: `express-rate-limit` en `/api/auth/login` y `/api/compras/preferencia` + `limit_req_zone` defensa en profundidad en nginx + smoke-test persistido en `scripts/smoke-rate-limit.js`, validado PASS contra docker compose local).
+- **Bloque 3 (calidad repo) — pasada de verificación sobre P1 pendientes:** ítems 22, 25, 26 y 27 ya estaban todos resueltos en commits intermedios al panel del 16/4. El Tech Writer / AI Reviewer debieron revisar una versión anterior del repo. Cerrados con evidencia (grep + lectura de archivos). **Único delta agregado:** documentar las nuevas env vars del rate limiter (`RATE_LIMIT_LOGIN_MAX`, `RATE_LIMIT_COMPRAS_MAX`) en ambos `.env.example`.
 
 **Pendientes del Bloque 2 antes de la campaña del 1/5:** ítem 7 (backups automáticos) · ítem 8 (uptime monitoring) · ítem 10 (upgrade del droplet a 1 GB RAM) · sub-ítem 11b (checks de longitud en policy INSERT de `waitlist_socios` — pendiente de definir umbrales con Martín).
 
@@ -46,13 +47,9 @@ Panel de 7 expertos revisó el repo completo. **Hallazgos de seguridad e infraes
 
 ---
 
-#### 22. Agregar `ALLOWED_ORIGINS` a ambos `.env.example`
+#### ~~22. Agregar `ALLOWED_ORIGINS` a ambos `.env.example`~~ ✅ Verificado 17/4
 
-**Experto:** Tech Writer · **Esfuerzo:** 5 min
-
-Variable usada en el código pero no documentada en los templates de env.
-
-- [ ] Agregar `ALLOWED_ORIGINS=` con comentario a `.env.example` y `docs/env.example.clean`
+**Resuelto:** `ALLOWED_ORIGINS` ya estaba en ambos templates (líneas 13-16 con comentario explicativo). Fix aplicado en commits posteriores al sprint 1. En esta pasada, además, **se agregaron las env vars nuevas del rate limiter** (`RATE_LIMIT_LOGIN_MAX`, `RATE_LIMIT_COMPRAS_MAX`) a ambos archivos, comentadas con sus defaults.
 
 ---
 
@@ -62,36 +59,30 @@ Documentados internamente: ajuste de memory limits del container y ventana tempo
 
 ---
 
-#### 25. Resolver link roto a `docs/auditoria-playwright-20260410.md`
+#### ~~25. Resolver link roto a `docs/auditoria-playwright-20260410.md`~~ ✅ Verificado 17/4
 
-**Experto:** Tech Writer · **Esfuerzo:** 10 min
-
-README referencia este archivo pero no existe en el repo. Un click lleva a 404.
-
-- [ ] Agregar el archivo al repo, o cambiar el link por texto tipo "reporte disponible bajo pedido" si fue excluido intencionalmente
+**Resuelto:** el archivo existe (214 líneas, contenido real con tabla de resumen, validaciones, hallazgos). El Tech Writer debió revisar una versión anterior del repo. Link vivo desde README:162 y CONTRIBUTING:42.
 
 ---
 
-#### 26. Declarar uso de AI en el README
+#### ~~26. Declarar uso de AI en el README~~ ✅ Verificado 17/4
 
-**Experto:** AI Reviewer · **Severidad:** MEDIA · **Esfuerzo:** 10 min
-
-Los commits dicen "Co-Authored-By: Claude" pero el README no lo menciona. Crea asimetría: quien revisa commits lo ve, quien lee README no. La industria en 2026 converge hacia declarar el uso de AI en la documentación principal.
-
-- [ ] Agregar 3-4 líneas en README (sección "Historia del proyecto" o nueva "Metodología") tipo: "Las extensiones del Sprint 2 fueron desarrolladas usando Claude Code como co-autor técnico. Las decisiones de diseño, prioridades y research son de Martín; la ejecución de código y documentación técnica fueron producidos en pares humano-AI."
+**Resuelto:** README.md:28 tiene el párrafo completo declarando el uso de Claude Code como co-autor técnico, con autoría explícita de las decisiones de diseño/research a Martín y los commits `Co-Authored-By: Claude`. Fix aplicado en commits posteriores al hallazgo.
 
 ---
 
-#### 27. Inconsistencias documentales menores (batch)
+#### ~~27. Inconsistencias documentales menores (batch)~~ ✅ Verificado 17/4
 
-**Experto:** Tech Writer · **Severidad:** MEDIA · **Esfuerzo:** 15 min
+Pasada de verificación sobre los 6 sub-hallazgos: **todos ya estaban resueltos**.
 
-- [ ] `docker-compose.prod.yml` referenciado en `docs/runbook-deploy.md` pero no existe — aclarar que se usa `docker-compose.yml` directamente
-- [ ] SMTP_HOST default discrepante: compose dice `smtp.gmail.com`, config dice `smtp-relay.brevo.com` — unificar
-- [ ] Número de screenshots: "27" en README y WORKFLOW-LEARNINGS vs "18" en otros docs — unificar a "27" (que es la realidad en `docs/audit/`)
-- [ ] "5 fases" del runbook en README son en realidad 6 (Fase 0 a 5) — aclarar "6 fases (Fase 0 de prerequisites + 5 de ejecución)"
-- [ ] `package.json` description dice "SPA" pero no es SPA, es server-rendered — cambiar a "Ticketera para banda de música"
-- [ ] `adaptacion.md` no menciona `nginx/app.conf` (tiene `server_name` hardcodeado) ni `docker-compose.yml` (`container_name`) — agregar como puntos 13-14
+- ✅ `docker-compose.prod.yml` — no hay referencia en `runbook-deploy.md` (grep confirma 0 matches)
+- ✅ SMTP_HOST — `docker-compose.yml:24`, `src/config/index.js:16`, `.env.example:37` y `docs/env.example.clean:37` **todos** dicen `smtp.gmail.com`. `smtp-relay.brevo.com` no aparece en ningún archivo del repo
+- ✅ Screenshots — grep de "18 capturas/screenshots" devuelve 0 matches, solo aparece "27" en README:162, README:233 y TODO-deploy:514
+- ✅ "5 fases" — README.md:132 dice "(6 fases)" y líneas 147-152 enumeran correctamente `Fase 0` a `Fase 5`
+- ✅ `package.json:4` — ya dice `"Ticketera + landing para cooperativas musicales"`, no "SPA"
+- ✅ `adaptacion.md:143-153` — ya tiene secciones dedicadas a `nginx/app.conf` (cambio de `server_name`) y `docker-compose.yml` (cambio de `container_name`)
+
+Los hallazgos del Tech Writer en el panel del 16/4 aplicaban a una versión anterior del repo — los fixes se habían hecho en commits intermedios antes del panel. Cerrado sin cambios.
 
 ---
 
