@@ -47,9 +47,12 @@ app.use(cors({
   credentials: true,
 }));
 
-// Body parsers
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Body parsers — límite conservador. Las subidas de imágenes pasan por
+// multer (no json/urlencoded), así que bajar a 1mb no afecta uploads.
+// Previene DoS por requests JSON grandes (10mb × 40 concurrentes = OOM
+// fácil en un droplet de 512MB).
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Sesiones con SQLite
 const SQLiteStore = require('connect-sqlite3')(session);
@@ -94,6 +97,21 @@ app.get('/healthz', async (_req, res) => {
 // ni /check (polling del cliente post-pago, parte del patrón 3-caminos).
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/compras/preferencia', comprasLimiter);
+
+// Guard del backoffice: express.static (que viene abajo) sirve cualquier archivo
+// en public/, incluyendo public/backoffice/dashboard.html. Eso exponía la
+// estructura del admin sin auth (no filtraba datos, pero daba señales al
+// atacante). Este middleware deja pasar solo login.html; todo el resto
+// redirige a login si no hay sesión admin activa.
+app.use('/backoffice', (req, res, next) => {
+  if (req.path === '/login.html' || req.path === '/login' || req.path === '/') {
+    return next();
+  }
+  if (!req.session?.usuario || req.session.usuario.rol !== 1) {
+    return res.redirect('/backoffice/login.html');
+  }
+  next();
+});
 
 // Archivos estáticos
 app.use(express.static(path.join(__dirname, '../public')));
