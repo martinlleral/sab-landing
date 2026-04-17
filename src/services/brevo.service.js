@@ -1,3 +1,7 @@
+// Wrapper SMTP genérico con nodemailer. El nombre del archivo es legacy
+// (el proyecto nació usando Brevo) — funciona con cualquier SMTP que se
+// configure en las env vars SMTP_HOST/PORT/USER/PASS. Hoy el SAB lo usa
+// con Gmail App Password.
 const nodemailer = require('nodemailer');
 const config = require('../config');
 

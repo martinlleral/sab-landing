@@ -72,13 +72,13 @@ flowchart LR
     App --> SQLite[(SQLite<br/>eventos, compras,<br/>entradas, admin)]
     App <-.REST.-> Supabase[(Supabase Postgres<br/>waitlist + research)]
     App <-.SDK.-> MP[MercadoPago<br/>preferencias + webhook]
-    App <-.SMTP.-> Brevo[Brevo<br/>mails con QR]
+    App <-.SMTP.-> Mail[SMTP<br/>Gmail App Password<br/>o Brevo]
 
     User <-.JS directo.-> Supabase
 
     classDef external fill:#2a3f5c,stroke:#3b5477,color:#e8ecf3
     classDef internal fill:#4a2230,stroke:#7a3c4d,color:#f0e8ec
-    class CF,MP,Brevo,Supabase external
+    class CF,MP,Mail,Supabase external
     class Nginx,App,SQLite internal
 ```
 
@@ -115,7 +115,7 @@ sab-landing/
 │   ├── server.js              entry point Express
 │   ├── routes/                rutas API + backoffice HTML
 │   ├── controllers/           lógica de cada endpoint
-│   ├── services/              integraciones MercadoPago, Brevo, QR
+│   ├── services/              integraciones MercadoPago, SMTP, QR
 │   ├── middleware/            auth, upload, validación
 │   └── utils/                 helpers (Prisma client, etc.)
 ├── prisma/
