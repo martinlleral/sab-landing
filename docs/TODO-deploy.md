@@ -1,6 +1,6 @@
 # TODO — Deploy & Technical Debt
 
-**Última actualización:** 16/4/2026 (post auditoría de integridad con 7 expertos)
+**Última actualización:** 17/4/2026 (rate limiting cerrado, smoke-test persistido)
 **Estado general:** MVP en producción con hardening parcial. Auditoría del 16/4 identificó hallazgos adicionales en seguridad, resiliencia, documentación y portafolio.
 **Score del proyecto (14/4, pre-hardening):** 5.8 / 10 promedio (SRE 5.5 · Security 4.8 · Tech Writer 7.0)
 
@@ -14,7 +14,11 @@
 - **Bloque 2 (resiliencia):** ítem 9 (graceful shutdown + `/healthz` con Prisma check + wiring de `MP_WEBHOOK_SECRET`/`MP_USER_ID` al container) · ítem 11 (RLS de Supabase verificado en vivo con 4 vectores — sin filtración — + fix de `search_path` en `waitlist_count`)
 - **Bloque 3 (calidad del repo):** ítem 13 (fix `ADMIN_USER` → `ADMIN_EMAIL` en ambos `.env.example`) · ítem 14 (5 screenshots curadas + sección "Auditorías y research" en README) · ítem 15 (`CONTRIBUTING.md` + `docs/adaptacion.md` + 3 templates `.github/`) · ítem 16 (5 badges shield.io + diagrama Mermaid de arquitectura en README)
 
-**Pendientes del Bloque 1 que requieren dependencias externas o entorno no disponible en la sesión autónoma:** ítem 2 (rotación de secrets externa) · ítem 4 (upgrade CVEs, requiere test real del flujo Brevo) · ítem 5 (rate limiting, requiere `npm install` local) · ítem 6 (auth hardening, `cookie.secure` espera HTTPS activo).
+**Pendientes del Bloque 1 que requieren dependencias externas o entorno no disponible en la sesión autónoma:** ítem 2 (rotación de secrets externa) · ítem 4 (upgrade CVEs, requiere test real del flujo Brevo) · ítem 6 (auth hardening, `cookie.secure` espera HTTPS activo).
+
+## Progreso del 17/4 — 1 ítem cerrado
+
+- **Bloque 1 (seguridad crítica):** ítem 5 (rate limiting: `express-rate-limit` en `/api/auth/login` y `/api/compras/preferencia` + `limit_req_zone` defensa en profundidad en nginx + smoke-test persistido en `scripts/smoke-rate-limit.js`, validado PASS contra docker compose local).
 
 **Pendientes del Bloque 2 antes de la campaña del 1/5:** ítem 7 (backups automáticos) · ítem 8 (uptime monitoring) · ítem 10 (upgrade del droplet a 1 GB RAM) · sub-ítem 11b (checks de longitud en policy INSERT de `waitlist_socios` — pendiente de definir umbrales con Martín).
 
@@ -225,41 +229,21 @@ Los tokens viejos que estuvieron en `.env.example` siguen activos en sus paneles
 
 ---
 
-### 5. Sin rate limiting en rutas críticas
+### ~~5. Sin rate limiting en rutas críticas~~ ✅ Hecho 17/4
 
-**Severidad:** ALTA · **Experto:** Security + SRE · **Esfuerzo:** 30 min
+**Resuelto:** módulo nuevo `src/middleware/rate-limit.js` con dos limiters exportados y montados en `server.js` antes de `app.use('/', routes)`:
 
-- `/api/auth/login` → bruteforce del admin posible. Con bcrypt cost 10 y sin lockout, un diccionario de 10k passwords se prueba en minutos si el atacante paraleliza.
-- `/api/compras/preferencia` → bot llena la tabla de compras pending, consume cuota de API MP, ensucia el cron de sync
-- Waitlist de Supabase → spam ilimitado si RLS no lo mitiga
+- `loginLimiter` → `/api/auth/login`: 10 intentos / 15 min. Corta bruteforce del backoffice (bcrypt cost 10 + diccionario). Tunable por `RATE_LIMIT_LOGIN_MAX`.
+- `comprasLimiter` → `/api/compras/preferencia`: 20 req / 1 min. Evita que un bot llene `compras` pending y consuma la cuota de MP. **No afecta** `/api/compras/webhook` (firmado por MP) ni `/api/compras/check/:id` (polling del cliente, parte del patrón 3-caminos). Tunable por `RATE_LIMIT_COMPRAS_MAX`.
+- `standardHeaders: true` → emite `RateLimit-Remaining` y `RateLimit-Reset` (draft-6, formato split más difundido que draft-7 combinado). `trust proxy: 1` ya estaba en server.js, por lo que cuenta IP real detrás de nginx/Cloudflare.
 
-**Fix:**
+**Defensa en profundidad en nginx:** `limit_req_zone sab_api 10m rate=30r/s` al tope de `app.conf` y `app-ssl.conf`, con `limit_req zone=sab_api burst=60 nodelay` sobre `location /api/`. Corta flooders antes de que lleguen a Node.
 
-```js
-// server.js
-const rateLimit = require('express-rate-limit');
+**Waitlist**: NO se limita desde este fix — el form llama directo a Supabase (no pasa por el backend Node). La protección va por RLS + checks de longitud en la policy INSERT de `waitlist_socios` (sub-ítem 11b, pendiente de definir umbrales con Martín).
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/auth/login', loginLimiter);
+**Validación:** `scripts/smoke-rate-limit.js` — dispara 12 POST a `/api/auth/login` con `fetch` nativo de Node 20 y verifica 10×401 + 2×429 con `RateLimit-Remaining:0`. Corrió en verde contra docker compose local (nginx + app). No hay suite de tests persistida — decisión: mantener el smoke-test como documentación ejecutable en vez de meter jest por un middleware.
 
-const comprasLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 20,
-});
-app.use('/api/compras/preferencia', comprasLimiter);
-```
-
-Complementario en nginx (`nginx/app.conf`):
-
-```nginx
-limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
-limit_req_zone $binary_remote_addr zone=waitlist:10m rate=2r/s;
-```
+**Dep agregada:** `express-rate-limit ^8.3.2` (0 CVEs, sin dependencias transitivas nuevas).
 
 ---
 

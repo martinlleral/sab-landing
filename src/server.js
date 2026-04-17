@@ -11,6 +11,7 @@ const config = require('./config');
 const prisma = require('./utils/prisma');
 const routes = require('./routes');
 const { syncPagosPendientes } = require('./jobs/syncPagos');
+const { loginLimiter, comprasLimiter } = require('./middleware/rate-limit');
 
 const app = express();
 
@@ -85,6 +86,14 @@ app.get('/healthz', async (_req, res) => {
     res.status(503).json({ status: 'error', db: 'down' });
   }
 });
+
+// Rate limiting en rutas sensibles (defensa en profundidad junto con nginx).
+// Se montan antes de routes/static para que apliquen a las rutas del router.
+// loginLimiter: bloquea bruteforce del admin en /api/auth/login.
+// comprasLimiter: limita creación de preferencias MP, no toca /webhook (firma MP)
+// ni /check (polling del cliente post-pago, parte del patrón 3-caminos).
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/compras/preferencia', comprasLimiter);
 
 // Archivos estáticos
 app.use(express.static(path.join(__dirname, '../public')));
