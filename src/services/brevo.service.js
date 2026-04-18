@@ -80,9 +80,9 @@ function buildHtml({ nombre, evento, entradas }) {
         <h4 style="margin:0 0 8px; color:#856404;">Instrucciones de uso</h4>
         <ul style="margin:0; padding-left:20px; color:#856404;">
           <li>Presentá el código QR en la entrada del evento.</li>
-          <li>Cada código QR es de uso único y personal.</li>
-          <li>No compartas tu entrada con otras personas.</li>
-          <li>Podés mostrar el QR desde tu celular o impreso.</li>
+          <li>Cada código QR es personal y se valida una sola vez.</li>
+          <li><strong>No compartas la foto del QR.</strong> El primero que lo presente en puerta entra — si alguien lo usa antes que vos, no podemos emitir una entrada nueva.</li>
+          <li>Podés mostrarlo desde el celular o impreso.</li>
         </ul>
       </div>
     </div>
@@ -155,8 +155,9 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
         <h4 style="margin:0 0 8px; color:#856404;">Instrucciones de uso</h4>
         <ul style="margin:0; padding-left:20px; color:#856404;">
           <li>Presentá el código QR en la entrada del evento.</li>
-          <li>Tu entrada es personal e intransferible.</li>
-          <li>Podés mostrar el QR desde tu celular o impreso.</li>
+          <li>Tu entrada es personal y se valida una sola vez.</li>
+          <li><strong>No compartas la foto del QR.</strong> El primero que lo presente en puerta entra — si alguien lo usa antes que vos, no podemos emitir una invitación nueva.</li>
+          <li>Podés mostrarlo desde el celular o impreso.</li>
         </ul>
       </div>
     </div>
