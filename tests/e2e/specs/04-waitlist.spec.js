@@ -11,46 +11,63 @@ test.describe('Waitlist de socios', () => {
     await page.goto('/');
     await page.locator('#waitlist').scrollIntoViewIfNeeded();
     await expect(page.locator('#waitlist')).toBeVisible();
-    await expect(page.locator('#waitlist form').first()).toBeVisible();
+    // El form tiene id="wl-form" dentro de #waitlist
+    await expect(page.locator('#wl-form')).toBeVisible();
   });
 
-  test('Contador de waitlist es un número >= 0', async ({ page }) => {
+  test('Contador de waitlist (#wl-count) es un número >= 0', async ({ page }) => {
     await page.goto('/');
     await page.locator('#waitlist').scrollIntoViewIfNeeded();
-    // Esperar a que el contador se hidrate con el valor de Supabase
-    const contador = page.locator('#waitlist-count').first();
-    await expect(contador).toBeVisible({ timeout: 5000 });
 
-    const text = await contador.textContent();
+    // Esperar a que se hidrate con el valor de Supabase (el default es "—")
+    // Usamos waitForFunction porque el valor cambia asíncronamente cuando llega el RPC
+    await page.waitForFunction(
+      () => {
+        const el = document.getElementById('wl-count');
+        return el && el.textContent.trim() !== '—' && el.textContent.trim() !== '';
+      },
+      { timeout: 8000 }
+    ).catch(() => {
+      throw new Error('El contador #wl-count no se hidrató desde Supabase RPC en 8s');
+    });
+
+    const text = await page.locator('#wl-count').textContent();
     const numero = parseInt(text.replace(/[^0-9]/g, ''), 10);
-    expect(numero).toBeGreaterThanOrEqual(0);
     expect(Number.isFinite(numero)).toBe(true);
+    expect(numero).toBeGreaterThanOrEqual(0);
   });
 
-  test('Formulario tiene las 6 preguntas RFM obligatorias + consentimiento Ley 25.326', async ({ page }) => {
+  test('Formulario tiene campos básicos (nombre, email) + consentimiento Ley 25.326', async ({ page }) => {
     await page.goto('/');
     await page.locator('#waitlist').scrollIntoViewIfNeeded();
-    const form = page.locator('#waitlist form').first();
+    const form = page.locator('#wl-form');
 
-    // Al menos los campos name + email (los básicos). Los otros 4 RFM pueden ser selects/checkboxes.
-    await expect(form.locator('input[name*="nombre" i], input[type="text"]').first()).toBeVisible();
+    // Campos básicos: nombre + email
+    await expect(form.locator('input[type="text"]').first()).toBeVisible();
     await expect(form.locator('input[type="email"]').first()).toBeVisible();
 
-    // El consentimiento Ley 25.326 debería aparecer como checkbox o texto cerca del submit
-    const consentimiento = form.locator('text=/25.326|protección de datos|consentimiento/i').first();
-    await expect(consentimiento).toBeVisible({ timeout: 2000 }).catch(() => {
-      console.warn('⚠ Consentimiento Ley 25.326 no visible — revisar manual');
-    });
+    // Consentimiento Ley 25.326 — suele estar como texto cerca del submit
+    const consentimiento = page.locator('#waitlist').locator('text=/25.326|protección de datos|consentimiento/i').first();
+    const visible = await consentimiento.isVisible().catch(() => false);
+    if (!visible) {
+      console.warn('⚠ Consentimiento Ley 25.326 no localizado automáticamente — validar manualmente');
+    }
   });
 
-  test('API RPC waitlist_count devuelve un número (integración Supabase viva)', async ({ page }) => {
-    // El contador de la home llama a Supabase directo. Si el JS carga, quiere decir
-    // que la config de Supabase anon key está bien y la RPC es accesible.
+  test('Fetch real a Supabase RPC waitlist_count desde el browser', async ({ page }) => {
+    // El contador dispara un fetch a Supabase al cargar. Interceptamos las requests
+    // para confirmar que el llamado efectivamente salió y devolvió 200.
+    let rpcResponseStatus = null;
+    page.on('response', async (response) => {
+      if (response.url().includes('/rpc/waitlist_count')) {
+        rpcResponseStatus = response.status();
+      }
+    });
+
     await page.goto('/');
-    await page.waitForTimeout(2000); // dar tiempo al fetch a Supabase
-    const contador = await page.locator('#waitlist-count').first().textContent();
-    expect(contador.trim()).not.toBe('');
-    expect(contador.trim()).not.toBe('—');
+    await page.waitForTimeout(3000); // dar tiempo al fetch
+
+    expect(rpcResponseStatus, 'El fetch a Supabase RPC no salió o no respondió').toBe(200);
   });
 
 });

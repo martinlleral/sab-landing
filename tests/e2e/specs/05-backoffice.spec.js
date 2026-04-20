@@ -26,13 +26,11 @@ test.describe('Backoffice — autenticación y acceso', () => {
   });
 
   test('Rutas admin redirigen o rechazan sin sesión', async ({ page, request }) => {
-    // GET a HTML protegido debería redirect al login
-    const dashboardRes = await page.goto('/backoffice/dashboard.html', { waitUntil: 'commit' });
-    // Dependiendo del middleware: 302 redirect o 200 con JS que redirecciona
-    // El criterio E2E es que NO podamos ver contenido autenticado
-    await page.waitForTimeout(500);
+    // GET a HTML protegido. Esperar a que el navigation termine (load event)
+    // para que un redirect server-side se complete antes de chequear la URL.
+    await page.goto('/backoffice/dashboard.html', { waitUntil: 'load' });
     const url = page.url();
-    expect(url).toContain('login');
+    expect(url, `URL final debería contener 'login', llegó: ${url}`).toContain('login');
 
     // API protegida sin sesión → 401
     const apiRes = await request.get('/api/admin/compras');

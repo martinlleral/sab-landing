@@ -22,12 +22,22 @@ test.describe('Navigation + carga inicial', () => {
     await expect(page.locator('footer')).toBeVisible();
   });
 
-  test('Nav links navegan a las secciones correctas', async ({ page }) => {
+  test('Nav links navegan a las secciones correctas', async ({ page, isMobile }) => {
     await page.goto('/');
+
+    // En mobile/tablet el nav está colapsado en un hamburger menu — abrirlo primero
+    if (isMobile) {
+      const toggle = page.locator('button.navbar-toggler, [data-bs-toggle="collapse"]').first();
+      if (await toggle.isVisible().catch(() => false)) {
+        await toggle.click();
+        await page.waitForTimeout(400); // animación del collapse
+      }
+    }
+
     const proximosLink = page.locator(S.home.navLinks.proximos).first();
     await proximosLink.click();
     // Pequeña espera para scroll-behavior smooth
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(800);
     const proximosSection = page.locator(S.home.proximosEventos);
     await expect(proximosSection).toBeInViewport();
   });

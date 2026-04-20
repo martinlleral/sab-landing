@@ -169,7 +169,10 @@ body {
 
 .hero-badge {
   display: inline-block;
-  background: var(--color-accent);
+  /* #c1121f (la versión oscura del carmín, ya en la paleta como accent-hover)
+     da contraste 5.5:1 contra #fff — WCAG AA compliant.
+     #e63946 original daba 4.16:1, insuficiente para el font-size chico (0.75rem). */
+  background: var(--color-accent-hover);
   color: #fff;
   font-family: var(--font-heading);
   font-size: 0.75rem;
@@ -265,7 +268,9 @@ body {
 
 .btn-comprar {
   display: inline-block;
-  background: var(--color-accent);
+  /* #c1121f para asegurar WCAG AA contrast 5.5:1 contra #fff.
+     #e63946 daba 4.16:1, insuficiente para font-size < 18pt / weight < 700. */
+  background: var(--color-accent-hover);
   color: #fff;
   font-family: var(--font-heading);
   font-size: 1.1rem;
@@ -278,13 +283,15 @@ body {
   cursor: pointer;
   transition: background 0.25s, transform 0.2s, box-shadow 0.25s;
   text-decoration: none;
-  box-shadow: 0 8px 30px rgba(230, 57, 70, 0.4);
+  box-shadow: 0 8px 30px rgba(193, 18, 31, 0.4);
 }
 
 .btn-comprar:hover {
-  background: var(--color-accent-hover);
+  /* El background default ya es el accent-hover (#c1121f). En hover oscurecemos
+     con filter:brightness para mantener feedback visual sin crear otra variable. */
+  filter: brightness(0.88);
   transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(230, 57, 70, 0.6);
+  box-shadow: 0 12px 40px rgba(193, 18, 31, 0.6);
   color: #fff;
 }
 

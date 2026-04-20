@@ -55,8 +55,16 @@ module.exports = defineConfig({
       use: { ...devices['Pixel 7'] },
     },
     {
+      // Tablet con chromium en vez de webkit — así evitamos descargar 300MB extra
+      // de browser solo para 1 viewport. La cobertura efectiva de "tablet" son
+      // las dimensiones + touch; el engine no es crítico.
       name: 'chromium-tablet',
-      use: { ...devices['iPad (gen 7)'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 820, height: 1180 },
+        hasTouch: true,
+        isMobile: true,
+      },
     },
   ],
 });
