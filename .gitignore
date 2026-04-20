@@ -48,3 +48,11 @@ logs/
 # Docs operativas con info interna de stakeholders — NUNCA commitear
 docs/pendientes-externos.md
 docs/**/stakeholders*.md
+
+# Playwright — artefactos de tests (el config y los specs SÍ van al repo)
+playwright-report/
+test-results/
+.playwright/
+
+# Artefacto de prisma migrate dev local
+prisma/prisma/

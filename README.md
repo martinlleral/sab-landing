@@ -153,6 +153,52 @@ Todo el proceso está documentado en [`docs/runbook-deploy.md`](docs/runbook-dep
 
 El runbook está pensado para ejecutar copy-paste sin pensar.
 
+## Testing E2E
+
+El proyecto incluye una suite de tests end-to-end con [Playwright](https://playwright.dev) que corre contra cualquier ambiente (local o producción):
+
+```bash
+# Correr la suite completa contra producción (3 viewports: desktop, mobile, tablet)
+npm run test:e2e
+
+# Modo UI interactivo (browser visible, time-travel debug, re-run)
+npm run test:e2e:ui
+
+# Abrir el último HTML report
+npm run test:e2e:report
+
+# Apuntar a otro ambiente (por default apunta a sindicatoargentinodeboleros.com.ar)
+SMOKE_TARGET=http://localhost:3000 npm run test:e2e
+```
+
+**Qué cubre:**
+
+| Spec | Cobertura |
+|---|---|
+| `01-navigation` | Home + links nav + healthz + favicon |
+| `02-responsive` | Overflow horizontal, touch targets WCAG, grid adaptativo |
+| `03-compra` | API crearPreferencia + validaciones 400/404 + modal |
+| `04-waitlist` | Sección, formulario, contador Supabase RPC |
+| `05-backoffice` | Login page + redirect sin sesión + 401 en API admin |
+| `06-a11y` | axe-core sobre home + login (WCAG 2.1 AA serious/critical) |
+| `07-seo` | meta/OG/Twitter Card/Schema MusicGroup/canonical/robots |
+
+**Tests del backoffice completos** (login con credenciales, navegación autenticada) requieren env vars:
+
+```bash
+export SMOKE_ADMIN_EMAIL=admin@tudominio.com
+export SMOKE_ADMIN_PASS=...
+npm run test:e2e
+```
+
+Sin estas variables, los tests de login se skipean (no fallan).
+
+**Smoke test específico del rate limiter:**
+
+```bash
+npm run test:smoke:ratelimit
+```
+
 ## Deuda técnica pendiente
 
 Ver [`docs/TODO-deploy.md`](docs/TODO-deploy.md) para la lista completa catalogada por prioridad.
