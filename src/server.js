@@ -144,10 +144,43 @@ app.use((err, req, res, _next) => {
 let server;
 let syncInterval;
 
+// Fail-fast: verifica que los tokens de MercadoPago tengan el formato esperado.
+// Previene typos silenciosos tipo "APP_USER-" vs "APP_USR-" que solo se manifiestan
+// cuando un comprador real intenta pagar (aprendido el 20/4/2026).
+function validateMpTokens() {
+  const errors = [];
+  const t = config.mercadopago.accessToken;
+  const k = config.mercadopago.publicKey;
+
+  if (!t) {
+    errors.push('MP_ACCESS_TOKEN vacío');
+  } else if (!t.startsWith('APP_USR-') && !t.startsWith('TEST-')) {
+    errors.push(`MP_ACCESS_TOKEN formato inválido (esperado prefix "APP_USR-" o "TEST-", recibido "${t.substring(0, 10)}..."). Probable typo en .env`);
+  }
+
+  if (!k) {
+    errors.push('MP_PUBLIC_KEY vacío');
+  } else if (!k.startsWith('APP_USR-') && !k.startsWith('TEST-')) {
+    errors.push(`MP_PUBLIC_KEY formato inválido (esperado prefix "APP_USR-" o "TEST-", recibido "${k.substring(0, 10)}..."). Probable typo en .env`);
+  }
+
+  return errors;
+}
+
 async function start() {
   if (config.nodeEnv === 'production' && config.sessionSecret === 'dev_secret_change_in_production') {
     console.error('FATAL: SESSION_SECRET no configurado en producción. Setear en .env antes de arrancar.');
     process.exit(1);
+  }
+
+  if (config.nodeEnv === 'production') {
+    const mpErrors = validateMpTokens();
+    if (mpErrors.length > 0) {
+      console.error('FATAL: credenciales MercadoPago inválidas:');
+      mpErrors.forEach((e) => console.error('  - ' + e));
+      console.error('Corregir en .env antes de arrancar. Las credenciales correctas están en panel MP → Credenciales.');
+      process.exit(1);
+    }
   }
 
   try {

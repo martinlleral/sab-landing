@@ -27,9 +27,6 @@
         <a href="/backoffice/lector-qr.html" class="bo-nav-link">
           <i class="bi bi-qr-code-scan"></i> Lector QR
         </a>
-        <a href="#" class="bo-nav-link" onclick="loadCompras()">
-          <i class="bi bi-bag-check"></i> Compras
-        </a>
         <div class="bo-nav-divider"></div>
         <a href="#" class="bo-nav-link text-danger" onclick="handleLogout()">
           <i class="bi bi-box-arrow-right"></i> Cerrar sesión
@@ -93,7 +90,6 @@
         <div class="bo-card mb-4">
           <div class="bo-card-header">
             <h5 class="bo-card-title">Últimas Compras</h5>
-            <a href="#" onclick="loadCompras()" class="btn-bo-secondary">Ver todas</a>
           </div>
           <div class="table-responsive">
             <table class="bo-table" id="tabla-compras">
@@ -170,9 +166,6 @@
       }
     }
 
-    function loadCompras() {
-      alert('Sección de compras — próximamente en implementación completa.');
-    }
   </script>
 </body>
 </html>
