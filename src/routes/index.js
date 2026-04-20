@@ -20,7 +20,11 @@ router.use('/api/eventos', eventosPublic);
 router.use('/api/compras', comprasPublic);
 router.use('/api/home', homePublic);
 
-// API admin
+// API admin — Cache-Control: no-store para no filtrar datos privados vía proxies o btn "atrás"
+router.use('/api/admin', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 router.use('/api/admin/eventos', eventosAdmin);
 router.use('/api/admin/compras', comprasAdmin);
 router.use('/api/admin/entradas', entradasRoutes);

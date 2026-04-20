@@ -14,6 +14,12 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
+  <!-- Preload del slider1 para bajar LCP. Si el admin sube una imagen con otro
+       nombre, este preload se desperdicia pero no rompe nada (el <img> real
+       se construye desde JS con la URL que devuelve /api/home). El path actual
+       es estable porque uploads usa nombres fijos slider1/2/3.jpg. -->
+  <link rel="preload" as="image" href="/assets/img/uploads/home/slider1.jpg" fetchpriority="high">
+
   <!-- Open Graph (para WhatsApp, Instagram, Facebook) -->
   <meta property="og:title" content="Sindicato Argentino de Boleros">
   <meta property="og:description" content="Orquesta cooperativa de 21 músicos. Boleros en vivo todos los miércoles en La Plata. Comprá tus entradas.">

@@ -56,3 +56,6 @@ test-results/
 
 # Artefacto de prisma migrate dev local
 prisma/prisma/
+
+# Lighthouse tmp dirs (Chrome profile temp folders en WSL por paths tipo C:\)
+C:\\*

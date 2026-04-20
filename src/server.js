@@ -114,7 +114,16 @@ app.use('/backoffice', (req, res, next) => {
 });
 
 // Archivos estáticos
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '../public'), {
+  setHeaders: (res, filePath) => {
+    // Cache-Control: no-store para HTML del backoffice (login + dashboard + CMS).
+    // Previene que proxies intermedios o el botón "atrás" del browser sirvan
+    // HTML cacheado tras logout.
+    if (filePath.includes(`${path.sep}backoffice${path.sep}`)) {
+      res.set('Cache-Control', 'no-store');
+    }
+  },
+}));
 
 // Asegurar que existan los directorios de uploads
 const uploadDirs = [
