@@ -140,10 +140,12 @@ El seed crea eventos de ejemplo que se ven en dev. Cambiá los nombres, fechas y
 
 ### 13. Nginx config — dominio del reverse proxy
 
-**Archivo:** `nginx/app.conf`
+**Archivo:** `nginx/app.conf` (HTTP-only, default) y `nginx/app-ssl.conf` (producción con SSL)
 
-- `server_name _` → cambiar a tu dominio (ej: `server_name orquesta.ar www.orquesta.ar;`)
-- Cuando tengas SSL, renombrar `nginx/app-ssl.conf` a `nginx/app.conf` y ajustar los paths de los certificados Let's Encrypt al nuevo dominio
+- `server_name _` en `app.conf` → cambiar a tu dominio (ej: `server_name orquesta.ar www.orquesta.ar;`)
+- `server_name sindicatoargentinodeboleros.com.ar ...` en `app-ssl.conf` → cambiar ambas ocurrencias a tu dominio
+
+**Sobre el `set_real_ip_from` y `real_ip_header CF-Connecting-IP`:** solo sirve si usás Cloudflare como proxy. Si **no** usás Cloudflare (ej. ponés el droplet con IP directa sin CDN), podés quitar el bloque entero — son ~25 líneas al inicio de cada archivo. Sin eso, `$remote_addr` va a ser la IP real del visitante directamente, que es lo correcto sin proxy intermedio.
 
 ### 14. Docker Compose — nombre del container y memory limits
 
@@ -152,6 +154,80 @@ El seed crea eventos de ejemplo que se ven en dev. Cambiá los nombres, fechas y
 - `container_name: sab-app` → cambiá a algo con el nombre de tu proyecto (ej: `orquesta-app`)
 - `container_name: sab-nginx` → idem (ej: `orquesta-nginx`)
 - Ajustar `memory` limits si tu droplet tiene más o menos RAM que 512MB
+
+---
+
+## SSL en producción — Cloudflare Origin Certificate (recomendado)
+
+El repo trae `docker-compose.yml` (HTTP-only, funciona out-of-the-box para dev local) + `docker-compose.prod.yml` (override opt-in para producción con SSL). Así podés clonar y correr `docker compose up -d` sin configurar nada de certificados, y cuando quieras activar HTTPS usás ambos archivos.
+
+**Requiere:**
+- Cuenta Cloudflare con el dominio activo (plan Free alcanza)
+- Cloudflare proxy activado sobre el registro A del dominio (ícono naranja, no gris)
+
+**Pasos:**
+
+1. **Generar el Origin Certificate en Cloudflare:**
+   - Panel Cloudflare → SSL/TLS → Origin Server → **Create Certificate**
+   - Type: **ECC** (más moderno, rápido; RSA también sirve si preferís compatibilidad amplia)
+   - Validez: **15 years** (cuanto más largo, menos mantenimiento — es un cert de uso interno CF↔droplet, no de cara al público)
+   - Hostnames: `tudominio.com` y `*.tudominio.com`
+   - Create → Cloudflare te muestra dos bloques: **Origin Certificate** y **Private key**. **Se muestran una sola vez.** Copiá ambos.
+
+2. **Instalar los certificados en el droplet:**
+
+   ```bash
+   ssh usuario@tu.droplet
+   sudo mkdir -p /etc/ssl/cloudflare
+   sudo chown $USER:$USER /etc/ssl/cloudflare
+
+   nano /etc/ssl/cloudflare/cert.pem
+   # (pegar el contenido del "Origin Certificate")
+   # Ctrl+O → Enter → Ctrl+X
+
+   nano /etc/ssl/cloudflare/key.pem
+   # (pegar el contenido del "Private Key")
+   # Ctrl+O → Enter → Ctrl+X
+
+   chmod 644 /etc/ssl/cloudflare/cert.pem
+   chmod 600 /etc/ssl/cloudflare/key.pem
+
+   # Verificar que el cert es válido
+   openssl x509 -in /etc/ssl/cloudflare/cert.pem -noout -subject -issuer -dates
+   # Esperado: issuer=...CloudFlare Origin... notAfter=<fecha 15 años en el futuro>
+   ```
+
+3. **Arrancar el stack con SSL:**
+
+   ```bash
+   cd /opt/sab/app    # o donde tengas el código
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+   ```
+
+   El override hace 3 cosas:
+   - Abre puerto 443
+   - Monta `app-ssl.conf` en vez de `app.conf` (redirect HTTP→HTTPS + bloque SSL)
+   - Monta el directorio `/etc/ssl/cloudflare` en el container nginx (read-only)
+
+4. **Cambiar el SSL mode de Cloudflare a "Full (strict)":**
+   - Panel Cloudflare → SSL/TLS → Overview → **Full (strict)**
+   - Con strict, Cloudflare valida el Origin Certificate contra su propia CA antes de proxear. Si el cert no es válido (o venció), CF devuelve 526. Protección máxima.
+
+5. **Validar end-to-end:**
+
+   ```bash
+   # Desde afuera, tiene que dar HTTP/2 200:
+   curl -I https://tudominio.com/
+
+   # El redirect HTTP→HTTPS:
+   curl -I http://tudominio.com/        # debería dar 301 Moved Permanently
+
+   # El cert que muestra el dominio es el Universal SSL de Cloudflare (Let's Encrypt):
+   echo | openssl s_client -connect tudominio.com:443 -servername tudominio.com 2>/dev/null | openssl x509 -noout -issuer
+   # issuer=Let's Encrypt
+   ```
+
+**Alternativa: Let's Encrypt con certbot.** Si no querés usar Cloudflare (o querés un cert emitido por una CA pública, visible desde afuera), podés correr certbot en el droplet. Requiere puerto 80 abierto al mundo para el challenge ACME, y renovación automática cada 90 días. Los paths de `ssl_certificate` en `app-ssl.conf` se cambian a `/etc/letsencrypt/live/tudominio.com/fullchain.pem` y `privkey.pem`. No está cubierto en este repo; ver [docs de certbot](https://certbot.eff.org/).
 
 ---
 
