@@ -50,9 +50,31 @@ async function loadHome() {
     }
 
     buildVideo(data.youtubeUrl);
+    renderStats(data);
   } catch (e) {
     console.warn('loadHome error:', e.message);
   }
+}
+
+function renderStats(data) {
+  // Formato de miles con punto (estándar es-AR): 20000 → "20.000"
+  const fmt = (n) => Number(n || 0).toLocaleString('es-AR');
+
+  const ediciones = data.totalEdiciones || 0;
+  const shows = data.totalShows || 0;
+  const personas = data.totalPersonas || 0;
+
+  const $ed = document.getElementById('qs-stat-ediciones');
+  if ($ed && ediciones > 0) $ed.textContent = ediciones;
+
+  const $sh = document.getElementById('qs-stat-shows');
+  if ($sh && shows > 0) $sh.textContent = `${shows}+`;
+
+  const $pe = document.getElementById('qs-stat-personas');
+  if ($pe && personas > 0) $pe.textContent = `+${fmt(personas)}`;
+
+  const $trust = document.getElementById('trust-personas');
+  if ($trust && personas > 0) $trust.textContent = `+${fmt(personas)} personas`;
 }
 
 function buildSlider(slides) {

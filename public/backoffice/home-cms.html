@@ -101,6 +101,34 @@
               </div>
             </div>
 
+            <!-- Estadísticas del proyecto -->
+            <div class="col-12">
+              <div class="bo-card">
+                <div class="bo-card-header">
+                  <h5 class="bo-card-title"><i class="bi bi-graph-up me-2"></i>Estadísticas del proyecto</h5>
+                </div>
+                <div class="bo-card-body">
+                  <p class="small mb-3" style="color:#666;">
+                    Números que aparecen en la trust bar del hero y en la sección "Quiénes Somos" de la home. Actualizá cada vez que cambien (ej. tras un nuevo miércoles del ciclo).
+                  </p>
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="totalEdiciones">Ediciones del ciclo Amor de Miércoles</label>
+                      <input type="number" min="0" step="1" class="bo-form-control" id="totalEdiciones" name="totalEdiciones" placeholder="Ej: 98">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="totalShows">Total de shows en vivo</label>
+                      <input type="number" min="0" step="1" class="bo-form-control" id="totalShows" name="totalShows" placeholder="Ej: 120">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="totalPersonas">Personas que participaron</label>
+                      <input type="number" min="0" step="1" class="bo-form-control" id="totalPersonas" name="totalPersonas" placeholder="Ej: 20000">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Texto Evento -->
             <div class="col-md-6">
               <div class="bo-card h-100">
@@ -181,6 +209,9 @@
 
         document.getElementById('textoEvento').value = data.textoEvento || '';
         document.getElementById('youtubeUrl').value = data.youtubeUrl || '';
+        document.getElementById('totalEdiciones').value = data.totalEdiciones ?? 0;
+        document.getElementById('totalShows').value = data.totalShows ?? 0;
+        document.getElementById('totalPersonas').value = data.totalPersonas ?? 0;
 
         ['1', '2', '3'].forEach((n) => {
           const url = data[`slider${n}Url`];

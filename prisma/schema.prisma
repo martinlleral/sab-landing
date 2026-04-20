@@ -8,13 +8,17 @@ datasource db {
 }
 
 model Home {
-  id          Int      @id @default(autoincrement())
-  slider1Url  String   @default("")
-  slider2Url  String   @default("")
-  slider3Url  String   @default("")
-  textoEvento String   @default("")
-  youtubeUrl  String   @default("")
-  updatedAt   DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  slider1Url     String   @default("")
+  slider2Url     String   @default("")
+  slider3Url     String   @default("")
+  textoEvento    String   @default("")
+  youtubeUrl     String   @default("")
+  // Stats del proyecto — editables desde backoffice, renderizados en trust bar + Quiénes Somos
+  totalEdiciones Int      @default(0)
+  totalShows     Int      @default(0)
+  totalPersonas  Int      @default(0)
+  updatedAt      DateTime @updatedAt
 }
 
 model Evento {
@@ -38,21 +42,21 @@ model Evento {
 }
 
 model Compra {
-  id               Int      @id @default(autoincrement())
+  id               Int       @id @default(autoincrement())
   eventoId         Int
-  evento           Evento   @relation(fields: [eventoId], references: [id])
+  evento           Evento    @relation(fields: [eventoId], references: [id])
   email            String
   nombre           String
   apellido         String
-  telefono         String   @default("")
+  telefono         String    @default("")
   cantidadEntradas Int
   precioUnitario   Int
   totalPagado      Int
-  mpPreferenciaId  String   @default("")
-  mpPagoId         String   @default("")
-  mpEstado         String   @default("pending")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  mpPreferenciaId  String    @default("")
+  mpPagoId         String    @default("")
+  mpEstado         String    @default("pending")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
   entradas         Entrada[]
 }
 

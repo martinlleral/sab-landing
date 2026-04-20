@@ -40,6 +40,9 @@ async function main() {
         slider3Url: '',
         textoEvento: '',
         youtubeUrl: '',
+        totalEdiciones: 0,
+        totalShows: 0,
+        totalPersonas: 0,
       },
     });
     console.log('✅ Registro Home inicial creado.');
