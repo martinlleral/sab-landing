@@ -20,6 +20,12 @@ module.exports = {
     from: process.env.EMAIL_FROM || 'noreply@sindicatodeboleros.com',
     fromName: process.env.EMAIL_FROM_NAME || 'Sindicato Argentino de Boleros',
   },
+  // Si BREVO_API_KEY está seteada, el servicio de mail usa HTTP API de Brevo
+  // (POST api.brevo.com/v3/smtp/email) en vez de SMTP. Workaround para el
+  // bloqueo de puertos 25/465/587 outbound de DigitalOcean.
+  brevo: {
+    apiKey: process.env.BREVO_API_KEY || '',
+  },
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
   uploadLimits: {
     fileSize: 5 * 1024 * 1024, // 5MB

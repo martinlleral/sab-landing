@@ -1,9 +1,21 @@
-// Wrapper SMTP genérico con nodemailer. El nombre del archivo es legacy
-// (el proyecto nació usando Brevo) — funciona con cualquier SMTP que se
-// configure en las env vars SMTP_HOST/PORT/USER/PASS. Hoy el SAB lo usa
-// con Gmail App Password.
+// Servicio de envío de mails. El nombre del archivo es legacy (el proyecto
+// nació usando Brevo). Soporta dos transports:
+//
+//   1. SMTP genérico vía nodemailer (SMTP_HOST/PORT/USER/PASS).
+//      Funciona con Gmail, Brevo SMTP, SendGrid, etc.
+//   2. Brevo HTTP API (POST api.brevo.com/v3/smtp/email).
+//      Se activa si BREVO_API_KEY está seteada.
+//      Workaround para DigitalOcean que bloquea puertos SMTP 25/465/587 outbound.
+//
+// El selector es automático: si hay BREVO_API_KEY → HTTP. Si no → SMTP.
 const nodemailer = require('nodemailer');
 const config = require('../config');
+
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
+
+function useBrevoHttp() {
+  return !!config.brevo.apiKey;
+}
 
 function getTransporter() {
   return nodemailer.createTransport({
@@ -19,6 +31,41 @@ function getTransporter() {
 
 function fromAddress() {
   return `"${config.smtp.fromName}" <${config.smtp.from}>`;
+}
+
+// Envío vía Brevo HTTP API. Convierte los attachments con CID (qr0, qr1, ...)
+// a base64 en el campo `attachment` — Brevo soporta referenciarlos desde el
+// HTML con `<img src="cid:qr0">` si el mimetype y el nombre son correctos.
+async function sendViaBrevoHttp({ to, toName, subject, html, attachments = [] }) {
+  const body = {
+    sender: { name: config.smtp.fromName, email: config.smtp.from },
+    to: [{ email: to, name: toName }],
+    subject,
+    htmlContent: html,
+  };
+  if (attachments.length > 0) {
+    body.attachment = attachments.map((a) => ({
+      name: a.filename,
+      content: a.content.toString('base64'),
+    }));
+  }
+
+  const res = await fetch(BREVO_API_URL, {
+    method: 'POST',
+    headers: {
+      'api-key': config.brevo.apiKey,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Brevo HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const json = await res.json().catch(() => ({}));
+  return { messageId: json.messageId || 'brevo-http' };
 }
 
 function formatFecha(fecha) {
@@ -94,30 +141,51 @@ function buildHtml({ nombre, evento, entradas }) {
 </html>`;
 }
 
-async function enviarConfirmacion({ email, nombre, evento, entradas }) {
-  console.log(`📧 Enviando confirmación a ${email} (${entradas.length} entrada(s), evento: ${evento.nombre})`);
-  console.log(`   SMTP: ${config.smtp.host}:${config.smtp.port} user=${config.smtp.user ? '✓' : '✗'} pass=${config.smtp.pass ? '✓' : '✗'}`);
+// Reemplaza `src="cid:qrN"` por `src="data:image/png;base64,..."` usando los
+// attachments con cid. Necesario para Brevo HTTP API, que no soporta inline
+// CID de forma confiable. Los data URLs funcionan en Gmail, Outlook, Apple Mail.
+function inlineCidsAsDataUrls(html, attachments) {
+  let out = html;
+  for (const a of attachments) {
+    if (!a.cid) continue;
+    const b64 = a.content.toString('base64');
+    const dataUrl = `data:${a.contentType || 'image/png'};base64,${b64}`;
+    const pattern = new RegExp(`cid:${a.cid}(?=["'])`, 'g');
+    out = out.replace(pattern, dataUrl);
+  }
+  return out;
+}
 
-  const transporter = getTransporter();
+async function enviarConfirmacion({ email, nombre, evento, entradas }) {
+  const http = useBrevoHttp();
+  console.log(`📧 Enviando confirmación a ${email} (${entradas.length} entrada(s), evento: ${evento.nombre}) — transport: ${http ? 'brevo-http' : 'smtp'}`);
+
   const html = buildHtml({ nombre, evento, entradas });
   const attachments = buildQrAttachments(entradas);
+  const subject = `🎟️ Tus entradas para ${evento.nombre}`;
 
+  if (http) {
+    const htmlInline = inlineCidsAsDataUrls(html, attachments);
+    const result = await sendViaBrevoHttp({ to: email, toName: nombre, subject, html: htmlInline });
+    console.log(`📧 Email enviado OK — messageId: ${result.messageId}`);
+    return result;
+  }
+
+  const transporter = getTransporter();
   const result = await transporter.sendMail({
     from: fromAddress(),
     to: `"${nombre}" <${email}>`,
-    subject: `🎟️ Tus entradas para ${evento.nombre}`,
+    subject,
     html,
     attachments,
   });
-
   console.log(`📧 Email enviado OK — messageId: ${result.messageId}`);
   return result;
 }
 
 async function enviarInvitacion({ email, nombre, evento, entrada }) {
-  console.log(`📧 Enviando invitación a ${email} (evento: ${evento.nombre})`);
-  console.log(`   SMTP: ${config.smtp.host}:${config.smtp.port} user=${config.smtp.user ? '✓' : '✗'} pass=${config.smtp.pass ? '✓' : '✗'}`);
-  const transporter = getTransporter();
+  const http = useBrevoHttp();
+  console.log(`📧 Enviando invitación a ${email} (evento: ${evento.nombre}) — transport: ${http ? 'brevo-http' : 'smtp'}`);
 
   const html = `
 <!DOCTYPE html>
@@ -168,17 +236,26 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
 </body>
 </html>`;
 
+  const subject = `🎟️ Tu entrada de invitación para ${evento.nombre}`;
+  const attachments = [{
+    filename: 'entrada-invitacion.png',
+    content: Buffer.from(entrada.qrBase64, 'base64'),
+    contentType: 'image/png',
+    cid: 'qr0',
+  }];
+
+  if (http) {
+    const htmlInline = inlineCidsAsDataUrls(html, attachments);
+    return sendViaBrevoHttp({ to: email, toName: nombre, subject, html: htmlInline });
+  }
+
+  const transporter = getTransporter();
   return transporter.sendMail({
     from: fromAddress(),
     to: `"${nombre}" <${email}>`,
-    subject: `🎟️ Tu entrada de invitación para ${evento.nombre}`,
+    subject,
     html,
-    attachments: [{
-      filename: 'entrada-invitacion.png',
-      content: Buffer.from(entrada.qrBase64, 'base64'),
-      contentType: 'image/png',
-      cid: 'qr0',
-    }],
+    attachments,
   });
 }
 
