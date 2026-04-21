@@ -237,11 +237,18 @@ function renderDestacado(evento) {
     return;
   }
 
-  // Título: si el invitado aparece en el nombre, resaltarlo con glow
+  // Título: si el invitado aparece en el nombre, partimos así:
+  //   "Amor de Miércoles con Leo García"
+  //   → "Amor de Miércoles · Invitado: <glow>Leo García</glow>"
+  // El conector "con" se normaliza a "· Invitado:" para leer como etiqueta
+  // explícita (pedido UX del 21/4). Si no hay invitado, se renderiza plano.
   if (elNombre) {
     if (evento.invitado && evento.nombre.includes(evento.invitado)) {
       const parts = evento.nombre.split(evento.invitado);
-      elNombre.innerHTML = esc(parts[0]) + '<span class="hero-guest-highlight">' + esc(evento.invitado) + '</span>' + esc(parts[1] || '');
+      let prefix = parts[0] || '';
+      // Normalizar "... con " → "... · Invitado: "
+      prefix = prefix.replace(/\s+con\s*$/i, ' · Invitado: ');
+      elNombre.innerHTML = esc(prefix) + '<span class="hero-guest-highlight">' + esc(evento.invitado) + '</span>' + esc(parts[1] || '');
     } else {
       elNombre.textContent = evento.nombre;
     }
@@ -312,10 +319,15 @@ function renderDestacado(evento) {
   }
 
   // Info cards en sección "El Evento"
+  // La card "Cuándo" usa 2 líneas — día de la semana (ej. "Miércoles") arriba
+  // y fecha corta sin año (ej. "29 de abril") debajo. La hora queda en su
+  // línea como detail.
+  const infoDia = document.getElementById('info-dia');
   const infoFecha = document.getElementById('info-fecha');
   const infoHora = document.getElementById('info-hora');
   const infoPrecio = document.getElementById('info-precio');
-  if (infoFecha) infoFecha.textContent = formatFecha(evento.fecha);
+  if (infoDia) infoDia.textContent = formatDiaSemana(evento.fecha);
+  if (infoFecha) infoFecha.textContent = formatFechaCorta(evento.fecha);
   if (infoHora) infoHora.textContent = evento.hora + ' hs';
   if (infoPrecio) infoPrecio.textContent = `$${formatPrecio(evento.precioEntrada)}`;
 
@@ -429,9 +441,11 @@ function populateModalEventoSelect(selectedId) {
     select.innerHTML = '<option value="">No hay eventos disponibles</option>';
     return;
   }
+  // Solo el nombre en el option — la fecha/hora queda en la "reflex box"
+  // debajo del select (#modal-evento-nombre + #modal-evento-fecha) para
+  // no duplicar la misma info en el mismo modal.
   select.innerHTML = eventosDisponibles.map((ev) => {
-    const label = `${esc(ev.nombre)} — ${formatFecha(ev.fecha)}`;
-    return `<option value="${ev.id}">${label}</option>`;
+    return `<option value="${ev.id}">${esc(ev.nombre)}</option>`;
   }).join('');
   if (selectedId != null) select.value = String(selectedId);
   // Si el id pedido ya no existe (ej. evento borrado entre render y click),
@@ -709,6 +723,24 @@ function formatFecha(fechaStr) {
     timeZone: 'UTC',
   });
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Solo el día de la semana — ej. "Miércoles"
+function formatDiaSemana(fechaStr) {
+  const str = new Date(fechaStr).toLocaleDateString('es-AR', {
+    weekday: 'long',
+    timeZone: 'UTC',
+  });
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Fecha corta sin año — ej. "29 de abril"
+function formatFechaCorta(fechaStr) {
+  return new Date(fechaStr).toLocaleDateString('es-AR', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  });
 }
 
 function formatPrecio(valor) {

@@ -976,6 +976,12 @@ footer {
   font-size: 1.1rem;
   font-weight: 700;
 }
+.info-card-value--sub {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #d9d3cc;
+  margin-top: 2px;
+}
 .info-card-detail {
   color: #b0aaa2;
   font-size: 0.85rem;
