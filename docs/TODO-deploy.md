@@ -1,7 +1,7 @@
 # TODO — Deploy & Technical Debt
 
-**Última actualización:** 22/4/2026 (cierre P0.3 como falsa alarma tras verificación en prod)
-**Estado general:** MVP en producción con hardening avanzado. Auditoría del 20-21/4 identificó P0.1 + P0.2 del flujo MP (BASE_URL, redirect — ambos fixeados) y 4 hallazgos UX. El P0.3 (QR PNG) fue descartado el 22/4 tras verificación empírica: el código escribe a disk correctamente (ver `docs/audit/auditoria-20260420.md`).
+**Última actualización:** 22/4/2026 (cierre de sesión post-pulidos UX + infra pre-campaña validada)
+**Estado general:** MVP en producción con hardening avanzado + pulidos UX del cliente aplicados el 22/4. Todos los hallazgos UX del 20-21/4 cerrados + 9 hallazgos nuevos del cliente también cerrados. Brevo configurado al 80% (DNS + sender OK, falta activación transactional — ticket #5326191 abierto). Backups R2 + Uptime monitoring validados y corriendo.
 **Score del proyecto (14/4, pre-hardening):** 5.8 / 10 promedio (SRE 5.5 · Security 4.8 · Tech Writer 7.0)
 
 > Este archivo es la fuente de verdad de lo que queda pendiente. Actualizado con los hallazgos consolidados de la auditoría de expertos del 14/4/2026 (SRE senior + Application Security Engineer + Technical Writer + OSS advocate), más los cierres del 15/4, 17/4 y la auditoría multidimensional del 20-21/4.
@@ -29,13 +29,45 @@
 - ~~31. QR PNG no persiste a disk~~ ✅ Cerrado 22/4 como falsa alarma (código OK, archivo verificado en prod)
 - 32. Verificar URL del webhook en panel MP (post-fix BASE_URL) — esperando a Eugenio
 
-**Nuevos P1 UX** (descubiertos por cliente navegando como comprador) — agregados abajo:
-- 33. Cards de "Próximos Eventos" sin botón de compra
-- 34. Precio en rojo confunde con advertencia de error
-- 35. "El Evento" termina en info plana sin CTA
+**Nuevos P1 UX** (descubiertos por cliente navegando como comprador):
+- ~~33. Cards de "Próximos Eventos" sin botón de compra~~ ✅ Hecho 22/4 (selector multi-evento en modal + botón por card + patrón Bootstrap con `data-evento-id`)
+- ~~34. Precio en rojo confunde con advertencia de error~~ ✅ Hecho 22/4 (precio + modal en blanco)
+- ~~35. "El Evento" termina en info plana sin CTA~~ ✅ Hecho 22/4
 
 **Nuevos P3 Sprint 2**:
 - 36. Google Knowledge Panel (requiere Google Business Profile)
+- 37. Carta 3D flip en QUIENES SOMOS con staff completo del lado inverso
+- 38. Test E2E de persistencia QR post-`procesarPagoAprobado`
+- 39. Cleanup de QR huérfanos al cancelar entradas (P2.6)
+
+## Progreso del 22/4 — pulidos UX del cliente + infra pre-campaña
+
+**Contexto**: sesión con Martín navegando el sitio como comprador real. Se aplicaron 13 pulidos UX en tiempo real, se configuró Brevo (dominio + sender + DNS via CF API), se auditaron backups existentes y se corrigió el monitoring de Uptime. 6 commits al main, 4 deploys a prod, downtime <15s cada uno.
+
+**Cerrado esta sesión:**
+- Verificación empírica de P0.3 QR PNG en prod → **falsa alarma** (archivo `737f9df9-...png` existe en volumen Docker, `qr.service.js` correcto)
+- Selector multi-evento en modal (`<select>` + listener `show.bs.modal` con `data-evento-id`) + botón "Comprar" por card
+- `updateBtnPagarState(ev)` con 3 estados: VAMOS / VER ENTRADAS (externo) / AGOTADO. Antes vivía en `btn-comprar` del hero
+- Precio neutro blanco en cards + modal (antes `--color-accent` rojo), fondo modal neutro
+- CTA final en sección "El Evento" (`.evento-cta-final`) que reutiliza el mismo modal
+- Fix bug heredado: sección "El Evento" siempre visible (antes se ocultaba si `textoEvento` estaba vacío)
+- Título hero en 2 líneas explícitas con `display: block` + `.hero-title-guest` (0.7em): "AMOR DE MIÉRCOLES" + "Invitado: Leo García"
+- Box "Cuándo" en 2 líneas sin año: helpers `formatDiaSemana()` + `formatFechaCorta()`
+- Selector modal sin duplicación (option solo muestra nombre, fecha/hora queda en reflex box)
+- Stats "19 Artistas en escena" consolidado (era 17+2)
+- Copy: "Pasamos por" → "Nos presentamos en" · "Soporte directo" → "Contacto directo" · "IR A PAGAR" → "VAMOS"
+- YouTube thumbnail cascada `maxres → sd (640×480, nuevo) → hq` — SD mejora nitidez notable en desktop para videos sin maxres
+- Waitlist: removidas 3 opciones (me-gorra, chk-back, chk-ensayo) + `BENEFIT_IDS` + payload
+- **Brevo configurado via API**: dominio `sindicatoargentinodeboleros.com.ar` autenticado (DKIM CNAMEs brevo1/brevo2 con proxy OFF + TXT brevo-code); sender `noreply@...` creado sin errores SPF/DKIM; todos los DNS records cargados vía Cloudflare API
+- **Backups R2 auditados y validados**: cron `/etc/cron.d/sab-backup` diario 04:00 UTC, 5 backups existentes (17-21/4) a `r2:sab-backups`, retention 7 días
+- **UptimeRobot corregido**: monitor existente migrado de IP+HTTP a HTTPS+dominio + nuevo monitor para `/`. Alert contact `sindicatoargentinodeboleros@gmail.com` activo
+- `.mcp.json` para conectar a Brevo MCP server en próximas sesiones (ubicado en parent del repo, no commiteado)
+
+**Pendientes post-sesión:**
+- Brevo: esperando ticket #5326191 (activación transactional — cuenta tiene `relay.enabled: false`, requiere review manual del support)
+- P0.2 verificar URL webhook en panel MP (esperando a Eugenio)
+- #50 Test E2E de persistencia QR — baja prioridad, Sprint 2
+- Google Knowledge Panel — Sprint 2 post-campaña
 
 **Pendientes de sesiones anteriores que siguen abiertos:**
 - Ítem 7 (backups automáticos offsite) — CRÍTICO para campaña
