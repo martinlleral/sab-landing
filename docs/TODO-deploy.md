@@ -1,12 +1,46 @@
 # TODO — Deploy & Technical Debt
 
-**Última actualización:** 17/4/2026 (rate limiting cerrado, smoke-test persistido)
-**Estado general:** MVP en producción con hardening parcial. Auditoría del 16/4 identificó hallazgos adicionales en seguridad, resiliencia, documentación y portafolio.
+**Última actualización:** 21/4/2026 (auditoría multidimensional + test E2E real)
+**Estado general:** MVP en producción con hardening avanzado. Auditoría del 20-21/4 identificó 3 P0 nuevos del flujo MP (BASE_URL, redirect, QR PNG) y 4 hallazgos UX.
 **Score del proyecto (14/4, pre-hardening):** 5.8 / 10 promedio (SRE 5.5 · Security 4.8 · Tech Writer 7.0)
 
-> Este archivo es la fuente de verdad de lo que queda pendiente. Actualizado con los hallazgos consolidados de la auditoría de expertos del 14/4/2026 (SRE senior + Application Security Engineer + Technical Writer + OSS advocate), más los cierres del 15/4/2026.
+> Este archivo es la fuente de verdad de lo que queda pendiente. Actualizado con los hallazgos consolidados de la auditoría de expertos del 14/4/2026 (SRE senior + Application Security Engineer + Technical Writer + OSS advocate), más los cierres del 15/4, 17/4 y la auditoría multidimensional del 20-21/4.
 >
 > **Ir tachando con `~~texto~~` + `✅ Hecho DD/MM` al cerrar cada ítem.**
+
+## Progreso del 20-21/4 — auditoría multidimensional pre-campaña
+
+**Contexto**: 6 dimensiones auditadas (E2E Playwright × 3 viewports, a11y WCAG 2.1 AA, Lighthouse mobile+desktop, security headers, TLS, rate limiting) + expert review con QA Engineer + test E2E con compra real ($12k reembolsados al SAB) + auditoría manual del cliente. Reporte completo en `docs/audit/auditoria-20260420.md`. Veredicto: **GO condicional para 1/5**.
+
+**Cerrado esta sesión:**
+- Suite E2E Playwright 104/104 passed en 3 viewports (commit `b51a98d` → `e8048db`)
+- 5 violaciones WCAG 2.1 AA color-contrast fixeadas (hero-badge, btn-comprar, wl-btn, wl-note, login-logo) — axe-core: 0 serious/critical
+- Bug real en `auth.middleware.js`: `req.path.startsWith('/api/')` fallaba en subrouters. Fix con helper `isApiRequest()` usando `req.originalUrl`. Tests de cobertura defensiva (4 endpoints `/api/admin/*`).
+- Preload de `slider1.jpg` con `fetchpriority=high` → LCP mobile 6s → 4.6s
+- `Cache-Control: no-store` para backoffice HTML + `/api/admin/*` (vía `express.static` setHeaders)
+- Fail-fast validation de MP tokens malformados al boot (`src/server.js:validateMpTokens`)
+- Pestaña "Compras" placeholder removida del sidebar del dashboard
+- Runbooks: `docs/ops/rollback-campana.md` + `docs/ops/webhook-mp-e2e.md`
+- Scripts: `scripts/loadtest-checkout.js` + `scripts/smoke-mail.js`
+- Brevo HTTP API implementado con fallback SMTP (en `src/services/brevo.service.js`) — espera `BREVO_API_KEY` para activarse
+- **Fix crítico aplicado en `.env` del droplet (no en repo)**: `BASE_URL=http://IP` → `https://sindicatoargentinodeboleros.com.ar`. Consecuencia del fix: re-habilita el webhook MP y el redirect post-pago (ambos rotos porque MP rechaza URLs HTTP+IP).
+
+**Nuevos P0 descubiertos** — agregados abajo en el bloque correspondiente:
+- 31. QR PNG no persiste a disk (hallazgo del test E2E del 21/4)
+- 32. Verificar URL del webhook en panel MP (post-fix BASE_URL)
+
+**Nuevos P1 UX** (descubiertos por cliente navegando como comprador) — agregados abajo:
+- 33. Cards de "Próximos Eventos" sin botón de compra
+- 34. Precio en rojo confunde con advertencia de error
+- 35. "El Evento" termina en info plana sin CTA
+
+**Nuevos P3 Sprint 2**:
+- 36. Google Knowledge Panel (requiere Google Business Profile)
+
+**Pendientes de sesiones anteriores que siguen abiertos:**
+- Ítem 7 (backups automáticos offsite) — CRÍTICO para campaña
+- Ítem 8 (uptime monitoring externo) — CRÍTICO para campaña
+- Ítem 10 (upgrade droplet a 1 GB RAM) — si el load test así lo indica
 
 ## Progreso del 15/4 — 8 ítems cerrados
 
@@ -662,6 +696,94 @@ Según los expertos, estas decisiones son correctas y no hay que tocarlas:
 
 ---
 
+## 🔍 Auditoría multidimensional — 20-21/4/2026
+
+Reporte completo: `docs/audit/auditoria-20260420.md`. 6 dimensiones (E2E, a11y, perf/SEO, security, TLS, rate limit) + QA Engineer + test E2E real + auditoría manual del cliente.
+
+### 🔴 P0 — bloqueantes del flujo MP (detectados el 21/4 en test E2E real)
+
+#### ~~31a. BASE_URL=http://IP rompía webhook + back_urls~~ ✅ Fixeado 21/4
+
+Fix aplicado en `.env` del droplet: `BASE_URL=https://sindicatoargentinodeboleros.com.ar`. Requirió `docker compose up -d app` (NO `restart` — éste no re-lee `.env`).
+
+#### 31b. QR PNG no persiste a disk
+
+**Esfuerzo:** 1-2 h · **Blocker si SMTP falla**
+
+`entrada.qrImageUrl` guarda `/assets/img/uploads/qr/<uuid>.png` pero el archivo nunca se escribe (verificado en contenedor 21/4 post-cancel de compra #20). Si el mail falla (hoy con SMTP bloqueado sin Brevo HTTP), el QR es irrecuperable desde backoffice.
+
+- [ ] Auditar `src/services/qr.service.js` — ver si `generarQR()` escribe a disk o solo genera base64
+- [ ] Si solo genera base64: agregar escritura a disk en `pagos.service.js:procesarPagoAprobado` antes de crear la entrada
+- [ ] Smoke: hacer compra, validar que existe el PNG físico en `/app/public/assets/img/uploads/qr/`
+
+#### 32. Verificar URL del webhook en panel MP
+
+**Esfuerzo:** 5 min · **Requiere login MP**
+
+Martín debe entrar al panel MP → Tus integraciones → [app SAB] → Webhooks y verificar que la URL configurada allí sea exactamente `https://sindicatoargentinodeboleros.com.ar/api/compras/webhook` (no IP, no HTTP). Esa config tiene prioridad sobre la `notification_url` que mandamos en cada preferencia.
+
+- [ ] Martín confirma URL en panel MP
+- [ ] Re-test con botón "Simular" del panel MP (no hace falta otra compra real) — observar log de `[webhook MP]` matcheando firma
+
+---
+
+### 🟡 P1 — UX del cliente (20-21/4)
+
+#### 33. Cards de "Próximos Eventos" sin botón de compra
+
+**Esfuerzo:** 2-3 h · **Impacto:** si la landing muestra 3 fechas, el cliente solo puede comprar la destacada
+
+- [ ] En `public/assets/js/app.js:374` (`renderProximos`), agregar `<button class="btn-comprar-card" data-evento-id="${ev.id}">Comprar</button>` por card
+- [ ] Refactor del handler del modal: aceptar `eventoId` dinámico en vez de leer `eventoActual` global
+- [ ] Test Playwright: abrir modal desde card secundaria, verificar que el form se submitea con el `eventoId` correcto
+
+#### 34. Precio en rojo confunde con advertencia
+
+**Esfuerzo:** 30 min + decisión UX
+
+`.evento-card-precio` usa `color: var(--color-accent)` (#e63946). Rojo activa señal "peligro" y desincentiva la compra.
+
+- [ ] Decidir color alternativo con Martín. Opciones: `#f0ece8` (blanco bone, sobrio), `#d4af37` (dorado, premium boleros/tango), mantener rojo con size más grande para reforzar CTA
+- [ ] Aplicar en `.evento-card-precio` + `.info-card-value--big` + `.hero-price` (si existe)
+- [ ] Re-run Lighthouse mobile para confirmar que no baja score
+
+#### 35. Head "EL EVENTO" no termina en CTA
+
+**Esfuerzo:** 1 h
+
+La sección `#descripcion` tiene H2 + info-grid + callouts pero no cierra en acción. El cliente espera que al leer "El Evento" haya un botón visible para comprar.
+
+- [ ] Al final de `.evento-content`, agregar CTA grande: `<button>Comprar entradas para este evento</button>` que abra el modal del evento destacado
+- [ ] Diseño: consistente con hero btn-comprar, un poco más grande
+
+---
+
+### 🟢 P3 — Sprint 2 (marketing orgánico post-campaña)
+
+#### 36. Google Knowledge Panel (recuadro lateral con foto + próximo evento)
+
+**Esfuerzo:** 1 semana con tiempos externos · **Post-campaña**
+
+Ese recuadro lo construye Google desde: (a) Google Business Profile, (b) Schema.org bien estructurado, (c) autoridad de dominio.
+
+- [ ] Crear/reclamar Google Business Profile para "Sindicato Argentino de Boleros" en La Plata. Completar: foto grupal, horario, teléfono, sitio web, categoría "Orquesta / Banda musical". Validación por postal o video-call toma ~7 días.
+- [ ] Ampliar Schema.org del sitio con `MusicEvent` por cada evento próximo (performer, startDate, location, offers)
+- [ ] Submit sitemap a Google Search Console + verificar ownership
+- [ ] Solicitar menciones en medios locales de La Plata (La Pulseada, 0221.com.ar) — aumenta autoridad
+
+---
+
+### Gaps de campaña preparados (21/4, pendientes de ejecución)
+
+| Gap | Artefacto listo | Qué falta |
+|---|---|---|
+| **Brevo HTTP API** | `src/services/brevo.service.js` auto-switch + `scripts/smoke-mail.js` | `BREVO_API_KEY` en `.env` del droplet (Tevi validando 2FA) → `npm run test:smoke:mail` |
+| **Load test checkout** | `scripts/loadtest-checkout.js` (Node nativo, VUs concurrentes, P50/95/99) | Definir target (SSH tunnel al droplet recomendado) + ejecutar |
+| **Webhook MP E2E** | `docs/ops/webhook-mp-e2e.md` | Ejecutar botón "Simular" del panel MP + monitorear logs |
+| **Rollback runbook** | `docs/ops/rollback-campana.md` | Ensayo el 29/4 + crear tag `v-pre-campaign` |
+
+---
+
 ## Estado del droplet
 
 Referencia operativa documentada internamente (no publicada por contener credenciales de acceso y topología de red).
@@ -673,6 +795,8 @@ Referencia operativa documentada internamente (no publicada por contener credenc
 - **Runbook de deploy completo:** `docs/runbook-deploy.md`
 - **Auditoría Playwright técnica (10/4):** `docs/auditoria-playwright-20260410.md`
 - **Auditoría de expertos post-deploy (14/4):** SRE senior + Application Security Engineer + Technical Writer + OSS advocate — resumen consolidado en este mismo archivo
+- **Auditoría multidimensional (20-21/4):** `docs/audit/auditoria-20260420.md`
+- **Runbooks operativos (20-21/4):** `docs/ops/rollback-campana.md`, `docs/ops/webhook-mp-e2e.md`
 - **Repositorio público:** https://github.com/martinlleral/sab-landing
 
 ---
