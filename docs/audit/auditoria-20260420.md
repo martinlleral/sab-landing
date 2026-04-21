@@ -37,7 +37,13 @@ Artefactos generados:
 
 ### P0 — bloqueantes (no-go si no se resuelven)
 
-*Ninguno detectado.*
+**Detectados el 20-21/4 durante test E2E con compra real ($12k que Eugenio reembolsó al SAB).**
+
+| # | Hallazgo | Root cause | Estado |
+|---|---|---|---|
+| P0.1 | **Webhook MP no dispara.** MP no manda POST a `/api/compras/webhook`. Defensa en profundidad cae a "solo cron" — si el cron se congela durante la campaña, procesamiento de pagos cae. | `BASE_URL=http://162.243.172.177` en `.env` de prod → la `notification_url` generada era HTTP+IP, MP la rechaza. | ✅ **Fixeado 21/4 00:55**: `BASE_URL=https://sindicatoargentinodeboleros.com.ar`. Pendiente re-test y verificar que la URL configurada en panel MP también sea HTTPS+dominio (esa sobreescribe la que mandamos en payload). |
+| P0.2 | **MP no redirige al usuario post-pago.** Checkout queda colgado en página de MP — usuario no ve confirmación, puede pensar que falló → reintenta → posible compra duplicada. | Mismo root cause P0.1: `back_urls.success=http://IP/...` → MP no respeta, `auto_return` tampoco se activa (requiere HTTPS). | ✅ **Fixeado 21/4 00:55**: con HTTPS+dominio las back_urls son válidas. Pendiente re-test. |
+| P0.3 | **QR PNG no persiste a disk.** `entrada.qrImageUrl` apunta a `/assets/img/uploads/qr/<uuid>.png` pero el archivo nunca se escribió (verificado en contenedor prod: `No such file or directory`). Si el mail falla (ej. SMTP bloqueado), el QR **no se puede recuperar desde backoffice** — solo existe como base64 en el mail que no salió. | Revisar `src/services/qr.service.js` — probablemente solo genera base64 para el mail y nunca escribe a disk, pese a que el schema guarda la URL. | ⚠ Pendiente — **crítico para la campaña**. Si Brevo no está listo el 1/5 y un pago pasa, perdemos el QR permanentemente. |
 
 ### P1 — pre-campaña (deben entrar antes del 28/4)
 
@@ -57,6 +63,33 @@ Artefactos generados:
 | P2.3 | YouTube `maxresdefault.jpg` 404 silenciado por `onerror` → `hqdefault.jpg` | Cambiar `src` inicial a `hqdefault.jpg` directo, remover `onerror`. Ensucia console en demos. | 15 min |
 | P2.4 | HSTS duplicado (origen + Cloudflare) | Remover el header del origen (helmet), dejar solo el de Cloudflare. Cosmético. | 5 min |
 | P2.5 | Lighthouse BP desktop 77 — 3 deprecations en `/cdn-cgi/challenge-platform/` | No actionable (código de Cloudflare Bot Fight, no nuestro). Documentar. | — |
+
+---
+
+## Hallazgos de auditoría manual (20/4 cierre del día)
+
+Usuario navegó el sitio como comprador real y encontró los siguientes issues UX. Confirmados contra el código.
+
+### P1 — UX crítico pre-campaña
+
+| # | Hallazgo | Evidencia | Acción | Esf |
+|---|---|---|---|---|
+| U1.1 | **Cards de "Próximos Eventos" no tienen botón de compra.** Solo el CTA del hero compra — y va fijo al evento destacado. Si hay 3 fechas en la landing, el usuario no puede comprar la 2da o 3ra. | `public/assets/js/app.js:374-388` → `renderProximos()` renderiza tarjetas sin botón. El modal de compra usa `eventoActual.id` que es el destacado. | Agregar botón "Comprar" por card que abra el modal con el `eventoId` de esa card. Refactor mínimo del handler del modal para aceptar `eventoId` dinámico. | 2-3 h |
+| U1.2 | **Precio aparece en rojo — lee como advertencia, no como CTA.** Rojo (#e63946) activa señal "peligro/error" y desincentiva la compra, especialmente en mobile donde el precio es lo primero que se ve. | `public/assets/css/app.css:560-565` → `.evento-card-precio { color: var(--color-accent); }` con `--color-accent: #e63946`. | Cambiar a color neutro o dorado (más alineado a identidad boleros/tango). Opciones: `#f0ece8` (blanco bone, sobrio) o `#d4af37` (dorado, premium). Decisión UX + design. | 30 min |
+
+### P2 — UX mejorable
+
+| # | Hallazgo | Diagnóstico | Acción | Esf |
+|---|---|---|---|---|
+| U2.1 | **Head "EL EVENTO" no lleva a ningún lugar.** Es solo H2 estático — no cumple función de navegación ni CTA. Los callouts/boxes del diseño original (info cards + WhatsApp callout) están en el HTML desplegado pero la experiencia no cierra un loop claro al usuario. | Callouts presentes en `public/index.html:197-266` (info-grid + callout--info + callout--whatsapp) y renderizan en prod. El problema es narrativo: la sección no termina con un CTA de acción (ej. "Comprá tu entrada"). | Agregar un CTA al final de `.evento-content` que abra el modal de compra del evento destacado. Hace que la sección "El Evento" termine en acción, no en info plana. | 1 h |
+
+### P3 / Sprint 2 — marketing orgánico
+
+| # | Hallazgo | Qué es | Acción | Esf |
+|---|---|---|---|---|
+| U3.1 | **SEO avanzado: hacer que el SAB aparezca en Google con recuadro lateral (Knowledge Panel)**, con foto, próximo evento, redes, ubicación. | Ese recuadro es el **Google Knowledge Panel**. Se construye de 3 fuentes: (1) **Google Business Profile** (el más importante — da el panel con foto, horario, dirección), (2) **Schema.org** bien estructurado (`MusicGroup` + `MusicEvent` + `Place`), (3) autoridad de dominio (menciones, links, tiempo). El sitio ya tiene Schema.org MusicGroup (`public/index.html:37-58`). Falta GBP + Schema Event + tiempo. | **Sprint 2** (post-campaña): (a) crear/reclamar Google Business Profile para "Sindicato Argentino de Boleros" en La Plata con foto grupal, horarios, teléfono, sitio. Validación por postal o video-call toma ~7 días. (b) Ampliar Schema.org con `MusicEvent` por evento próximo (performer, startDate, location, offers). (c) Submit sitemap a Google Search Console. | 1 semana (con tiempos externos de verificación GBP) |
+
+---
 
 ---
 
