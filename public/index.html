@@ -550,7 +550,7 @@
       const A=`${U}/rest/v1/waitlist_socios`;
       // Sin 'return=minimal' para poder leer el body de error de Supabase
       const H={'apikey':K,'Authorization':`Bearer ${K}`,'Content-Type':'application/json'};
-      const BENEFIT_IDS=['chk-early','chk-desc','chk-back','chk-com','chk-ensayo','chk-mesa','chk-merch'];
+      const BENEFIT_IDS=['chk-early','chk-desc','chk-com','chk-mesa','chk-merch'];
 
       async function loadCount(){
         try{
