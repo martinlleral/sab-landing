@@ -183,7 +183,7 @@
           <div class="trust-item">
             <div class="trust-icon trust-icon--whatsapp"><i class="bi bi-whatsapp"></i></div>
             <div>
-              <div class="trust-text-title">Soporte directo</div>
+              <div class="trust-text-title">Contacto directo</div>
               <div class="trust-text-subtitle">221 591-7409</div>
             </div>
           </div>
@@ -269,6 +269,13 @@
               <i class="bi bi-whatsapp"></i>
               Grupos, cumpleaños y consultas: <a href="https://wa.me/5492215917409" target="_blank" rel="noopener" class="callout-link">221 591-7409</a>
             </p>
+          </div>
+
+          <!-- CTA final de la sección El Evento -->
+          <div class="evento-cta-final text-center">
+            <button type="button" class="btn-comprar" data-bs-toggle="modal" data-bs-target="#modalCompra">
+              Comprar entradas
+            </button>
           </div>
         </div>
       </div>
@@ -678,12 +685,18 @@
         </div>
         <div class="modal-body">
 
+          <!-- Selector de evento -->
+          <div class="mb-3" id="modal-evento-selector-wrap">
+            <label class="form-label" for="modal-evento-select">Evento *</label>
+            <select class="form-select" id="modal-evento-select"></select>
+          </div>
+
           <!-- Flyer del evento -->
           <div id="modal-flyer-wrap" style="display:none; margin-bottom:16px;">
             <img id="modal-flyer" src="" alt="Flyer del evento" style="width:100%; max-height:380px; object-fit:contain; border-radius:8px; background:#0a0a0a;">
           </div>
 
-          <!-- Info del evento -->
+          <!-- Info del evento (reflejo de lo seleccionado) -->
           <div class="evento-info-modal">
             <div class="nombre" id="modal-evento-nombre">—</div>
             <div class="fecha" id="modal-evento-fecha">—</div>
@@ -743,7 +756,7 @@
           <button type="button" class="btn-pagar" id="btn-pagar" onclick="handleComprar()">
             <span class="spinner-border spinner-border-sm" id="pagar-spinner" style="display:none;" role="status"></span>
             <i class="bi bi-credit-card me-1"></i>
-            IR A PAGAR
+            VAMOS
           </button>
         </div>
       </div>

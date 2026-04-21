@@ -10,6 +10,8 @@
 
 **GO condicional.** No hay hallazgos P0 (bloqueantes). Hay 3 P1 no negociables (~4-5 h totales) que deben entrar antes del 28/4. Todo lo demás es P2 (post-campaña).
 
+> **Actualización 22/4/2026:** P0.3 cerrado como falsa alarma tras verificación en prod. El archivo QR `737f9df9-440e-44f4-bb57-792fc934a583.png` existe en `/app/public/assets/img/uploads/qr/` (timestamp 21/4 00:33, coincidente con compra #20). El código de `qr.service.js` ya escribe a disk correctamente; el hallazgo original asumió lo contrario sin confirmar empíricamente. Se promueve un nuevo hallazgo P2.6 menor (cleanup de archivos QR huérfanos al cancelar entradas).
+
 ---
 
 ## Metodología
@@ -43,7 +45,7 @@ Artefactos generados:
 |---|---|---|---|
 | P0.1 | **Webhook MP no dispara.** MP no manda POST a `/api/compras/webhook`. Defensa en profundidad cae a "solo cron" — si el cron se congela durante la campaña, procesamiento de pagos cae. | `BASE_URL=http://162.243.172.177` en `.env` de prod → la `notification_url` generada era HTTP+IP, MP la rechaza. | ✅ **Fixeado 21/4 00:55**: `BASE_URL=https://sindicatoargentinodeboleros.com.ar`. Pendiente re-test y verificar que la URL configurada en panel MP también sea HTTPS+dominio (esa sobreescribe la que mandamos en payload). |
 | P0.2 | **MP no redirige al usuario post-pago.** Checkout queda colgado en página de MP — usuario no ve confirmación, puede pensar que falló → reintenta → posible compra duplicada. | Mismo root cause P0.1: `back_urls.success=http://IP/...` → MP no respeta, `auto_return` tampoco se activa (requiere HTTPS). | ✅ **Fixeado 21/4 00:55**: con HTTPS+dominio las back_urls son válidas. Pendiente re-test. |
-| P0.3 | **QR PNG no persiste a disk.** `entrada.qrImageUrl` apunta a `/assets/img/uploads/qr/<uuid>.png` pero el archivo nunca se escribió (verificado en contenedor prod: `No such file or directory`). Si el mail falla (ej. SMTP bloqueado), el QR **no se puede recuperar desde backoffice** — solo existe como base64 en el mail que no salió. | Revisar `src/services/qr.service.js` — probablemente solo genera base64 para el mail y nunca escribe a disk, pese a que el schema guarda la URL. | ⚠ Pendiente — **crítico para la campaña**. Si Brevo no está listo el 1/5 y un pago pasa, perdemos el QR permanentemente. |
+| ~~P0.3~~ | ~~**QR PNG no persiste a disk.**~~ | ~~Revisar `src/services/qr.service.js`.~~ | ✅ **Cerrado 22/4 como falsa alarma**. Verificación en prod: archivo `737f9df9-440e-44f4-bb57-792fc934a583.png` existe en volumen `uploads-data` (timestamp 21/4 00:33, consistente con compra #20). `qr.service.js:20` usa `QRCode.toFile()` — escribe correctamente. El hallazgo original se basó en un chequeo prematuro antes de que `procesarPagoAprobado()` completara. Subproducto: se identificó un issue menor post-campaña (ver P2.6). |
 
 ### P1 — pre-campaña (deben entrar antes del 28/4)
 
@@ -63,6 +65,7 @@ Artefactos generados:
 | P2.3 | YouTube `maxresdefault.jpg` 404 silenciado por `onerror` → `hqdefault.jpg` | Cambiar `src` inicial a `hqdefault.jpg` directo, remover `onerror`. Ensucia console en demos. | 15 min |
 | P2.4 | HSTS duplicado (origen + Cloudflare) | Remover el header del origen (helmet), dejar solo el de Cloudflare. Cosmético. | 5 min |
 | P2.5 | Lighthouse BP desktop 77 — 3 deprecations en `/cdn-cgi/challenge-platform/` | No actionable (código de Cloudflare Bot Fight, no nuestro). Documentar. | — |
+| P2.6 | **QR PNG huérfano tras cancelar entrada.** Al cancelar/borrar una `Entrada` (rollback transaccional o admin), el archivo PNG en `/app/public/assets/img/uploads/qr/<uuid>.png` queda en disk sin referencia en DB. Detectado al confirmar el cierre de P0.3: compra #20 cancelada, `entradas: []` en DB, pero archivo sigue presente. No afecta UX ni seguridad — solo genera basura en disk a largo plazo. | (a) En el handler de cancelación/borrado de entrada, llamar a `fs.unlink(qrImageUrl)` tras el `tx.entrada.delete`. (b) Script de limpieza batch que compare `Entrada.qrImageUrl` vs archivos en disk y borre huérfanos. | 1-2 h |
 
 ---
 

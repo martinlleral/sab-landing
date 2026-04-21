@@ -1,7 +1,7 @@
 # TODO — Deploy & Technical Debt
 
-**Última actualización:** 21/4/2026 (auditoría multidimensional + test E2E real)
-**Estado general:** MVP en producción con hardening avanzado. Auditoría del 20-21/4 identificó 3 P0 nuevos del flujo MP (BASE_URL, redirect, QR PNG) y 4 hallazgos UX.
+**Última actualización:** 22/4/2026 (cierre P0.3 como falsa alarma tras verificación en prod)
+**Estado general:** MVP en producción con hardening avanzado. Auditoría del 20-21/4 identificó P0.1 + P0.2 del flujo MP (BASE_URL, redirect — ambos fixeados) y 4 hallazgos UX. El P0.3 (QR PNG) fue descartado el 22/4 tras verificación empírica: el código escribe a disk correctamente (ver `docs/audit/auditoria-20260420.md`).
 **Score del proyecto (14/4, pre-hardening):** 5.8 / 10 promedio (SRE 5.5 · Security 4.8 · Tech Writer 7.0)
 
 > Este archivo es la fuente de verdad de lo que queda pendiente. Actualizado con los hallazgos consolidados de la auditoría de expertos del 14/4/2026 (SRE senior + Application Security Engineer + Technical Writer + OSS advocate), más los cierres del 15/4, 17/4 y la auditoría multidimensional del 20-21/4.
@@ -26,8 +26,8 @@
 - **Fix crítico aplicado en `.env` del droplet (no en repo)**: `BASE_URL=http://IP` → `https://sindicatoargentinodeboleros.com.ar`. Consecuencia del fix: re-habilita el webhook MP y el redirect post-pago (ambos rotos porque MP rechaza URLs HTTP+IP).
 
 **Nuevos P0 descubiertos** — agregados abajo en el bloque correspondiente:
-- 31. QR PNG no persiste a disk (hallazgo del test E2E del 21/4)
-- 32. Verificar URL del webhook en panel MP (post-fix BASE_URL)
+- ~~31. QR PNG no persiste a disk~~ ✅ Cerrado 22/4 como falsa alarma (código OK, archivo verificado en prod)
+- 32. Verificar URL del webhook en panel MP (post-fix BASE_URL) — esperando a Eugenio
 
 **Nuevos P1 UX** (descubiertos por cliente navegando como comprador) — agregados abajo:
 - 33. Cards de "Próximos Eventos" sin botón de compra
@@ -706,15 +706,15 @@ Reporte completo: `docs/audit/auditoria-20260420.md`. 6 dimensiones (E2E, a11y, 
 
 Fix aplicado en `.env` del droplet: `BASE_URL=https://sindicatoargentinodeboleros.com.ar`. Requirió `docker compose up -d app` (NO `restart` — éste no re-lee `.env`).
 
-#### 31b. QR PNG no persiste a disk
+#### ~~31b. QR PNG no persiste a disk~~ ✅ Cerrado 22/4 como falsa alarma
 
-**Esfuerzo:** 1-2 h · **Blocker si SMTP falla**
+**Verificación en prod (22/4):** archivo `737f9df9-440e-44f4-bb57-792fc934a583.png` existe en `/app/public/assets/img/uploads/qr/` (timestamp 21/4 00:33, consistente con compra #20). `qr.service.js:20` usa `QRCode.toFile()`: **escribe a disk correctamente**. El hallazgo original se basó en un chequeo prematuro antes de que `procesarPagoAprobado()` completara — el archivo se escribe en ese punto del flujo, no antes.
 
-`entrada.qrImageUrl` guarda `/assets/img/uploads/qr/<uuid>.png` pero el archivo nunca se escribe (verificado en contenedor 21/4 post-cancel de compra #20). Si el mail falla (hoy con SMTP bloqueado sin Brevo HTTP), el QR es irrecuperable desde backoffice.
+El test de ayer salió así porque: compra #20 pasó brevemente por `approved` → se generó entrada + archivo QR → cancelé la entrada en DB (rollback transaccional) pero el archivo quedó huérfano en disk. De ahí surgió el hallazgo P2.6 (cleanup de huérfanos — post-campaña, no bloquea).
 
-- [ ] Auditar `src/services/qr.service.js` — ver si `generarQR()` escribe a disk o solo genera base64
-- [ ] Si solo genera base64: agregar escritura a disk en `pagos.service.js:procesarPagoAprobado` antes de crear la entrada
-- [ ] Smoke: hacer compra, validar que existe el PNG físico en `/app/public/assets/img/uploads/qr/`
+- [x] Verificación empírica en prod (22/4): archivo existe con UUID y timestamp coherentes
+- [x] Confirmación de que `qr.service.js:generarQR()` ya usa `QRCode.toFile()` (no solo base64)
+- [ ] (Sprint 2) Agregar test E2E que valide post-`checkAndProcess` la existencia del PNG — previene regresiones silenciosas
 
 #### 32. Verificar URL del webhook en panel MP
 

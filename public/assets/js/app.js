@@ -10,6 +10,8 @@ const API = {
 };
 
 let eventoActual = null;
+let eventosProximos = [];
+let eventosDisponibles = [];
 
 // Sanitización XSS — escapar HTML en datos del CMS
 function esc(str) {
@@ -29,6 +31,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadAll() {
   await Promise.all([loadHome(), loadDestacado(), loadProximos()]);
+  buildEventosDisponibles();
+  wireModalCompra();
+}
+
+function buildEventosDisponibles() {
+  const lista = [];
+  if (eventoActual) lista.push(eventoActual);
+  for (const ev of eventosProximos) {
+    if (!lista.find((e) => e.id === ev.id)) lista.push(ev);
+  }
+  eventosDisponibles = lista;
 }
 
 // ============================================
@@ -320,27 +333,9 @@ function renderDestacado(evento) {
     }
   }
 
-  // Precargar modal
-  const modalNombre = document.getElementById('modal-evento-nombre');
-  const modalFecha = document.getElementById('modal-evento-fecha');
-  const modalPrecioUnit = document.getElementById('modal-precio-unit');
-
-  if (modalNombre) modalNombre.textContent = evento.nombre;
-  if (modalFecha) modalFecha.textContent = `${formatFecha(evento.fecha)} — ${evento.hora}`;
-  if (modalPrecioUnit) modalPrecioUnit.value = evento.precioEntrada;
-
-  const flyerWrap = document.getElementById('modal-flyer-wrap');
-  const flyerImg = document.getElementById('modal-flyer');
-  if (flyerWrap && flyerImg) {
-    if (evento.flyerUrl) {
-      flyerImg.src = evento.flyerUrl;
-      flyerWrap.style.display = 'block';
-    } else {
-      flyerWrap.style.display = 'none';
-    }
-  }
-
-  updateTotal();
+  // La precarga del modal (nombre/fecha/flyer/precio) ahora la resuelve
+  // el listener show.bs.modal en wireModalCompra() — se pobla al abrir,
+  // no al cargar la página.
 
   // Fade-in del hero cuando todo está listo
   if (heroContent) {
@@ -355,9 +350,11 @@ function renderDestacado(evento) {
 async function loadProximos() {
   try {
     const eventos = await fetchJSON(API.proximos);
-    renderProximos(eventos);
+    eventosProximos = eventos || [];
+    renderProximos(eventosProximos);
   } catch (e) {
     console.warn('loadProximos error:', e.message);
+    eventosProximos = [];
     renderProximos([]);
   }
 }
@@ -382,6 +379,9 @@ function renderProximos(eventos) {
           <div class="evento-card-nombre">${esc(ev.nombre)}</div>
           <div class="evento-card-fecha">📅 ${formatFecha(ev.fecha)} — ${esc(ev.hora)}</div>
           <div class="evento-card-precio">$ ${formatPrecio(ev.precioEntrada)}</div>
+          <button type="button" class="btn-comprar-card" data-bs-toggle="modal" data-bs-target="#modalCompra" data-evento-id="${ev.id}">
+            <i class="bi bi-ticket-perforated me-1"></i> Comprar
+          </button>
         </div>
       </div>
     </div>`
@@ -391,6 +391,81 @@ function renderProximos(eventos) {
 // ============================================
 // MODAL DE COMPRA
 // ============================================
+
+// Wirea el listener show.bs.modal una sola vez tras loadAll. El evento
+// relatedTarget expone el botón que disparó el modal — si trae data-evento-id,
+// pre-seleccionamos ese evento; si no, cae al destacado (eventoActual).
+function wireModalCompra() {
+  const modalEl = document.getElementById('modalCompra');
+  if (!modalEl || modalEl.dataset.wired === '1') return;
+  modalEl.dataset.wired = '1';
+
+  const select = document.getElementById('modal-evento-select');
+  if (select) select.addEventListener('change', onEventoSeleccionadoChange);
+
+  modalEl.addEventListener('show.bs.modal', (event) => {
+    const trigger = event.relatedTarget;
+    const rawId = trigger?.dataset?.eventoId;
+    const idRequested = rawId ? Number(rawId) : (eventoActual ? eventoActual.id : null);
+    populateModalEventoSelect(idRequested);
+    onEventoSeleccionadoChange();
+  });
+}
+
+function populateModalEventoSelect(selectedId) {
+  const select = document.getElementById('modal-evento-select');
+  if (!select) return;
+  if (!eventosDisponibles.length) {
+    select.innerHTML = '<option value="">No hay eventos disponibles</option>';
+    return;
+  }
+  select.innerHTML = eventosDisponibles.map((ev) => {
+    const label = `${esc(ev.nombre)} — ${formatFecha(ev.fecha)}`;
+    return `<option value="${ev.id}">${label}</option>`;
+  }).join('');
+  if (selectedId != null) select.value = String(selectedId);
+  // Si el id pedido ya no existe (ej. evento borrado entre render y click),
+  // el browser deja la primera opción seleccionada — suficiente.
+}
+
+function getEventoSeleccionado() {
+  const select = document.getElementById('modal-evento-select');
+  const id = select ? Number(select.value) : null;
+  if (!id) return null;
+  return eventosDisponibles.find((ev) => ev.id === id) || null;
+}
+
+function onEventoSeleccionadoChange() {
+  const ev = getEventoSeleccionado();
+  const nombreEl = document.getElementById('modal-evento-nombre');
+  const fechaEl = document.getElementById('modal-evento-fecha');
+  const precioEl = document.getElementById('modal-precio-unit');
+  const flyerWrap = document.getElementById('modal-flyer-wrap');
+  const flyerImg = document.getElementById('modal-flyer');
+
+  if (!ev) {
+    if (nombreEl) nombreEl.textContent = '—';
+    if (fechaEl) fechaEl.textContent = '—';
+    if (precioEl) precioEl.value = 0;
+    if (flyerWrap) flyerWrap.style.display = 'none';
+    updateTotal();
+    return;
+  }
+
+  if (nombreEl) nombreEl.textContent = ev.nombre;
+  if (fechaEl) fechaEl.textContent = `${formatFecha(ev.fecha)} — ${ev.hora}`;
+  if (precioEl) precioEl.value = ev.precioEntrada || 0;
+  if (flyerWrap && flyerImg) {
+    if (ev.flyerUrl) {
+      flyerImg.src = ev.flyerUrl;
+      flyerWrap.style.display = 'block';
+    } else {
+      flyerWrap.style.display = 'none';
+    }
+  }
+  updateTotal();
+}
+
 function updateTotal() {
   const cantSelect = document.getElementById('modal-cantidad');
   const precioInput = document.getElementById('modal-precio-unit');
@@ -411,7 +486,11 @@ document.addEventListener('change', (e) => {
 });
 
 async function handleComprar() {
-  if (!eventoActual) return;
+  const evento = getEventoSeleccionado();
+  if (!evento) {
+    showModalError('Seleccioná un evento antes de continuar.');
+    return;
+  }
 
   const nombre = document.getElementById('modal-nombre').value.trim();
   const apellido = document.getElementById('modal-apellido').value.trim();
@@ -442,7 +521,7 @@ async function handleComprar() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        eventoId: eventoActual.id,
+        eventoId: evento.id,
         email,
         nombre,
         apellido,
