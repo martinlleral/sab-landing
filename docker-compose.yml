@@ -25,6 +25,7 @@ services:
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASS=${SMTP_PASS}
+      - BREVO_API_KEY=${BREVO_API_KEY:-}
       - EMAIL_FROM=${EMAIL_FROM}
       - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Sindicato Argentino de Boleros}
       - BASE_URL=${BASE_URL:-https://sindicatoargentinodeboleros.com.ar}
