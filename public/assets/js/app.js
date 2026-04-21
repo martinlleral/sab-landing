@@ -237,18 +237,22 @@ function renderDestacado(evento) {
     return;
   }
 
-  // Título: si el invitado aparece en el nombre, partimos así:
+  // Título: si el invitado aparece en el nombre, partimos en 2 líneas:
   //   "Amor de Miércoles con Leo García"
-  //   → "Amor de Miércoles · Invitado: <glow>Leo García</glow>"
-  // El conector "con" se normaliza a "· Invitado:" para leer como etiqueta
-  // explícita (pedido UX del 21/4). Si no hay invitado, se renderiza plano.
+  //   →  Amor de Miércoles
+  //      Invitado: <glow>Leo García</glow>
+  // Cada línea en su propio <span class="hero-title-line"> con display:block
+  // para que el salto sea explícito y no por word-wrap natural (pedido UX
+  // del 21/4 tras ver el wrap roto en 3 líneas).
   if (elNombre) {
     if (evento.invitado && evento.nombre.includes(evento.invitado)) {
       const parts = evento.nombre.split(evento.invitado);
-      let prefix = parts[0] || '';
-      // Normalizar "... con " → "... · Invitado: "
-      prefix = prefix.replace(/\s+con\s*$/i, ' · Invitado: ');
-      elNombre.innerHTML = esc(prefix) + '<span class="hero-guest-highlight">' + esc(evento.invitado) + '</span>' + esc(parts[1] || '');
+      // Quitar el " con " final del prefijo — ya no queda como conector
+      const mainTitle = (parts[0] || '').replace(/\s+con\s*$/i, '').trim();
+      const suffix = parts[1] || '';
+      elNombre.innerHTML =
+        '<span class="hero-title-line">' + esc(mainTitle) + '</span>' +
+        '<span class="hero-title-line hero-title-guest">Invitado: <span class="hero-guest-highlight">' + esc(evento.invitado) + '</span>' + esc(suffix) + '</span>';
     } else {
       elNombre.textContent = evento.nombre;
     }

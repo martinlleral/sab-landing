@@ -236,6 +236,15 @@ body {
 }
 
 /* Invitado destacado en el título del hero — glow blanco neón */
+.hero-title-line {
+  display: block;
+}
+.hero-title-guest {
+  font-size: 0.7em;
+  margin-top: 4px;
+  letter-spacing: 3px;
+}
+
 .hero-guest-highlight {
   color: #fff;
   text-shadow:
