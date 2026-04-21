@@ -55,12 +55,13 @@ async function loadHome() {
     buildSlider(slides);
 
     const desc = document.getElementById('evento-descripcion');
-    if (desc) desc.textContent = data.textoEvento || '';
-
-    const secDesc = document.getElementById('descripcion');
-    if (secDesc) {
-      secDesc.style.display = data.textoEvento ? '' : 'none';
+    if (desc) {
+      desc.textContent = data.textoEvento || '';
+      desc.style.display = data.textoEvento ? '' : 'none';
     }
+    // La sección "El Evento" (#descripcion) siempre se muestra — contiene ciclo,
+    // viñetas, info cards, callouts y CTA. Solo el <p id="evento-descripcion">
+    // se oculta si el campo "texto del evento" del backoffice está vacío.
 
     buildVideo(data.youtubeUrl);
     renderStats(data);
@@ -144,14 +145,23 @@ function buildVideo(youtubeUrl) {
   const img = document.createElement('img');
   img.className = 'yt-thumbnail-img';
   img.alt = 'Reproducir video';
-  // Try maxresdefault first, fall back to hqdefault if it's the gray placeholder (120x90)
-  img.src = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+  // Cascada de thumbs: maxresdefault (1280×720, ideal) → sddefault (640×480,
+  // intermedio) → hqdefault (480×360, último recurso). Sin maxres el SD
+  // queda mucho mejor en desktop que el HQ de 480px.
+  const ytThumb = (res) => `https://img.youtube.com/vi/${videoId}/${res}.jpg`;
+  img.src = ytThumb('maxresdefault');
   img.onload = () => {
-    if (img.naturalWidth <= 120) {
-      img.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    // Placeholder gris 120×90 devuelto como 200 cuando maxres no existe.
+    if (img.naturalWidth <= 120) img.src = ytThumb('sddefault');
+  };
+  img.onerror = () => {
+    // Si maxres falla (404), probar sd. Si sd también falla, cae a hq.
+    if (img.src.endsWith('maxresdefault.jpg')) {
+      img.src = ytThumb('sddefault');
+    } else if (img.src.endsWith('sddefault.jpg')) {
+      img.src = ytThumb('hqdefault');
     }
   };
-  img.onerror = () => { img.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`; };
 
   const btn = document.createElement('div');
   btn.className = 'yt-play-btn';
@@ -449,6 +459,7 @@ function onEventoSeleccionadoChange() {
     if (precioEl) precioEl.value = 0;
     if (flyerWrap) flyerWrap.style.display = 'none';
     updateTotal();
+    updateBtnPagarState(null);
     return;
   }
 
@@ -464,6 +475,43 @@ function onEventoSeleccionadoChange() {
     }
   }
   updateTotal();
+  updateBtnPagarState(ev);
+}
+
+// Ajusta el botón "VAMOS" del modal según el estado del evento seleccionado.
+// 3 casos: externo (linkExterno) | agotado | normal. Antes esto vivía en el
+// btn-comprar del hero; al unificar el CTA el modal es el único flujo.
+function updateBtnPagarState(ev) {
+  const btn = document.getElementById('btn-pagar');
+  if (!btn) return;
+  const label = btn.querySelector('.btn-pagar-label');
+
+  // Limpiar estado previo
+  btn.disabled = false;
+  btn.onclick = null;
+
+  if (!ev) {
+    btn.disabled = true;
+    if (label) label.textContent = 'VAMOS';
+    return;
+  }
+
+  const disponibles = (ev.cantidadDisponible || 0) - (ev.cantidadVendida || 0);
+
+  if (ev.esExterno && ev.linkExterno) {
+    if (label) label.textContent = 'VER ENTRADAS';
+    btn.onclick = () => window.open(ev.linkExterno, '_blank', 'noopener');
+    return;
+  }
+
+  if (disponibles <= 0) {
+    if (label) label.textContent = 'AGOTADO';
+    btn.disabled = true;
+    return;
+  }
+
+  if (label) label.textContent = 'VAMOS';
+  btn.onclick = () => handleComprar();
 }
 
 function updateTotal() {

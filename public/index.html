@@ -137,10 +137,8 @@
           <p class="hero-precio" id="hero-precio-wrap">
             Desde <strong id="hero-precio">$12.000</strong>
           </p>
-          <button class="btn-comprar" id="btn-comprar" data-bs-toggle="modal" data-bs-target="#modalCompra">
-            COMPRAR ENTRADAS
-          </button>
-          <!-- Trust signals inline (hero) - minimal -->
+          <!-- CTA unificado en la sección "El Evento" (.evento-cta-final).
+               Removido del hero para no duplicar el punto de entrada al modal. -->
 
         </div>
       </div>
@@ -756,7 +754,7 @@
           <button type="button" class="btn-pagar" id="btn-pagar" onclick="handleComprar()">
             <span class="spinner-border spinner-border-sm" id="pagar-spinner" style="display:none;" role="status"></span>
             <i class="bi bi-credit-card me-1"></i>
-            VAMOS
+            <span class="btn-pagar-label">VAMOS</span>
           </button>
         </div>
       </div>
