@@ -15,7 +15,8 @@
     "test:e2e:report": "playwright show-report",
     "test:smoke:ratelimit": "node scripts/smoke-rate-limit.js",
     "test:smoke:mail": "node scripts/smoke-mail.js",
-    "test:loadtest": "node scripts/loadtest-checkout.js"
+    "test:loadtest": "node scripts/loadtest-checkout.js",
+    "test:integration:qr": "node tests/integration/qr-persistence.test.js"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

@@ -115,7 +115,7 @@ async function adminCrear(req, res) {
     const {
       nombre, descripcion, fecha, hora, invitado,
       precioEntrada, cantidadDisponible,
-      esDestacado, estaPublicado, esExterno, linkExterno,
+      esDestacado, estaPublicado, estaAgotado, esExterno, linkExterno,
     } = req.body;
 
     if (!nombre || !descripcion || !fecha || !hora || !precioEntrada || !cantidadDisponible) {
@@ -136,6 +136,7 @@ async function adminCrear(req, res) {
         flyerUrl,
         esDestacado: esDestacado === 'true' || esDestacado === true,
         estaPublicado: estaPublicado === 'true' || estaPublicado === true,
+        estaAgotado: estaAgotado === 'true' || estaAgotado === true,
         esExterno: esExterno === 'true' || esExterno === true,
         linkExterno: linkExterno || null,
       },
@@ -157,7 +158,7 @@ async function adminEditar(req, res) {
     const {
       nombre, descripcion, fecha, hora, invitado,
       precioEntrada, cantidadDisponible,
-      esDestacado, estaPublicado, esExterno, linkExterno,
+      esDestacado, estaPublicado, estaAgotado, esExterno, linkExterno,
     } = req.body;
 
     const data = {};
@@ -170,6 +171,7 @@ async function adminEditar(req, res) {
     if (cantidadDisponible !== undefined) data.cantidadDisponible = parseInt(cantidadDisponible);
     if (esDestacado !== undefined) data.esDestacado = esDestacado === 'true' || esDestacado === true;
     if (estaPublicado !== undefined) data.estaPublicado = estaPublicado === 'true' || estaPublicado === true;
+    if (estaAgotado !== undefined) data.estaAgotado = estaAgotado === 'true' || estaAgotado === true;
     if (esExterno !== undefined) data.esExterno = esExterno === 'true' || esExterno === true;
     if (linkExterno !== undefined) data.linkExterno = linkExterno || null;
     if (req.file) data.flyerUrl = `/assets/img/uploads/eventos/${req.file.filename}`;

@@ -53,6 +53,7 @@ async function crearPreferencia(req, res) {
     const evento = await prisma.evento.findUnique({ where: { id: parseInt(eventoId) } });
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
     if (!evento.estaPublicado) return res.status(400).json({ error: 'Evento no disponible' });
+    if (evento.estaAgotado) return res.status(400).json({ error: 'Entradas agotadas para este evento' });
 
     const disponibles = evento.cantidadDisponible - evento.cantidadVendida;
     if (disponibles < parseInt(cantidad)) {

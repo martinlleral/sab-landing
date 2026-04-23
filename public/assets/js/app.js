@@ -347,7 +347,10 @@ function renderDestacado(evento) {
 
   if (btnComprar) {
     const disponibles = evento.cantidadDisponible - evento.cantidadVendida;
-    if (disponibles <= 0) {
+    // "agotado" = toggle manual, o se vendieron todas. Un evento con cupo=0 y
+    // sin ventas se considera "aún no configurado" y no dispara el estado.
+    const agotado = evento.estaAgotado || (evento.cantidadVendida > 0 && disponibles <= 0);
+    if (agotado) {
       btnComprar.textContent = 'AGOTADO';
       btnComprar.disabled = true;
     } else if (evento.esExterno && evento.linkExterno) {
@@ -394,24 +397,38 @@ function renderProximos(eventos) {
     return;
   }
 
-  container.innerHTML = eventos.map((ev) => `
+  container.innerHTML = eventos.map((ev) => {
+    const disponibles = (ev.cantidadDisponible || 0) - (ev.cantidadVendida || 0);
+    const agotado = ev.estaAgotado || ((ev.cantidadVendida || 0) > 0 && disponibles <= 0);
+    const imgTag = ev.flyerUrl
+      ? `<img src="${esc(ev.flyerUrl)}" alt="${esc(ev.nombre)}" class="evento-card-img">`
+      : `<img src="/assets/img/event-default.jpg" alt="${esc(ev.nombre)}" class="evento-card-img evento-card-img--default">`;
+    const overlay = agotado
+      ? `<div class="evento-card-agotado-overlay" aria-hidden="true"><span>AGOTADO</span></div>`
+      : '';
+    const boton = agotado
+      ? `<button type="button" class="btn-comprar-card" disabled aria-disabled="true">
+           <i class="bi bi-x-circle me-1"></i> Agotado
+         </button>`
+      : `<button type="button" class="btn-comprar-card" data-bs-toggle="modal" data-bs-target="#modalCompra" data-evento-id="${ev.id}">
+           <i class="bi bi-ticket-perforated me-1"></i> Comprar
+         </button>`;
+    return `
     <div class="col-md-4 mb-4">
-      <div class="evento-card">
-        ${ev.flyerUrl
-          ? `<img src="${esc(ev.flyerUrl)}" alt="${esc(ev.nombre)}" class="evento-card-img">`
-          : `<img src="/assets/img/event-default.jpg" alt="${esc(ev.nombre)}" class="evento-card-img evento-card-img--default">`
-        }
+      <div class="evento-card${agotado ? ' evento-card--agotado' : ''}">
+        <div class="evento-card-img-wrap">
+          ${imgTag}
+          ${overlay}
+        </div>
         <div class="evento-card-body">
           <div class="evento-card-nombre">${esc(ev.nombre)}</div>
           <div class="evento-card-fecha">📅 ${formatFecha(ev.fecha)} — ${esc(ev.hora)}</div>
           <div class="evento-card-precio">$ ${formatPrecio(ev.precioEntrada)}</div>
-          <button type="button" class="btn-comprar-card" data-bs-toggle="modal" data-bs-target="#modalCompra" data-evento-id="${ev.id}">
-            <i class="bi bi-ticket-perforated me-1"></i> Comprar
-          </button>
+          ${boton}
         </div>
       </div>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
 }
 
 // ============================================
@@ -515,16 +532,17 @@ function updateBtnPagarState(ev) {
   }
 
   const disponibles = (ev.cantidadDisponible || 0) - (ev.cantidadVendida || 0);
+  const agotado = ev.estaAgotado || ((ev.cantidadVendida || 0) > 0 && disponibles <= 0);
+
+  if (agotado) {
+    if (label) label.textContent = 'AGOTADO';
+    btn.disabled = true;
+    return;
+  }
 
   if (ev.esExterno && ev.linkExterno) {
     if (label) label.textContent = 'VER ENTRADAS';
     btn.onclick = () => window.open(ev.linkExterno, '_blank', 'noopener');
-    return;
-  }
-
-  if (disponibles <= 0) {
-    if (label) label.textContent = 'AGOTADO';
-    btn.disabled = true;
     return;
   }
 

@@ -34,6 +34,7 @@ model Evento {
   flyerUrl           String   @default("")
   esDestacado        Boolean  @default(false)
   estaPublicado      Boolean  @default(false)
+  estaAgotado        Boolean  @default(false)
   esExterno          Boolean  @default(false)
   linkExterno        String?
   createdAt          DateTime @default(now())

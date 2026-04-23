@@ -156,10 +156,16 @@
                       <label class="form-check-label bo-switch-label" for="estaPublicado">Publicado (visible en el sitio)</label>
                     </div>
                   </div>
-                  <div class="bo-switch-group">
+                  <div class="bo-switch-group mb-3">
                     <div class="form-check form-switch">
                       <input class="form-check-input" type="checkbox" id="esDestacado" name="esDestacado">
                       <label class="form-check-label bo-switch-label" for="esDestacado">Evento Destacado (aparece en hero)</label>
+                    </div>
+                  </div>
+                  <div class="bo-switch-group">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="estaAgotado" name="estaAgotado">
+                      <label class="form-check-label bo-switch-label" for="estaAgotado">Entradas agotadas (bloquea la compra manualmente)</label>
                     </div>
                   </div>
                 </div>
@@ -381,6 +387,7 @@
       document.getElementById('cantidadDisponible').value = ev.cantidadDisponible || '';
       document.getElementById('estaPublicado').checked = ev.estaPublicado;
       document.getElementById('esDestacado').checked = ev.esDestacado;
+      document.getElementById('estaAgotado').checked = ev.estaAgotado;
       document.getElementById('esExterno').checked = ev.esExterno;
 
       if (ev.esExterno) {
@@ -441,6 +448,7 @@
 
         formData.set('estaPublicado', document.getElementById('estaPublicado').checked);
         formData.set('esDestacado', document.getElementById('esDestacado').checked);
+        formData.set('estaAgotado', document.getElementById('estaAgotado').checked);
         formData.set('esExterno', document.getElementById('esExterno').checked);
 
         const url = isNuevo ? '/api/admin/eventos' : `/api/admin/eventos/${eventoId}`;

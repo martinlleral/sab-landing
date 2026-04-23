@@ -605,6 +605,52 @@ section {
   outline-offset: 2px;
 }
 
+.btn-comprar-card:disabled,
+.btn-comprar-card[aria-disabled="true"] {
+  background: #555;
+  color: #ddd;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.btn-comprar-card:disabled:hover,
+.btn-comprar-card[aria-disabled="true"]:hover {
+  background: #555;
+  transform: none;
+}
+
+.evento-card-img-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.evento-card-agotado-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.evento-card-agotado-overlay span {
+  font-family: var(--font-heading);
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 10px 26px;
+  border: 3px solid #fff;
+  transform: rotate(-6deg);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.evento-card--agotado .evento-card-img {
+  filter: grayscale(0.55);
+}
+
 .no-eventos {
   color: var(--color-text-muted);
   font-family: var(--font-heading);
