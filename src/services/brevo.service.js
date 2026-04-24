@@ -87,12 +87,15 @@ function buildQrAttachments(entradas) {
 }
 
 function buildHtml({ nombre, evento, entradas }) {
+  // URL pública absoluta del QR. Usamos el PNG ya persistido en disk por
+  // qrService.generarQR. Así evitamos data URLs (bloqueadas por Gmail mobile
+  // y WhatsApp Web) y CIDs (renderizado inconsistente entre providers).
   const qrItems = entradas
     .map(
       (e, i) => `
       <div style="margin:16px 0; text-align:center; border:1px solid #eee; border-radius:8px; padding:16px;">
         <p style="font-weight:bold; font-size:16px;">Entrada #${i + 1}</p>
-        <img src="cid:qr${i}" alt="QR Entrada ${i + 1}" style="width:180px; height:180px;" />
+        <img src="${config.baseUrl}/assets/img/uploads/qr/${e.codigoQR}.png" alt="QR Entrada ${i + 1}" style="width:180px; height:180px;" />
         <p style="color:#666; font-size:12px; margin-top:8px;">Código: ${e.codigoQR}</p>
       </div>`
     )
@@ -118,6 +121,7 @@ function buildHtml({ nombre, evento, entradas }) {
         <p style="margin:4px 0;"><strong>Fecha:</strong> ${formatFecha(evento.fecha)}</p>
         <p style="margin:4px 0;"><strong>Hora:</strong> ${evento.hora}</p>
         ${evento.invitado ? `<p style="margin:4px 0;"><strong>Invitado especial:</strong> ${evento.invitado}</p>` : ''}
+        <p style="margin:4px 0;"><strong>Dirección:</strong> Espacio Doble T — Calle 23 entre 43 y 44, Barrio La Loma, La Plata</p>
       </div>
 
       <h3 style="color:#111;">🎟️ Tus Entradas</h3>
@@ -132,6 +136,10 @@ function buildHtml({ nombre, evento, entradas }) {
           <li>Podés mostrarlo desde el celular o impreso.</li>
         </ul>
       </div>
+
+      <p style="color:#666; font-size:14px; margin-top:24px; text-align:center;">
+        Cualquier duda o consulta comunicate al WhatsApp <a href="https://wa.me/5492215917409" style="color:#111; font-weight:bold;">+54 9 221 591-7409</a>
+      </p>
     </div>
     <div style="background:#111; padding:16px; text-align:center;">
       <p style="color:#888; font-size:12px; margin:0;">© Sindicato Argentino de Boleros — Todos los derechos reservados</p>
@@ -165,8 +173,9 @@ async function enviarConfirmacion({ email, nombre, evento, entradas }) {
   const subject = `🎟️ Tus entradas para ${evento.nombre}`;
 
   if (http) {
-    const htmlInline = inlineCidsAsDataUrls(html, attachments);
-    const result = await sendViaBrevoHttp({ to: email, toName: nombre, subject, html: htmlInline });
+    // Imágenes del HTML van por URL pública absoluta (ver buildHtml / enviarInvitacion).
+    // Los attachments se mantienen como archivos adjuntos descargables por el user.
+    const result = await sendViaBrevoHttp({ to: email, toName: nombre, subject, html });
     console.log(`📧 Email enviado OK — messageId: ${result.messageId}`);
     return result;
   }
@@ -210,12 +219,13 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
         <p style="margin:4px 0;"><strong>Fecha:</strong> ${formatFecha(evento.fecha)}</p>
         <p style="margin:4px 0;"><strong>Hora:</strong> ${evento.hora}</p>
         ${evento.invitado ? `<p style="margin:4px 0;"><strong>Invitado especial:</strong> ${evento.invitado}</p>` : ''}
+        <p style="margin:4px 0;"><strong>Dirección:</strong> Espacio Doble T — Calle 23 entre 43 y 44, Barrio La Loma, La Plata</p>
       </div>
 
       <h3 style="color:#111;">🎟️ Tu Entrada</h3>
       <div style="margin:16px 0; text-align:center; border:1px solid #eee; border-radius:8px; padding:16px;">
         <p style="font-weight:bold; font-size:16px;">Entrada de Invitación</p>
-        <img src="cid:qr0" alt="QR Entrada" style="width:180px; height:180px;" />
+        <img src="${config.baseUrl}/assets/img/uploads/qr/${entrada.codigoQR}.png" alt="QR Entrada" style="width:180px; height:180px;" />
         <p style="color:#666; font-size:12px; margin-top:8px;">Código: ${entrada.codigoQR}</p>
       </div>
 
@@ -228,6 +238,10 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
           <li>Podés mostrarlo desde el celular o impreso.</li>
         </ul>
       </div>
+
+      <p style="color:#666; font-size:14px; margin-top:24px; text-align:center;">
+        Cualquier duda o consulta comunicate al WhatsApp <a href="https://wa.me/5492215917409" style="color:#111; font-weight:bold;">+54 9 221 591-7409</a>
+      </p>
     </div>
     <div style="background:#111; padding:16px; text-align:center;">
       <p style="color:#888; font-size:12px; margin:0;">© Sindicato Argentino de Boleros — Todos los derechos reservados</p>
