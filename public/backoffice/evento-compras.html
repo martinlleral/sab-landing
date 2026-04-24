@@ -171,7 +171,15 @@
         document.getElementById('evento-nombre').textContent = ev.nombre;
         document.getElementById('evento-fecha').textContent =
           `📅 ${boFecha(ev.fecha)}  ⏰ ${ev.hora}${ev.invitado ? '  🎤 ' + ev.invitado : ''}`;
-        document.getElementById('evento-precio').textContent = `Precio: ${boPrecio(ev.precioEntrada)} por entrada`;
+        // El precio "por entrada" a nivel evento ya no existe (cada compra tiene su precio snapshot
+        // según la tanda vigente al momento de la compra). Mostramos el precio de la tanda vigente
+        // o un rango min-max si hay varias tandas con precios distintos.
+        const tandas = ev.tandas || [];
+        const precios = [...new Set(tandas.map((t) => t.precio))].sort((a, b) => a - b);
+        let precioTxt = 'Sin tandas configuradas';
+        if (precios.length === 1) precioTxt = `Precio: ${boPrecio(precios[0])}`;
+        else if (precios.length > 1) precioTxt = `Precio: ${boPrecio(precios[0])} — ${boPrecio(precios[precios.length - 1])} según tanda`;
+        document.getElementById('evento-precio').textContent = precioTxt;
 
         if (ev.flyerUrl) {
           const img = document.getElementById('evento-flyer');

@@ -51,9 +51,6 @@ async function crearEventoConTandas(tandasData) {
       descripcion: 'Evento de test para tandas',
       fecha: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       hora: '21:00',
-      precioEntrada: 0,
-      cantidadDisponible: 0,
-      cantidadVendida: 0,
       estaPublicado: true,
       tandas: { create: tandasData },
     },
@@ -206,7 +203,74 @@ async function main() {
     });
 
     // ============================================
-    // 5. GET /api/eventos/destacado incluye tandaVigente
+    // 5. Swap atómico de `orden` (F1): cambiar orden a uno ocupado → swap
+    // ============================================
+
+    // ev1 ya tiene Tanda orden=1 (early bird id=early.id) + Tanda orden=2 (regular id=regular.id).
+    // Antes del refactor esto rompía con P2002. Ahora debería hacer swap.
+    // NOTA: tras el punto 3 se modificó early.cantidadVendida=5 via prisma directo — no afecta el orden.
+    const ordenEarlyOriginal = early.orden;  // 1
+    const ordenRegularOriginal = regular.orden; // 2
+
+    // Login admin para la request autenticada. Requiere ADMIN_EMAIL/ADMIN_PASS
+    // como env vars — si no están, los 4 checks del swap se marcan como SKIP.
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPass = process.env.ADMIN_PASS;
+    if (!adminEmail || !adminPass) {
+      checks.push({
+        name: 'swap de orden (SKIP — falta ADMIN_EMAIL/ADMIN_PASS en env)',
+        pass: true,
+        detail: 'Correr con: docker exec -e ADMIN_EMAIL=... -e ADMIN_PASS=... sab-app node ...',
+      });
+    } else {
+      const loginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: adminEmail, password: adminPass }),
+      });
+      const setCookie = loginRes.headers.get('set-cookie') || '';
+      const cookie = setCookie.split(';')[0];
+
+      // Mover regular (orden=2) a orden=1. Espero que early quede en orden=2.
+      const swapRes = await fetch(`${BASE_URL}/api/admin/tandas/${regular.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ orden: ordenEarlyOriginal }),  // = 1
+      });
+      checks.push({
+        name: 'swap de orden responde 200',
+        pass: swapRes.status === 200,
+        detail: `status=${swapRes.status}`,
+      });
+
+      const earlyPost = await prisma.tanda.findUnique({ where: { id: early.id } });
+      const regularPost = await prisma.tanda.findUnique({ where: { id: regular.id } });
+      checks.push({
+        name: 'swap: regular ahora en orden=1',
+        pass: regularPost.orden === ordenEarlyOriginal,
+        detail: `regular.orden=${regularPost.orden} (esperado ${ordenEarlyOriginal})`,
+      });
+      checks.push({
+        name: 'swap: early ahora en orden=2 (el que dejó regular)',
+        pass: earlyPost.orden === ordenRegularOriginal,
+        detail: `early.orden=${earlyPost.orden} (esperado ${ordenRegularOriginal})`,
+      });
+
+      const conflictos = await prisma.tanda.groupBy({
+        by: ['eventoId', 'orden'],
+        where: { eventoId: ev1.id },
+        _count: true,
+      });
+      const hayDup = conflictos.some((c) => c._count > 1);
+      checks.push({
+        name: 'swap: no hay duplicados de (eventoId, orden)',
+        pass: !hayDup,
+        detail: JSON.stringify(conflictos.map((c) => `${c.eventoId}/${c.orden}: ${c._count}`)),
+      });
+    }
+
+    // ============================================
+    // 6. GET /api/eventos/destacado incluye tandaVigente
     // ============================================
 
     const destRes = await fetch(`${BASE_URL}/api/eventos/destacado`);

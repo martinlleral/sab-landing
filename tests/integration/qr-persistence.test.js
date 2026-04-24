@@ -48,6 +48,8 @@ async function cleanup() {
 
   await prisma.entrada.deleteMany({ where: { compraId: { in: compraIds } } });
   await prisma.compra.deleteMany({ where: { id: { in: compraIds } } });
+  // Borrar tandas antes de eventos (FK RESTRICT)
+  await prisma.tanda.deleteMany({ where: { eventoId: { in: eventoIds } } });
   await prisma.evento.deleteMany({
     where: { id: { in: eventoIds }, nombre: TEST_EVENTO_NAME },
   });
@@ -69,16 +71,17 @@ async function main() {
         descripcion: 'Evento temporal para test de integración de persistencia QR',
         fecha: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         hora: '21:00',
-        precioEntrada: 1000,
-        cantidadDisponible: 10,
-        cantidadVendida: 0,
         estaPublicado: false,
+        tandas: { create: [{ nombre: 'General', precio: 1000, orden: 1, activa: true, capacidad: 10, cantidadVendida: 0 }] },
       },
+      include: { tandas: true },
     });
+    const tandaId = evento.tandas[0].id;
 
     const compra = await prisma.compra.create({
       data: {
         eventoId: evento.id,
+        tandaId,
         email: `${TEST_EMAIL_PREFIX}${ts}@test.invalid`,
         nombre: 'QR-Test',
         apellido: 'Persistence',

@@ -208,7 +208,12 @@
         <div id="tandas-section" style="display:none;" class="mt-4">
           <div class="bo-card">
             <div class="bo-card-header d-flex justify-content-between align-items-center">
-              <h5 class="bo-card-title mb-0"><i class="bi bi-layers me-2"></i>Tandas de venta</h5>
+              <div class="d-flex align-items-center">
+                <h5 class="bo-card-title mb-0"><i class="bi bi-layers me-2"></i>Tandas de venta</h5>
+                <span id="tandas-dirty-indicator" class="tandas-dirty-indicator" style="display:none;">
+                  <i class="bi bi-exclamation-circle-fill me-1"></i>Tenés cambios sin guardar
+                </span>
+              </div>
               <button type="button" class="btn-bo-primary btn-sm" onclick="agregarTanda()">
                 <i class="bi bi-plus-lg"></i> Agregar tanda
               </button>
@@ -403,19 +408,27 @@
       const tbody = document.getElementById('tandas-body');
       if (!tandas.length) {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-3" style="color:#666;">Sin tandas — agregá al menos una para que el evento sea vendible</td></tr>';
+        updateDirtyIndicatorGlobal();
         return;
       }
       tbody.innerHTML = tandas.map((t) => {
         const badge = ESTADO_BADGES[t.estado] || ESTADO_BADGES.desactivada;
         const vendidasTxt = t.capacidad !== null ? `${t.cantidadVendida}/${t.capacidad}` : `${t.cantidadVendida}/∞`;
         const disabledBorrar = t.cantidadVendida > 0 ? 'disabled title="No se puede borrar una tanda con ventas"' : '';
-        return `<tr data-tanda-id="${t.id}">
-          <td><input type="number" min="1" class="bo-form-control bo-form-control-sm" name="orden" value="${t.orden}"></td>
-          <td><input type="text" class="bo-form-control bo-form-control-sm" name="nombre" value="${esc(t.nombre)}"></td>
-          <td><input type="number" min="0" class="bo-form-control bo-form-control-sm" name="precio" value="${t.precio}"></td>
-          <td><input type="number" min="${t.cantidadVendida}" class="bo-form-control bo-form-control-sm" name="capacidad" value="${t.capacidad ?? ''}" placeholder="∞"></td>
+        const fechaOriginal = toDatetimeLocal(t.fechaLimite);
+        // data-original-* guarda los valores iniciales para detectar dirty-state.
+        return `<tr data-tanda-id="${t.id}"
+            data-original-orden="${t.orden}"
+            data-original-nombre="${esc(t.nombre)}"
+            data-original-precio="${t.precio}"
+            data-original-capacidad="${t.capacidad ?? ''}"
+            data-original-fechaLimite="${fechaOriginal}">
+          <td><input type="number" min="1" class="bo-form-control bo-form-control-sm" name="orden" value="${t.orden}" oninput="checkDirty(${t.id})"></td>
+          <td><input type="text" class="bo-form-control bo-form-control-sm" name="nombre" value="${esc(t.nombre)}" oninput="checkDirty(${t.id})"></td>
+          <td><input type="number" min="0" class="bo-form-control bo-form-control-sm" name="precio" value="${t.precio}" oninput="checkDirty(${t.id})"></td>
+          <td><input type="number" min="${t.cantidadVendida}" class="bo-form-control bo-form-control-sm" name="capacidad" value="${t.capacidad ?? ''}" placeholder="∞" oninput="checkDirty(${t.id})"></td>
           <td style="color:#888;">${vendidasTxt}</td>
-          <td><input type="datetime-local" class="bo-form-control bo-form-control-sm" name="fechaLimite" value="${toDatetimeLocal(t.fechaLimite)}"></td>
+          <td><input type="datetime-local" class="bo-form-control bo-form-control-sm" name="fechaLimite" value="${fechaOriginal}" oninput="checkDirty(${t.id})"></td>
           <td><span class="${badge.cls}">${badge.text}</span></td>
           <td class="text-center">
             <div class="form-check form-switch d-inline-block">
@@ -423,12 +436,72 @@
             </div>
           </td>
           <td>
-            <button type="button" class="btn-bo-primary btn-sm" onclick="guardarTanda(${t.id})" title="Guardar cambios"><i class="bi bi-floppy"></i></button>
-            <button type="button" class="btn-bo-danger btn-sm" onclick="borrarTanda(${t.id})" ${disabledBorrar} title="Borrar tanda"><i class="bi bi-trash"></i></button>
+            <button type="button" class="btn-tanda-save" onclick="guardarTanda(${t.id})" title="Guardar cambios">
+              <i class="bi bi-floppy me-1"></i><span class="btn-tanda-save-label">Guardar</span>
+            </button>
+            <button type="button" class="btn-bo-danger btn-sm ms-1" onclick="borrarTanda(${t.id})" ${disabledBorrar} title="Borrar tanda"><i class="bi bi-trash"></i></button>
           </td>
         </tr>`;
       }).join('');
+      updateDirtyIndicatorGlobal();
     }
+
+    // ============================================
+    // DIRTY STATE — detecta cambios sin guardar y alerta
+    // ============================================
+
+    function checkDirty(tandaId) {
+      const row = document.querySelector(`tr[data-tanda-id="${tandaId}"]`);
+      if (!row) return;
+      const get = (name) => row.querySelector(`[name="${name}"]`);
+      const curr = {
+        orden: get('orden').value,
+        nombre: get('nombre').value,
+        precio: get('precio').value,
+        capacidad: get('capacidad').value,
+        fechaLimite: get('fechaLimite').value,
+      };
+      const orig = {
+        orden: row.dataset.originalOrden,
+        nombre: row.dataset.originalNombre,
+        precio: row.dataset.originalPrecio,
+        capacidad: row.dataset.originalCapacidad,
+        fechaLimite: row.dataset.originalFechalimite,  // dataset lowercases el suffix compuesto
+      };
+      const dirty =
+        curr.orden !== orig.orden ||
+        curr.nombre !== orig.nombre ||
+        curr.precio !== orig.precio ||
+        curr.capacidad !== orig.capacidad ||
+        curr.fechaLimite !== orig.fechaLimite;
+      row.classList.toggle('tanda-row--dirty', dirty);
+      const btn = row.querySelector('.btn-tanda-save');
+      if (btn) {
+        btn.classList.toggle('btn-tanda-save--dirty', dirty);
+        const label = btn.querySelector('.btn-tanda-save-label');
+        if (label) label.textContent = dirty ? 'Guardar cambios' : 'Guardar';
+      }
+      updateDirtyIndicatorGlobal();
+    }
+
+    function hasDirtyRows() {
+      return !!document.querySelector('tr.tanda-row--dirty');
+    }
+
+    // Indicador visible en el header de la sección cuando hay cambios sin guardar.
+    function updateDirtyIndicatorGlobal() {
+      let indicator = document.getElementById('tandas-dirty-indicator');
+      if (!indicator) return;
+      indicator.style.display = hasDirtyRows() ? 'inline-block' : 'none';
+    }
+
+    // Warning del browser si el user intenta navegar/cerrar con cambios sin guardar.
+    window.addEventListener('beforeunload', (e) => {
+      if (hasDirtyRows()) {
+        e.preventDefault();
+        e.returnValue = '';  // browsers modernos muestran su mensaje default
+      }
+    });
 
     function esc(s) {
       return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

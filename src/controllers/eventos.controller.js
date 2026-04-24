@@ -56,12 +56,15 @@ async function adminListar(req, res) {
         orderBy: { fecha: 'desc' },
         skip,
         take: limit,
-        include: { _count: { select: { compras: true } } },
+        include: {
+          _count: { select: { compras: true } },
+          tandas: { orderBy: { orden: 'asc' } },
+        },
       }),
       prisma.evento.count(),
     ]);
 
-    return res.json({ eventos, total, page, totalPages: Math.ceil(total / limit) });
+    return res.json({ eventos: eventos.map(adjuntarTandaVigente), total, page, totalPages: Math.ceil(total / limit) });
   } catch (err) {
     console.error('Error en adminListar eventos:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -80,12 +83,15 @@ async function adminListarPasados(req, res) {
         orderBy: { fecha: 'desc' },
         skip,
         take: limit,
-        include: { _count: { select: { compras: true } } },
+        include: {
+          _count: { select: { compras: true } },
+          tandas: { orderBy: { orden: 'asc' } },
+        },
       }),
       prisma.evento.count({ where: { fecha: { lt: new Date() } } }),
     ]);
 
-    return res.json({ eventos, total, page, totalPages: Math.ceil(total / limit) });
+    return res.json({ eventos: eventos.map(adjuntarTandaVigente), total, page, totalPages: Math.ceil(total / limit) });
   } catch (err) {
     console.error('Error en adminListarPasados:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -101,12 +107,14 @@ async function adminGetById(req, res) {
         compras: {
           orderBy: { createdAt: 'desc' },
           take: 50,
+          include: { tanda: { select: { nombre: true, precio: true } } },
         },
         _count: { select: { compras: true } },
+        tandas: { orderBy: { orden: 'asc' } },
       },
     });
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
-    return res.json(evento);
+    return res.json(adjuntarTandaVigente(evento));
   } catch (err) {
     console.error('Error en adminGetById evento:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -139,8 +147,8 @@ async function adminCrear(req, res) {
     const cupoInt = parseInt(cantidadDisponible);
 
     // Evento + Tanda "General" default atómicamente. La tanda es la fuente
-    // de verdad de venta; los campos legacy en Evento quedan como snapshot
-    // hasta la Fase B del refactor (DROP columns).
+    // de verdad de venta. Los campos precio/cupo del form se usan sólo
+    // para poblar la tanda default — el Evento ya no los persiste.
     const evento = await prisma.evento.create({
       data: {
         nombre,
@@ -148,8 +156,6 @@ async function adminCrear(req, res) {
         fecha: parsearFechaLocal(fecha),
         hora,
         invitado: invitado || '',
-        precioEntrada: precioInt,
-        cantidadDisponible: cupoInt,
         flyerUrl,
         esDestacado: esDestacado === 'true' || esDestacado === true,
         estaPublicado: estaPublicado === 'true' || estaPublicado === true,
@@ -185,7 +191,6 @@ async function adminEditar(req, res) {
 
     const {
       nombre, descripcion, fecha, hora, invitado,
-      precioEntrada, cantidadDisponible,
       esDestacado, estaPublicado, estaAgotado, esExterno, linkExterno,
     } = req.body;
 
@@ -195,8 +200,6 @@ async function adminEditar(req, res) {
     if (fecha !== undefined) data.fecha = parsearFechaLocal(fecha);
     if (hora !== undefined) data.hora = hora;
     if (invitado !== undefined) data.invitado = invitado;
-    if (precioEntrada !== undefined) data.precioEntrada = parseInt(precioEntrada);
-    if (cantidadDisponible !== undefined) data.cantidadDisponible = parseInt(cantidadDisponible);
     if (esDestacado !== undefined) data.esDestacado = esDestacado === 'true' || esDestacado === true;
     if (estaPublicado !== undefined) data.estaPublicado = estaPublicado === 'true' || estaPublicado === true;
     if (estaAgotado !== undefined) data.estaAgotado = estaAgotado === 'true' || estaAgotado === true;
@@ -267,18 +270,11 @@ async function adminEnviarInvitacion(req, res) {
       },
     });
 
-    // Incrementa ambos contadores: legacy en Evento (se elimina en Fase B) +
-    // source of truth en Tanda. Las invitaciones consumen cupo de la tanda vigente.
-    await prisma.$transaction([
-      prisma.evento.update({
-        where: { id: eventoId },
-        data: { cantidadVendida: { increment: 1 } },
-      }),
-      prisma.tanda.update({
-        where: { id: tandaVigente.id },
-        data: { cantidadVendida: { increment: 1 } },
-      }),
-    ]);
+    // Las invitaciones consumen cupo de la tanda vigente (fuente de verdad única).
+    await prisma.tanda.update({
+      where: { id: tandaVigente.id },
+      data: { cantidadVendida: { increment: 1 } },
+    });
 
     const codigo = uuidv4();
     const qrImageUrl = await qrService.generarQR(codigo);

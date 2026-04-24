@@ -592,3 +592,78 @@ body {
   background: #1a202c;
   color: #718096;
 }
+
+/* ============================================
+   TANDAS — dirty state (cambios sin guardar)
+   ============================================ */
+
+.tanda-row--dirty {
+  border-left: 3px solid #f6c90e !important;
+  background: rgba(246, 201, 14, 0.04);
+}
+
+.tanda-row--dirty td {
+  border-top-color: #f6c90e40 !important;
+}
+
+.tandas-dirty-indicator {
+  margin-left: 14px;
+  padding: 4px 12px;
+  background: rgba(246, 201, 14, 0.15);
+  border: 1px solid #f6c90e;
+  color: #f6c90e;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  animation: dirty-indicator-pulse 2s ease-in-out infinite;
+}
+
+@keyframes dirty-indicator-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+/* Botón Guardar de tanda: visible siempre, destacado cuando hay cambios */
+
+.btn-tanda-save {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  background: transparent;
+  color: #a0aec0;
+  border: 1px solid #4a5568;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-tanda-save:hover {
+  background: #2d3748;
+  color: #e2e8f0;
+  border-color: #718096;
+}
+
+.btn-tanda-save--dirty {
+  background: #d69e2e;
+  color: #1a202c;
+  border-color: #d69e2e;
+  font-weight: 700;
+  box-shadow: 0 0 0 0 rgba(214, 158, 46, 0.6);
+  animation: btn-save-pulse 1.6s ease-out infinite;
+}
+
+.btn-tanda-save--dirty:hover {
+  background: #ecc94b;
+  color: #1a202c;
+  border-color: #ecc94b;
+}
+
+@keyframes btn-save-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(214, 158, 46, 0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(214, 158, 46, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(214, 158, 46, 0); }
+}

@@ -22,25 +22,22 @@ model Home {
 }
 
 model Evento {
-  id                 Int      @id @default(autoincrement())
-  nombre             String
-  descripcion        String
-  fecha              DateTime
-  hora               String
-  invitado           String   @default("")
-  precioEntrada      Int
-  cantidadDisponible Int
-  cantidadVendida    Int      @default(0)
-  flyerUrl           String   @default("")
-  esDestacado        Boolean  @default(false)
-  estaPublicado      Boolean  @default(false)
-  estaAgotado        Boolean  @default(false)
-  esExterno          Boolean  @default(false)
-  linkExterno        String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  compras            Compra[]
-  tandas             Tanda[]
+  id            Int      @id @default(autoincrement())
+  nombre        String
+  descripcion   String
+  fecha         DateTime
+  hora          String
+  invitado      String   @default("")
+  flyerUrl      String   @default("")
+  esDestacado   Boolean  @default(false)
+  estaPublicado Boolean  @default(false)
+  estaAgotado   Boolean  @default(false)
+  esExterno     Boolean  @default(false)
+  linkExterno   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  compras       Compra[]
+  tandas        Tanda[]
 }
 
 model Tanda {

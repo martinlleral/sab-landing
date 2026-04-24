@@ -128,7 +128,15 @@
         return;
       }
 
-      tbody.innerHTML = eventos.map((ev) => `
+      tbody.innerHTML = eventos.map((ev) => {
+        // Precio mostrado: tanda vigente > primera tanda (si hay) > "—"
+        const tandaRef = ev.tandaVigente || (ev.tandas && ev.tandas[0]) || null;
+        const precioCell = tandaRef ? boPrecio(tandaRef.precio) : '<span style="color:#555;">—</span>';
+        // Vendidas: suma de vendidas de todas las tandas / suma de capacidades (∞ si alguna es null)
+        const sumVendidas = (ev.tandas || []).reduce((s, t) => s + t.cantidadVendida, 0);
+        const sumCapacidad = (ev.tandas || []).reduce((s, t) => t.capacidad === null ? null : (s === null ? null : s + t.capacidad), 0);
+        const capacidadTxt = sumCapacidad === null ? '∞' : sumCapacidad;
+        return `
         <tr>
           <td style="color:#666;">${ev.id}</td>
           <td>
@@ -139,10 +147,10 @@
           </td>
           <td style="font-weight:500;">${ev.nombre}</td>
           <td style="color:#888;">${boFecha(ev.fecha)}</td>
-          <td>${boPrecio(ev.precioEntrada)}</td>
+          <td>${precioCell}</td>
           <td>
-            <span style="color:#f6c90e;">${ev.cantidadVendida}</span>
-            <span style="color:#555;"> / ${ev.cantidadDisponible}</span>
+            <span style="color:#f6c90e;">${sumVendidas}</span>
+            <span style="color:#555;"> / ${capacidadTxt}</span>
           </td>
           <td>
             <span class="badge-estado ${ev.estaPublicado ? 'approved' : 'rejected'}">
@@ -168,7 +176,8 @@
             </div>
           </td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
     }
 
     async function eliminarEvento(id, nombre) {

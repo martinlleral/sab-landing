@@ -106,6 +106,28 @@ async function adminActualizar(req, res) {
       });
     }
 
+    // Swap atómico: si el admin reordena una tanda a un `orden` ya ocupado por
+    // otra tanda del mismo evento, intercambiamos ambos órdenes en una sola
+    // transacción con un valor temporal negativo para evitar el UNIQUE violation.
+    if (data.orden !== undefined && data.orden !== existing.orden) {
+      const conflicto = await prisma.tanda.findFirst({
+        where: { eventoId: existing.eventoId, orden: data.orden, id: { not: id } },
+      });
+      if (conflicto) {
+        const tempOrden = -Math.abs(id); // valor temporal único y sin colisión posible
+        const tanda = await prisma.$transaction(async (tx) => {
+          // 1. Sacar al conflicto de la "zona de colisión" con un orden temporal.
+          await tx.tanda.update({ where: { id: conflicto.id }, data: { orden: tempOrden } });
+          // 2. Aplicar todos los cambios pedidos a `existing` (incluyendo el nuevo orden).
+          const actualizada = await tx.tanda.update({ where: { id }, data });
+          // 3. Mover al conflicto al orden viejo de `existing`.
+          await tx.tanda.update({ where: { id: conflicto.id }, data: { orden: existing.orden } });
+          return actualizada;
+        });
+        return res.json(tanda);
+      }
+    }
+
     try {
       const tanda = await prisma.tanda.update({ where: { id }, data });
       return res.json(tanda);
