@@ -267,7 +267,37 @@ Detectado el 24/4/2026 durante la validación del feature "Agotado manual": el t
 - Cache-busting por filename hashing (`app.HASH.js`) o query string versionada (`app.js?v=HASH`). Requiere build step o script de templating del HTML.
 - Hasta que esté: agregar un paso "purge CF si cambian assets estáticos" al runbook de deploy.
 
-### 2.8 Auto-bombo en commits y README
+### 2.8 FK opcional nueva sin backfill defensivo
+
+**Problema:** cuando agregás un campo FK opcional a una tabla con datos existentes (ej: `Compra.tandaId` nueva FK a `Tanda`), los registros pre-existentes quedan con el campo en `NULL`. Si el código nuevo hace escrituras condicionales ("si FK existe, actualizar contador"), los registros previos que se procesen después del deploy quedan sin actualizar el contador nuevo → **drift silencioso** entre la fuente de verdad vieja y la nueva.
+
+Detectado el 23/4/2026: tras agregar `Compra.tandaId` al schema, 5 compras pre-existentes quedaron con `tandaId=NULL`. Si el cron aprobaba alguna después del deploy, `procesarPagoAprobado` incrementaba `evento.cantidadVendida` (legacy) pero saltaba el increment de `tanda.cantidadVendida` (nuevo) por el `if (compra.tandaId)` guard. Latencia de detección: varios días. Al hacer `DROP COLUMN` del contador legacy (Fase B), la única fuente de verdad restante es la de tanda → subestima las ventas reales.
+
+**Fix para futuro:**
+- Toda migration aditiva que agregue FK opcional debe ir acompañada de un **script de backfill idempotente** que asigne valores a los registros pre-existentes (ej: primera tanda del evento).
+- El backfill corre como paso explícito del deploy (antes o después del rebuild, según el caso).
+- Health check post-deploy debe incluir `SELECT COUNT(*) WHERE fk_nueva IS NULL` para detectar casos olvidados.
+- Idempotencia obligatoria: 2da corrida no debe hacer nada (permite reintento seguro).
+
+Ver memoria interna `insight_backfill_fk_en_tablas_existentes.md` para el patrón de implementación en JS + Prisma.
+
+### 2.9 QR en mails vía data URL o CID
+
+**Problema:** los QRs embebidos en mails de confirmación (o cualquier imagen crítica) no se ven en Gmail mobile ni WhatsApp Web cuando se usan data URLs base64. Los clientes modernos los bloquean por política anti-phishing. Los CIDs (Content-ID como attachment) tienen rendering inconsistente entre providers (Outlook OK, Gmail web parcial, WhatsApp Web mal).
+
+Detectado el 24/4/2026: Tebi recibió un mail de invitación reenviado por WhatsApp Web y solo vio el texto "QR Entrada" + código hash, sin imagen. En Gmail mobile, igual. En Outlook desktop, el QR se veía bien — dando la falsa sensación de que "funcionaba".
+
+**Fix para futuro:**
+- Servir imágenes críticas del mail (QRs, fotos del evento) por **URL pública absoluta HTTPS del propio dominio del sender**. Ejemplo: `<img src="https://tudominio.com/assets/img/uploads/qr/<uuid>.png">`.
+- El UUID como nombre de archivo garantiza seguridad (128 bits no adivinables = equivalente a una password criptográfica). El mismo nivel de exposición que el mail en tránsito.
+- Funciona en 100% de clientes: Gmail desktop/mobile, Outlook, Apple Mail, WhatsApp Web, Telegram preview.
+- Opcional: seguir adjuntando el PNG como attachment para que el user lo pueda descargar/imprimir.
+
+**NO usar data URLs para contenido funcional del mail.** Sólo aceptables para iconos decorativos pequeños donde bloqueo = pérdida estética, no funcional.
+
+Ver memoria interna `insight_mail_qr_url_publica.md`.
+
+### 2.10 Auto-bombo en commits y README
 
 **Problema:** fácil caer en escribir commits y README que adjudican todo el trabajo a quien hace el último push, sin reconocer contribuciones previas.
 
