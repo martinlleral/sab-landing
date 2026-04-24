@@ -266,9 +266,14 @@ function renderDestacado(evento) {
   }
   if (elInvitado) elInvitado.textContent = evento.invitado || '';
 
-  // Schema.org Event JSON-LD (rich snippets en Google)
+  // Schema.org Event JSON-LD (rich snippets en Google).
+  // Source of truth = tandaVigente (precio + availability). Si no hay tandaVigente,
+  // caemos a la primera tanda del evento como referencia de precio y marcamos SoldOut.
   const schemaEl = document.getElementById('schema-event');
-  if (schemaEl && evento.fecha && evento.precioEntrada) {
+  const tandaVigente = evento.tandaVigente || null;
+  const tandaRef = tandaVigente || (evento.tandas && evento.tandas[0]) || null;
+  const soldOut = evento.estaAgotado || tandaVigente === null;
+  if (schemaEl && evento.fecha && tandaRef) {
     const fechaISO = new Date(evento.fecha).toISOString().split('T')[0];
     const startDateTime = `${fechaISO}T${evento.hora || '21:00'}:00-03:00`;
     const schema = {
@@ -301,11 +306,9 @@ function renderDestacado(evento) {
       },
       'offers': {
         '@type': 'Offer',
-        'price': evento.precioEntrada,
+        'price': tandaRef.precio,
         'priceCurrency': 'ARS',
-        'availability': evento.cantidadDisponible > evento.cantidadVendida
-          ? 'https://schema.org/InStock'
-          : 'https://schema.org/SoldOut',
+        'availability': soldOut ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock',
         'url': 'https://sindicatoargentinodeboleros.com.ar',
         'validFrom': new Date().toISOString()
       },
@@ -326,6 +329,10 @@ function renderDestacado(evento) {
   // La card "Cuándo" usa 2 líneas — día de la semana (ej. "Miércoles") arriba
   // y fecha corta sin año (ej. "29 de abril") debajo. La hora queda en su
   // línea como detail.
+  // Precio mostrado = tandaVigente.precio. Si no hay tanda vigente, ocultamos
+  // el precio (el evento no es vendible ahora).
+  const precioMostrado = tandaVigente ? tandaVigente.precio : null;
+
   const infoDia = document.getElementById('info-dia');
   const infoFecha = document.getElementById('info-fecha');
   const infoHora = document.getElementById('info-hora');
@@ -333,23 +340,22 @@ function renderDestacado(evento) {
   if (infoDia) infoDia.textContent = formatDiaSemana(evento.fecha);
   if (infoFecha) infoFecha.textContent = formatFechaCorta(evento.fecha);
   if (infoHora) infoHora.textContent = evento.hora + ' hs';
-  if (infoPrecio) infoPrecio.textContent = `$${formatPrecio(evento.precioEntrada)}`;
+  if (infoPrecio) infoPrecio.textContent = precioMostrado ? `$${formatPrecio(precioMostrado)}` : '—';
 
   // Precio visible en hero
   const elPrecio = document.getElementById('hero-precio');
   const elPrecioWrap = document.getElementById('hero-precio-wrap');
-  if (elPrecio && evento.precioEntrada) {
-    elPrecio.textContent = `$${formatPrecio(evento.precioEntrada)}`;
+  if (elPrecio && precioMostrado) {
+    elPrecio.textContent = `$${formatPrecio(precioMostrado)}`;
   }
   if (elPrecioWrap) {
-    elPrecioWrap.style.display = evento.precioEntrada ? '' : 'none';
+    elPrecioWrap.style.display = precioMostrado ? '' : 'none';
   }
 
   if (btnComprar) {
-    const disponibles = evento.cantidadDisponible - evento.cantidadVendida;
-    // "agotado" = toggle manual, o se vendieron todas. Un evento con cupo=0 y
-    // sin ventas se considera "aún no configurado" y no dispara el estado.
-    const agotado = evento.estaAgotado || (evento.cantidadVendida > 0 && disponibles <= 0);
+    // "agotado" = toggle manual, o no hay tanda vigente (todas las tandas activas
+    // están agotadas/vencidas, o no hay tandas configuradas).
+    const agotado = evento.estaAgotado || tandaVigente === null;
     if (agotado) {
       btnComprar.textContent = 'AGOTADO';
       btnComprar.disabled = true;
@@ -398,8 +404,9 @@ function renderProximos(eventos) {
   }
 
   container.innerHTML = eventos.map((ev) => {
-    const disponibles = (ev.cantidadDisponible || 0) - (ev.cantidadVendida || 0);
-    const agotado = ev.estaAgotado || ((ev.cantidadVendida || 0) > 0 && disponibles <= 0);
+    const tv = ev.tandaVigente || null;
+    const agotado = ev.estaAgotado || tv === null;
+    const precioMostrado = tv ? tv.precio : null;
     const imgTag = ev.flyerUrl
       ? `<img src="${esc(ev.flyerUrl)}" alt="${esc(ev.nombre)}" class="evento-card-img">`
       : `<img src="/assets/img/event-default.jpg" alt="${esc(ev.nombre)}" class="evento-card-img evento-card-img--default">`;
@@ -413,6 +420,9 @@ function renderProximos(eventos) {
       : `<button type="button" class="btn-comprar-card" data-bs-toggle="modal" data-bs-target="#modalCompra" data-evento-id="${ev.id}">
            <i class="bi bi-ticket-perforated me-1"></i> Comprar
          </button>`;
+    const precioLinea = precioMostrado
+      ? `<div class="evento-card-precio">$ ${formatPrecio(precioMostrado)}</div>`
+      : '';
     return `
     <div class="col-md-4 mb-4">
       <div class="evento-card${agotado ? ' evento-card--agotado' : ''}">
@@ -423,7 +433,7 @@ function renderProximos(eventos) {
         <div class="evento-card-body">
           <div class="evento-card-nombre">${esc(ev.nombre)}</div>
           <div class="evento-card-fecha">📅 ${formatFecha(ev.fecha)} — ${esc(ev.hora)}</div>
-          <div class="evento-card-precio">$ ${formatPrecio(ev.precioEntrada)}</div>
+          ${precioLinea}
           ${boton}
         </div>
       </div>
@@ -500,7 +510,9 @@ function onEventoSeleccionadoChange() {
 
   if (nombreEl) nombreEl.textContent = ev.nombre;
   if (fechaEl) fechaEl.textContent = `${formatFecha(ev.fecha)} — ${ev.hora}`;
-  if (precioEl) precioEl.value = ev.precioEntrada || 0;
+  // El precio del modal es el de la tanda vigente (la que el backend va a cobrar).
+  // Si no hay vigente, queda en 0 y el botón queda disabled por updateBtnPagarState.
+  if (precioEl) precioEl.value = (ev.tandaVigente && ev.tandaVigente.precio) || 0;
   if (flyerWrap && flyerImg) {
     if (ev.flyerUrl) {
       flyerImg.src = ev.flyerUrl;
@@ -531,8 +543,7 @@ function updateBtnPagarState(ev) {
     return;
   }
 
-  const disponibles = (ev.cantidadDisponible || 0) - (ev.cantidadVendida || 0);
-  const agotado = ev.estaAgotado || ((ev.cantidadVendida || 0) > 0 && disponibles <= 0);
+  const agotado = ev.estaAgotado || !ev.tandaVigente;
 
   if (agotado) {
     if (label) label.textContent = 'AGOTADO';

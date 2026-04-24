@@ -531,3 +531,64 @@ body {
     padding: 16px;
   }
 }
+
+/* ============================================
+   TANDAS — tabla CRUD
+   ============================================ */
+
+.bo-form-control-sm {
+  padding: 4px 8px;
+  font-size: 0.875rem;
+  height: auto;
+}
+
+.bo-table-tandas input.bo-form-control {
+  width: 100%;
+  min-width: 60px;
+}
+
+.bo-table-tandas td {
+  vertical-align: middle;
+}
+
+.btn-bo-primary.btn-sm,
+.btn-bo-danger.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.tanda-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.tanda-badge--vigente {
+  background: #22543d;
+  color: #9ae6b4;
+}
+
+.tanda-badge--proxima {
+  background: #744210;
+  color: #f6e05e;
+}
+
+.tanda-badge--agotada {
+  background: #742a2a;
+  color: #fc8181;
+}
+
+.tanda-badge--vencida {
+  background: #2d3748;
+  color: #a0aec0;
+}
+
+.tanda-badge--desactivada {
+  background: #1a202c;
+  color: #718096;
+}

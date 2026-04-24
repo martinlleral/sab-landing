@@ -85,12 +85,15 @@
                 </div>
               </div>
 
-              <!-- Precios y entradas -->
-              <div class="bo-card mb-4">
+              <!-- Precios y entradas (solo visible al crear — en edición se gestiona vía Tandas) -->
+              <div class="bo-card mb-4" id="precio-cupo-card">
                 <div class="bo-card-header">
                   <h5 class="bo-card-title"><i class="bi bi-ticket-perforated me-2"></i>Entradas y Precio</h5>
                 </div>
                 <div class="bo-card-body">
+                  <p style="color:#888;font-size:.875rem;margin-bottom:16px;" id="precio-cupo-nuevo-note">
+                    Al crear el evento se genera automáticamente una <strong>tanda "General"</strong> con estos valores. Después podés agregar más tandas desde la sección correspondiente.
+                  </p>
                   <div class="row g-3">
                     <div class="col-md-6">
                       <label class="bo-form-label" for="precioEntrada">Precio por Entrada (ARS) *</label>
@@ -101,6 +104,17 @@
                       <input type="number" class="bo-form-control" id="cantidadDisponible" name="cantidadDisponible" placeholder="200" min="1" required>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <!-- Nota redirectiva a Tandas (solo visible en edición) -->
+              <div class="bo-card mb-4" id="precio-cupo-edicion-note" style="display:none;">
+                <div class="bo-card-body" style="padding:18px;">
+                  <p style="margin:0;color:#a0aec0;font-size:.9rem;">
+                    <i class="bi bi-info-circle me-2" style="color:#667eea;"></i>
+                    <strong>Precio y cupo</strong> se gestionan desde la sección <strong>Tandas de venta</strong> más abajo.
+                    La tanda vigente (la primera en orden que no esté agotada ni vencida) define el precio que ve el público.
+                  </p>
                 </div>
               </div>
 
@@ -189,6 +203,45 @@
             </div>
           </div>
         </form>
+
+        <!-- Tandas (solo en modo edición — al crear nuevo evento, se crea una Tanda "General" automáticamente) -->
+        <div id="tandas-section" style="display:none;" class="mt-4">
+          <div class="bo-card">
+            <div class="bo-card-header d-flex justify-content-between align-items-center">
+              <h5 class="bo-card-title mb-0"><i class="bi bi-layers me-2"></i>Tandas de venta</h5>
+              <button type="button" class="btn-bo-primary btn-sm" onclick="agregarTanda()">
+                <i class="bi bi-plus-lg"></i> Agregar tanda
+              </button>
+            </div>
+            <div class="bo-card-body">
+              <p style="color:#888;font-size:.875rem;margin-bottom:16px;">
+                Las tandas son <strong>secuenciales</strong>: solo una está vigente por vez (la primera en orden que no esté agotada ni vencida).
+                La vigente determina el precio que ve el público. Dejá capacidad o fecha límite en blanco para que esa condición no aplique.
+              </p>
+              <div class="table-responsive">
+                <table class="bo-table bo-table-tandas">
+                  <thead>
+                    <tr>
+                      <th style="width:60px;">Orden</th>
+                      <th>Nombre</th>
+                      <th style="width:120px;">Precio</th>
+                      <th style="width:120px;">Capacidad</th>
+                      <th style="width:90px;">Vendidas</th>
+                      <th style="width:200px;">Fecha límite</th>
+                      <th style="width:110px;">Estado</th>
+                      <th style="width:70px;">Activa</th>
+                      <th style="width:100px;">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tandas-body">
+                    <tr><td colspan="9" class="text-center py-3" style="color:#666;">Cargando...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="tandas-feedback" style="display:none;margin-top:12px;"></div>
+            </div>
+          </div>
+        </div>
 
         <!-- Compras del evento (solo en modo edición) -->
         <div id="compras-section" style="display:none;" class="mt-4">
@@ -282,9 +335,21 @@
 
       if (!isNuevo && eventoId) {
         document.getElementById('btn-eliminar').style.display = 'block';
+        document.getElementById('tandas-section').style.display = 'block';
         document.getElementById('compras-section').style.display = 'block';
         document.getElementById('invitaciones-section').style.display = 'block';
+
+        // En edición, precio/cupo se gestionan vía Tandas. Ocultamos la card
+        // tradicional + quitamos `required` para que el form pueda submitear.
+        // Los valores siguen cargándose (invisibles) desde fillForm para
+        // compatibilidad con el endpoint legacy adminEditar durante Fase A.
+        document.getElementById('precio-cupo-card').style.display = 'none';
+        document.getElementById('precio-cupo-edicion-note').style.display = 'block';
+        document.getElementById('precioEntrada').required = false;
+        document.getElementById('cantidadDisponible').required = false;
+
         loadEvento(eventoId);
+        cargarTandas();
         cargarInvitaciones();
       }
 
@@ -300,6 +365,160 @@
         }
       } catch (err) {
         boAlert('Error al cargar evento: ' + err.message);
+      }
+    }
+
+    // ============================================
+    // TANDAS — CRUD dentro del evento
+    // ============================================
+
+    const ESTADO_BADGES = {
+      vigente:     { text: 'Vigente',     cls: 'tanda-badge tanda-badge--vigente' },
+      proxima:     { text: 'Próxima',     cls: 'tanda-badge tanda-badge--proxima' },
+      agotada:     { text: 'Agotada',     cls: 'tanda-badge tanda-badge--agotada' },
+      vencida:     { text: 'Vencida',     cls: 'tanda-badge tanda-badge--vencida' },
+      desactivada: { text: 'Desactivada', cls: 'tanda-badge tanda-badge--desactivada' },
+    };
+
+    async function cargarTandas() {
+      try {
+        const tandas = await boFetch(`/api/admin/tandas?eventoId=${eventoId}`);
+        renderTandas(tandas);
+      } catch (err) {
+        console.error('Error al cargar tandas:', err.message);
+        document.getElementById('tandas-body').innerHTML =
+          `<tr><td colspan="9" class="text-center py-3" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    // Formato para input[type="datetime-local"]: "YYYY-MM-DDTHH:mm" en local time.
+    function toDatetimeLocal(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function renderTandas(tandas) {
+      const tbody = document.getElementById('tandas-body');
+      if (!tandas.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-3" style="color:#666;">Sin tandas — agregá al menos una para que el evento sea vendible</td></tr>';
+        return;
+      }
+      tbody.innerHTML = tandas.map((t) => {
+        const badge = ESTADO_BADGES[t.estado] || ESTADO_BADGES.desactivada;
+        const vendidasTxt = t.capacidad !== null ? `${t.cantidadVendida}/${t.capacidad}` : `${t.cantidadVendida}/∞`;
+        const disabledBorrar = t.cantidadVendida > 0 ? 'disabled title="No se puede borrar una tanda con ventas"' : '';
+        return `<tr data-tanda-id="${t.id}">
+          <td><input type="number" min="1" class="bo-form-control bo-form-control-sm" name="orden" value="${t.orden}"></td>
+          <td><input type="text" class="bo-form-control bo-form-control-sm" name="nombre" value="${esc(t.nombre)}"></td>
+          <td><input type="number" min="0" class="bo-form-control bo-form-control-sm" name="precio" value="${t.precio}"></td>
+          <td><input type="number" min="${t.cantidadVendida}" class="bo-form-control bo-form-control-sm" name="capacidad" value="${t.capacidad ?? ''}" placeholder="∞"></td>
+          <td style="color:#888;">${vendidasTxt}</td>
+          <td><input type="datetime-local" class="bo-form-control bo-form-control-sm" name="fechaLimite" value="${toDatetimeLocal(t.fechaLimite)}"></td>
+          <td><span class="${badge.cls}">${badge.text}</span></td>
+          <td class="text-center">
+            <div class="form-check form-switch d-inline-block">
+              <input class="form-check-input" type="checkbox" name="activa" ${t.activa ? 'checked' : ''} onchange="toggleActivaTanda(${t.id}, this.checked)">
+            </div>
+          </td>
+          <td>
+            <button type="button" class="btn-bo-primary btn-sm" onclick="guardarTanda(${t.id})" title="Guardar cambios"><i class="bi bi-floppy"></i></button>
+            <button type="button" class="btn-bo-danger btn-sm" onclick="borrarTanda(${t.id})" ${disabledBorrar} title="Borrar tanda"><i class="bi bi-trash"></i></button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function showTandasFeedback(msg, isError = false) {
+      const el = document.getElementById('tandas-feedback');
+      el.style.display = 'block';
+      el.innerHTML = `<span style="color:${isError ? '#fc8181' : '#48bb78'};">${msg}</span>`;
+      setTimeout(() => { el.style.display = 'none'; }, 4000);
+    }
+
+    // Lee inputs de la fila y los convierte a payload para el backend.
+    function readTandaRow(tandaId) {
+      const row = document.querySelector(`tr[data-tanda-id="${tandaId}"]`);
+      if (!row) return null;
+      const get = (name) => row.querySelector(`[name="${name}"]`);
+      const capRaw = get('capacidad').value.trim();
+      const fechaRaw = get('fechaLimite').value;
+      return {
+        orden: parseInt(get('orden').value, 10),
+        nombre: get('nombre').value.trim(),
+        precio: parseInt(get('precio').value, 10),
+        capacidad: capRaw === '' ? null : parseInt(capRaw, 10),
+        fechaLimite: fechaRaw ? new Date(fechaRaw).toISOString() : null,
+        activa: get('activa').checked,
+      };
+    }
+
+    async function guardarTanda(tandaId) {
+      const data = readTandaRow(tandaId);
+      if (!data) return;
+      try {
+        await boFetch(`/api/admin/tandas/${tandaId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        showTandasFeedback('✅ Tanda guardada');
+        await cargarTandas();
+      } catch (err) {
+        showTandasFeedback(`❌ Error: ${err.message}`, true);
+      }
+    }
+
+    async function toggleActivaTanda(tandaId, nuevoEstado) {
+      try {
+        await boFetch(`/api/admin/tandas/${tandaId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ activa: nuevoEstado }),
+        });
+        await cargarTandas();
+      } catch (err) {
+        showTandasFeedback(`❌ Error: ${err.message}`, true);
+      }
+    }
+
+    async function borrarTanda(tandaId) {
+      if (!boConfirm('¿Eliminar esta tanda? Si tiene ventas, se bloqueará y deberás desactivarla.')) return;
+      try {
+        await boFetch(`/api/admin/tandas/${tandaId}`, { method: 'DELETE' });
+        showTandasFeedback('✅ Tanda eliminada');
+        await cargarTandas();
+      } catch (err) {
+        showTandasFeedback(`❌ Error: ${err.message}`, true);
+      }
+    }
+
+    async function agregarTanda() {
+      // Default: orden = max(actuales) + 1, precio copiado de la última, nombre genérico
+      const current = await boFetch(`/api/admin/tandas?eventoId=${eventoId}`);
+      const maxOrden = current.reduce((m, t) => Math.max(m, t.orden), 0);
+      const ultimoPrecio = current.length ? current[current.length - 1].precio : 0;
+      try {
+        await boFetch('/api/admin/tandas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventoId: parseInt(eventoId, 10),
+            nombre: `Tanda ${maxOrden + 1}`,
+            precio: ultimoPrecio,
+            orden: maxOrden + 1,
+            activa: true,
+          }),
+        });
+        showTandasFeedback('✅ Tanda creada — editá los valores y guardá');
+        await cargarTandas();
+      } catch (err) {
+        showTandasFeedback(`❌ Error: ${err.message}`, true);
       }
     }
 

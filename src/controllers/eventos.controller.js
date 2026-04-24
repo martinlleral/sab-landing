@@ -135,7 +135,12 @@ async function adminCrear(req, res) {
     }
 
     const flyerUrl = req.file ? `/assets/img/uploads/eventos/${req.file.filename}` : '';
+    const precioInt = parseInt(precioEntrada);
+    const cupoInt = parseInt(cantidadDisponible);
 
+    // Evento + Tanda "General" default atómicamente. La tanda es la fuente
+    // de verdad de venta; los campos legacy en Evento quedan como snapshot
+    // hasta la Fase B del refactor (DROP columns).
     const evento = await prisma.evento.create({
       data: {
         nombre,
@@ -143,15 +148,26 @@ async function adminCrear(req, res) {
         fecha: parsearFechaLocal(fecha),
         hora,
         invitado: invitado || '',
-        precioEntrada: parseInt(precioEntrada),
-        cantidadDisponible: parseInt(cantidadDisponible),
+        precioEntrada: precioInt,
+        cantidadDisponible: cupoInt,
         flyerUrl,
         esDestacado: esDestacado === 'true' || esDestacado === true,
         estaPublicado: estaPublicado === 'true' || estaPublicado === true,
         estaAgotado: estaAgotado === 'true' || estaAgotado === true,
         esExterno: esExterno === 'true' || esExterno === true,
         linkExterno: linkExterno || null,
+        tandas: {
+          create: [{
+            nombre: 'General',
+            precio: precioInt,
+            orden: 1,
+            activa: true,
+            capacidad: cupoInt > 0 ? cupoInt : null,
+            cantidadVendida: 0,
+          }],
+        },
       },
+      include: { tandas: true },
     });
 
     return res.status(201).json(evento);

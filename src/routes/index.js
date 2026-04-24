@@ -6,6 +6,7 @@ const staticRoutes = require('./static.routes');
 const { publicRouter: eventosPublic, adminRouter: eventosAdmin } = require('./eventos.routes');
 const { publicRouter: comprasPublic, adminRouter: comprasAdmin } = require('./compras.routes');
 const { publicRouter: homePublic, adminRouter: homeAdmin } = require('./home.routes');
+const { adminRouter: tandasAdmin } = require('./tandas.routes');
 const entradasRoutes = require('./entradas.routes');
 const usuariosRoutes = require('./usuarios.routes');
 const backofficeRoutes = require('./backoffice.routes');
@@ -30,6 +31,7 @@ router.use('/api/admin/compras', comprasAdmin);
 router.use('/api/admin/entradas', entradasRoutes);
 router.use('/api/admin/usuarios', usuariosRoutes);
 router.use('/api/admin/home', homeAdmin);
+router.use('/api/admin/tandas', tandasAdmin);
 
 // Backoffice HTML
 router.use('/backoffice', backofficeRoutes);
