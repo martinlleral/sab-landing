@@ -80,7 +80,9 @@ function boFechaInput(fechaStr) {
 // PRICE FORMAT
 // ============================================
 function boPrecio(valor) {
-  return `$ ${Number(valor || 0).toLocaleString('es-AR')}`;
+  //   = non-breaking space — evita que "$ 12.000" se parta en 2 líneas
+  // cuando la celda de la tabla es angosta (ver eventos-lista.html).
+  return `$ ${Number(valor || 0).toLocaleString('es-AR')}`;
 }
 
 // ============================================

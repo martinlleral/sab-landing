@@ -667,3 +667,32 @@ body {
   70% { box-shadow: 0 0 0 8px rgba(214, 158, 46, 0); }
   100% { box-shadow: 0 0 0 0 rgba(214, 158, 46, 0); }
 }
+
+/* ============================================
+   TABLAS — fixes visuales post-auditoría 24/4
+   ============================================ */
+
+/* Precio nunca se parte en 2 líneas (el nbsp del formatter boPrecio
+   ya lo previene, acá reforzamos por si algún td de precio es muy
+   angosto o tiene contenido adicional). */
+.bo-table td.bo-td-precio,
+.bo-table td.bo-td-acciones {
+  white-space: nowrap;
+}
+
+/* Botones de acción dentro de la tabla: compactos, sin texto uppercase
+   del danger, que todo quepa en una sola fila. */
+.bo-table td .btn-bo-secondary,
+.bo-table td .btn-bo-danger {
+  padding: 5px 11px;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+  text-transform: none;
+  font-weight: 500;
+}
+
+/* El botón de borrar queda solo con ícono, más chico aún. */
+.bo-table td .btn-bo-danger {
+  padding: 5px 9px;
+  letter-spacing: 0;
+}

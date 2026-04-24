@@ -146,9 +146,9 @@
             }
           </td>
           <td style="font-weight:500;">${ev.nombre}</td>
-          <td style="color:#888;">${boFecha(ev.fecha)}</td>
-          <td>${precioCell}</td>
-          <td>
+          <td style="color:#888; white-space:nowrap;">${boFecha(ev.fecha)}</td>
+          <td class="bo-td-precio">${precioCell}</td>
+          <td style="white-space:nowrap;">
             <span style="color:#f6c90e;">${sumVendidas}</span>
             <span style="color:#555;"> / ${capacidadTxt}</span>
           </td>
@@ -162,8 +162,8 @@
               ${ev.esDestacado ? 'Sí' : 'No'}
             </span>
           </td>
-          <td>
-            <div class="d-flex gap-2 flex-wrap">
+          <td class="bo-td-acciones">
+            <div class="d-flex gap-1 align-items-center">
               <a href="/backoffice/evento-detalle.html?id=${ev.id}" class="btn-bo-secondary" title="Editar evento">
                 <i class="bi bi-pencil"></i> Editar
               </a>
