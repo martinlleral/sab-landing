@@ -15,9 +15,16 @@ const { loginLimiter, comprasLimiter } = require('./middleware/rate-limit');
 
 const app = express();
 
-// Seguridad
+// Seguridad. Los headers que setea nginx (HSTS, X-Frame-Options,
+// X-Content-Type-Options) se desactivan acá para evitar duplicados — nginx
+// los aplica incluso cuando Node no responde (errores 502/503), por eso
+// queda como fuente de verdad. Helmet sigue aportando referrer-policy,
+// permissions-policy, origin-agent-cluster, etc.
 app.use(helmet({
   contentSecurityPolicy: false,
+  hsts: false,
+  xFrameOptions: false,
+  noSniff: false,
 }));
 
 // Logs
