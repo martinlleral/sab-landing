@@ -209,7 +209,65 @@ Cuando las dependencias destrababan (en varias sesiones), cada paso era de 10-30
 - Usar variables de entorno (`ADMIN_EMAIL`, `ADMIN_PASS`) para credenciales bootstrap, con fallback a valores imposibles de adivinar (ej: `'CAMBIAR_' + Date.now()`).
 - Documentar explícitamente en el README que las credenciales bootstrap deben rotarse inmediatamente después del primer login.
 
-### 2.5 Auto-bombo en commits y README
+### 2.5 rsync de archivos puntuales sin `--relative`
+
+**Problema:** durante un deploy incremental del 24/4/2026, se ejecutó:
+
+```bash
+rsync -avz public/assets/js/app.js public/assets/css/app.css sab-droplet:/opt/sab/app/public/assets/
+```
+
+El destino `public/assets/` es un directorio, así que rsync copió los archivos **dentro** de ese directorio — resultando en `/opt/sab/app/public/assets/app.js`, NO en `/opt/sab/app/public/assets/js/app.js` (que es el path real donde Node sirve el archivo). El rsync no tiró error porque técnicamente "funcionó": copió los archivos a un directorio válido.
+
+Efecto en cascada: Docker `COPY . .` copió los archivos ahí donde quedaron → la imagen tuvo el archivo viejo en el path correcto + el nuevo en el path wrong. El server sirvió el viejo. El bug fue silencioso hasta la validación visual.
+
+**Fix para futuro:**
+- Preferir **rsync con `--relative`**: `rsync -avz --relative public/assets/js/app.js host:/opt/sab/app/` preserva la jerarquía.
+- O especificar el path destino COMPLETO: `rsync -avz public/assets/js/app.js host:/opt/sab/app/public/assets/js/`.
+- O rsync-ear directorios enteros en vez de archivos sueltos.
+- **Verificar post-rsync** con `ssh host "grep -c <token_nuevo> /path/real/del/archivo"` antes de rebuildear Docker.
+
+### 2.6 Prisma P3009 cuando el volumen tapa las migrations
+
+**Problema:** con `docker-compose.yml` montando `db-data:/app/prisma` (named volume sobre todo el directorio), las migrations nuevas que viajan en la imagen Docker son **tapadas** por el volumen en runtime. Secuencia del bug detectada el 24/4:
+
+1. Deploy #1: rsync código + `docker compose build` + `up -d`. Entrypoint corre `prisma migrate deploy`, pero Prisma lee desde el volumen (que NO tiene la migration nueva). No aplica nada. La DB queda sin la columna.
+2. Workaround ad-hoc: `docker cp` de la migration al volumen + `ALTER TABLE` manual para que la DB tenga la columna.
+3. Deploy #2 (posterior, cualquier redeploy): rebuild + up -d. Ahora el volumen SÍ tiene la migration. Prisma la detecta como "pendiente", intenta aplicarla sobre una DB que ya tiene la columna → `SQLITE_ERROR: duplicate column` → registro queda con `finished_at = NULL` en `_prisma_migrations`. Prisma considera la migration "failed".
+4. En adelante: entrypoint falla con `Error: P3009 migrate found failed migrations`. Container en restart loop. 502 Bad Gateway en el sitio.
+
+**Fix para futuro (mientras el volumen siga montado sobre `/app/prisma`):**
+- En deploys con migration nueva, hacer `docker cp` de la migration al container corriendo **ANTES** de rebuild + up. Correr `docker exec ... npx prisma migrate deploy` con la DB vigente para que Prisma trackee el estado correctamente. Recién después hacer rebuild.
+- O mejor: **separar la DB del resto del directorio prisma** (fix R — aislar DB en subdirectorio). Ver issue GitHub `tech-debt: aislar DB en subdir del volumen prisma`.
+
+**Recovery si ya caíste en P3009:**
+
+Parar el container, editar `_prisma_migrations` desde un container temporal con sqlite3 + el volumen montado:
+
+```bash
+# Usar ms Unix INTEGER para timestamps (NO ISO strings — Prisma los rechaza con "invalid characters")
+ssh host "echo \"UPDATE _prisma_migrations SET finished_at = started_at + 50, applied_steps_count = 1, logs = NULL, rolled_back_at = NULL WHERE migration_name = '<NOMBRE>';\" > /tmp/fix.sql"
+ssh host "docker run --rm -v <project>_db-data:/vol -v /tmp:/host alpine sh -c 'apk add --quiet sqlite && sqlite3 /vol/prod.db < /host/fix.sql'"
+```
+
+Luego arrancar el container normalmente.
+
+### 2.7 Cloudflare cachea `/assets/*` por 4 horas post-deploy
+
+**Problema:** Express con `express.static()` sirve JS/CSS con `cache-control: public, max-age=14400` (4hs) por default. Detrás de Cloudflare, el asset termina cacheado en el edge de CF + en el browser del usuario. Post-deploy de un cambio en frontend, los usuarios con sesión previa ven la versión vieja durante horas.
+
+Detectado el 24/4/2026 durante la validación del feature "Agotado manual": el toggle guardaba en DB correctamente, pero el browser del operador tenía cacheado el HTML/JS viejo y por eso el `formData` del backoffice no mandaba el campo nuevo.
+
+**Fix rápido (post-deploy):**
+- `Ctrl+Shift+R` en el browser para bustear cache local.
+- Si el público también necesita ver el cambio ya: purge manual en panel Cloudflare → Caching → Purge by URL o Purge Everything.
+- Validar con `curl -sI <URL> | grep -iE "last-modified|cf-cache-status"`: `last-modified` debe reflejar la fecha del deploy, `cf-cache-status` debe ser `MISS` o `REVALIDATED` (no `HIT` con fecha vieja).
+
+**Fix prolijo (backlog):**
+- Cache-busting por filename hashing (`app.HASH.js`) o query string versionada (`app.js?v=HASH`). Requiere build step o script de templating del HTML.
+- Hasta que esté: agregar un paso "purge CF si cambian assets estáticos" al runbook de deploy.
+
+### 2.8 Auto-bombo en commits y README
 
 **Problema:** fácil caer en escribir commits y README que adjudican todo el trabajo a quien hace el último push, sin reconocer contribuciones previas.
 
