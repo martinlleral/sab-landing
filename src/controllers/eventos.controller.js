@@ -2,14 +2,25 @@ const { v4: uuidv4 } = require('uuid');
 const prisma = require('../utils/prisma');
 const qrService = require('../services/qr.service');
 const brevoService = require('../services/brevo.service');
+const { getTandaVigente } = require('../services/tandas.service');
+
+// Adjunta al evento la tandaVigente calculada + precio/stock derivados para el
+// frontend público. No reemplaza los campos legacy del evento (ese cleanup es
+// en Fase B); los suma al response para que el frontend pueda migrar sin
+// downtime de lectura.
+function adjuntarTandaVigente(evento) {
+  const vigente = getTandaVigente(evento.tandas);
+  return { ...evento, tandaVigente: vigente };
+}
 
 async function getDestacado(req, res) {
   try {
     const evento = await prisma.evento.findFirst({
       where: { esDestacado: true, estaPublicado: true },
+      include: { tandas: true },
     });
     if (!evento) return res.status(404).json({ error: 'No hay evento destacado' });
-    return res.json(evento);
+    return res.json(adjuntarTandaVigente(evento));
   } catch (err) {
     console.error('Error en getDestacado:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -25,8 +36,9 @@ async function getProximos(req, res) {
       },
       orderBy: { fecha: 'asc' },
       take: 3,
+      include: { tandas: true },
     });
-    return res.json(eventos);
+    return res.json(eventos.map(adjuntarTandaVigente));
   } catch (err) {
     console.error('Error en getProximos:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -213,12 +225,21 @@ async function adminEnviarInvitacion(req, res) {
 
     if (!email) return res.status(400).json({ error: 'Email requerido' });
 
-    const evento = await prisma.evento.findUnique({ where: { id: eventoId } });
+    const evento = await prisma.evento.findUnique({
+      where: { id: eventoId },
+      include: { tandas: true },
+    });
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    const tandaVigente = getTandaVigente(evento.tandas);
+    if (!tandaVigente) {
+      return res.status(400).json({ error: 'El evento no tiene tanda vigente — no se pueden enviar invitaciones' });
+    }
 
     const compra = await prisma.compra.create({
       data: {
         eventoId,
+        tandaId: tandaVigente.id,
         email,
         nombre: nombre || 'Invitado',
         apellido: apellido || '',
@@ -230,10 +251,18 @@ async function adminEnviarInvitacion(req, res) {
       },
     });
 
-    await prisma.evento.update({
-      where: { id: eventoId },
-      data: { cantidadVendida: { increment: 1 } },
-    });
+    // Incrementa ambos contadores: legacy en Evento (se elimina en Fase B) +
+    // source of truth en Tanda. Las invitaciones consumen cupo de la tanda vigente.
+    await prisma.$transaction([
+      prisma.evento.update({
+        where: { id: eventoId },
+        data: { cantidadVendida: { increment: 1 } },
+      }),
+      prisma.tanda.update({
+        where: { id: tandaVigente.id },
+        data: { cantidadVendida: { increment: 1 } },
+      }),
+    ]);
 
     const codigo = uuidv4();
     const qrImageUrl = await qrService.generarQR(codigo);

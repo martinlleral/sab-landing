@@ -46,10 +46,20 @@ async function procesarPagoAprobado(compraId, mpPaymentId) {
   }
 
   const entradasCreadas = await prisma.$transaction(async (tx) => {
+    // Legacy counter en Evento — se elimina en Fase B del refactor de tandas.
     await tx.evento.update({
       where: { id: compra.eventoId },
       data: { cantidadVendida: { increment: compra.cantidadEntradas } },
     });
+
+    // Source of truth: tanda de la compra. Si tandaId es null (invitaciones
+    // históricas pre-tandas), lo saltamos.
+    if (compra.tandaId) {
+      await tx.tanda.update({
+        where: { id: compra.tandaId },
+        data: { cantidadVendida: { increment: compra.cantidadEntradas } },
+      });
+    }
 
     const entradas = [];
     for (const { codigo, qrImageUrl } of qrFiles) {

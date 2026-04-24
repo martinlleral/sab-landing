@@ -31,9 +31,15 @@ async function cleanup() {
 
   await prisma.entrada.deleteMany({ where: { compraId: { in: compraIds } } });
   await prisma.compra.deleteMany({ where: { id: { in: compraIds } } });
-  await prisma.evento.deleteMany({
+
+  // Borrar tandas antes de eventos (FK RESTRICT)
+  const eventosTest = await prisma.evento.findMany({
     where: { nombre: TEST_EVENTO_NAME },
+    select: { id: true },
   });
+  const idsTest = eventosTest.map((e) => e.id);
+  await prisma.tanda.deleteMany({ where: { eventoId: { in: idsTest } } });
+  await prisma.evento.deleteMany({ where: { id: { in: idsTest } } });
 }
 
 async function postCompra(eventoId, emailSuffix) {
@@ -62,7 +68,8 @@ async function main() {
   try {
     await cleanup();
 
-    // Evento 1: destacado + agotado manual
+    // Evento 1: destacado + agotado manual (tiene tanda vigente, pero el
+    // toggle estaAgotado la sobrepasa)
     const evAgotado = await prisma.evento.create({
       data: {
         nombre: TEST_EVENTO_NAME,
@@ -75,11 +82,12 @@ async function main() {
         estaPublicado: true,
         esDestacado: true,
         estaAgotado: true,
+        tandas: { create: [{ nombre: 'General', precio: 1000, orden: 1, activa: true, capacidad: 10, cantidadVendida: 0 }] },
       },
     });
     eventoAgotadoId = evAgotado.id;
 
-    // Evento 2: publicado, stock libre, no agotado — control
+    // Evento 2: publicado, con tanda vigente, sin agotar — control
     const evDisponible = await prisma.evento.create({
       data: {
         nombre: TEST_EVENTO_NAME,
@@ -91,6 +99,7 @@ async function main() {
         cantidadVendida: 0,
         estaPublicado: true,
         estaAgotado: false,
+        tandas: { create: [{ nombre: 'General', precio: 1000, orden: 1, activa: true, capacidad: 10, cantidadVendida: 0 }] },
       },
     });
     eventoDisponibleId = evDisponible.id;

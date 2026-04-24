@@ -40,12 +40,33 @@ model Evento {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   compras            Compra[]
+  tandas             Tanda[]
+}
+
+model Tanda {
+  id              Int       @id @default(autoincrement())
+  eventoId        Int
+  evento          Evento    @relation(fields: [eventoId], references: [id])
+  nombre          String
+  precio          Int
+  orden           Int
+  activa          Boolean   @default(true)
+  capacidad       Int?
+  cantidadVendida Int       @default(0)
+  fechaLimite     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  compras         Compra[]
+
+  @@unique([eventoId, orden])
 }
 
 model Compra {
   id               Int       @id @default(autoincrement())
   eventoId         Int
   evento           Evento    @relation(fields: [eventoId], references: [id])
+  tandaId          Int?
+  tanda            Tanda?    @relation(fields: [tandaId], references: [id])
   email            String
   nombre           String
   apellido         String

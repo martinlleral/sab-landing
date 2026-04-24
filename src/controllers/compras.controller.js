@@ -3,6 +3,7 @@ const prisma = require('../utils/prisma');
 const config = require('../config');
 const mpService = require('../services/mercadopago.service');
 const { procesarPagoAprobado } = require('../services/pagos.service');
+const { getTandaVigente } = require('../services/tandas.service');
 
 // Verifica la firma HMAC-SHA256 del webhook MP.
 // Manifest: id:<data.id>;request-id:<x-request-id>;ts:<ts>;
@@ -50,36 +51,49 @@ async function crearPreferencia(req, res) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
     }
 
-    const evento = await prisma.evento.findUnique({ where: { id: parseInt(eventoId) } });
+    const evento = await prisma.evento.findUnique({
+      where: { id: parseInt(eventoId) },
+      include: { tandas: true },
+    });
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
     if (!evento.estaPublicado) return res.status(400).json({ error: 'Evento no disponible' });
     if (evento.estaAgotado) return res.status(400).json({ error: 'Entradas agotadas para este evento' });
 
-    const disponibles = evento.cantidadDisponible - evento.cantidadVendida;
-    if (disponibles < parseInt(cantidad)) {
-      return res.status(400).json({ error: `Solo quedan ${disponibles} entradas disponibles` });
+    const tandaVigente = getTandaVigente(evento.tandas);
+    if (!tandaVigente) {
+      return res.status(400).json({ error: 'Entradas no disponibles para este evento' });
     }
 
-    const total = evento.precioEntrada * parseInt(cantidad);
+    // Stock de la tanda vigente. Si capacidad es null (sin límite), omitimos la validación.
+    const cant = parseInt(cantidad);
+    if (tandaVigente.capacidad !== null) {
+      const disponibles = tandaVigente.capacidad - tandaVigente.cantidadVendida;
+      if (disponibles < cant) {
+        return res.status(400).json({ error: `Solo quedan ${disponibles} entradas disponibles` });
+      }
+    }
+
+    const total = tandaVigente.precio * cant;
 
     const compra = await prisma.compra.create({
       data: {
         eventoId: evento.id,
+        tandaId: tandaVigente.id,
         email,
         nombre,
         apellido,
         telefono: telefono || '',
-        cantidadEntradas: parseInt(cantidad),
-        precioUnitario: evento.precioEntrada,
+        cantidadEntradas: cant,
+        precioUnitario: tandaVigente.precio,
         totalPagado: total,
         mpEstado: 'pending',
       },
     });
 
     const preferencia = await mpService.crearPreferencia({
-      titulo: `${evento.nombre} — ${parseInt(cantidad)} entrada(s)`,
-      precio: evento.precioEntrada,
-      cantidad: parseInt(cantidad),
+      titulo: `${evento.nombre} — ${cant} entrada(s)`,
+      precio: tandaVigente.precio,
+      cantidad: cant,
       email,
       preferenciaId: String(compra.id),
     });
