@@ -87,6 +87,7 @@ function buildQrAttachments(entradas) {
 }
 
 function buildHtml({ nombre, evento, entradas }) {
+  const esSingular = entradas.length === 1;
   // URL pública absoluta del QR. Usamos el PNG ya persistido en disk por
   // qrService.generarQR. Así evitamos data URLs (bloqueadas por Gmail mobile
   // y WhatsApp Web) y CIDs (renderizado inconsistente entre providers).
@@ -94,7 +95,7 @@ function buildHtml({ nombre, evento, entradas }) {
     .map(
       (e, i) => `
       <div style="margin:16px 0; text-align:center; border:1px solid #eee; border-radius:8px; padding:16px;">
-        <p style="font-weight:bold; font-size:16px;">Entrada #${i + 1}</p>
+        <p style="font-weight:bold; font-size:16px;">${esSingular ? 'Tu entrada' : `Entrada #${i + 1}`}</p>
         <img src="${config.baseUrl}/assets/img/uploads/qr/${e.codigoQR}.png" alt="QR Entrada ${i + 1}" style="width:180px; height:180px;" />
         <p style="color:#666; font-size:12px; margin-top:8px;">Código: ${e.codigoQR}</p>
       </div>`
@@ -113,7 +114,7 @@ function buildHtml({ nombre, evento, entradas }) {
     </div>
     <div style="padding:32px;">
       <h2 style="color:#111;">¡Hola, ${nombre}!</h2>
-      <p style="color:#444; font-size:16px;">Tu compra fue confirmada. A continuación encontrás tus entradas con los códigos QR para ingresar al evento.</p>
+      <p style="color:#444; font-size:16px;">Tu compra fue confirmada. A continuación encontrás ${esSingular ? 'tu entrada con el código QR' : 'tus entradas con los códigos QR'} para ingresar al evento.</p>
 
       <div style="background:#f9f9f9; border-radius:8px; padding:16px; margin:24px 0;">
         <h3 style="color:#111; margin:0 0 12px;">📅 Detalle del Evento</h3>
@@ -124,14 +125,14 @@ function buildHtml({ nombre, evento, entradas }) {
         <p style="margin:4px 0;"><strong>Dirección:</strong> Espacio Doble T — Calle 23 entre 43 y 44, Barrio La Loma, La Plata</p>
       </div>
 
-      <h3 style="color:#111;">🎟️ Tus Entradas</h3>
+      <h3 style="color:#111;">🎟️ ${esSingular ? 'Tu Entrada' : 'Tus Entradas'}</h3>
       ${qrItems}
 
       <div style="background:#fff3cd; border-radius:8px; padding:16px; margin:24px 0; border-left:4px solid #ffc107;">
         <h4 style="margin:0 0 8px; color:#856404;">Instrucciones de uso</h4>
         <ul style="margin:0; padding-left:20px; color:#856404;">
           <li>Presentá el código QR en la entrada del evento.</li>
-          <li>Cada código QR es personal y se valida una sola vez.</li>
+          <li>${esSingular ? 'Tu código QR es personal' : 'Cada código QR es personal'} y se valida una sola vez.</li>
           <li><strong>No compartas la foto del QR.</strong> El primero que lo presente en puerta entra — si alguien lo usa antes que vos, no podemos emitir una entrada nueva.</li>
           <li>Podés mostrarlo desde el celular o impreso.</li>
         </ul>
@@ -170,7 +171,7 @@ async function enviarConfirmacion({ email, nombre, evento, entradas }) {
 
   const html = buildHtml({ nombre, evento, entradas });
   const attachments = buildQrAttachments(entradas);
-  const subject = `🎟️ Tus entradas para ${evento.nombre}`;
+  const subject = `🎟️ ${entradas.length === 1 ? 'Tu entrada' : 'Tus entradas'} para ${evento.nombre}`;
 
   if (http) {
     // Imágenes del HTML van por URL pública absoluta (ver buildHtml / enviarInvitacion).
