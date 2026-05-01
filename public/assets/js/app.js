@@ -353,15 +353,19 @@ function renderDestacado(evento) {
   }
 
   if (btnComprar) {
-    // "agotado" = toggle manual, o no hay tanda vigente (todas las tandas activas
-    // están agotadas/vencidas, o no hay tandas configuradas).
-    const agotado = evento.estaAgotado || tandaVigente === null;
-    if (agotado) {
+    // Orden: toggle manual → externo → sin tanda vigente → normal.
+    // Externo va antes que "sin tanda" porque los eventos externos no usan tandas:
+    // la venta vive en otro sitio (link de terceros).
+    if (evento.estaAgotado) {
       btnComprar.textContent = 'AGOTADO';
       btnComprar.disabled = true;
     } else if (evento.esExterno && evento.linkExterno) {
+      btnComprar.disabled = false;
       btnComprar.textContent = 'COMPRAR ENTRADAS';
       btnComprar.onclick = () => window.open(evento.linkExterno, '_blank');
+    } else if (tandaVigente === null) {
+      btnComprar.textContent = 'AGOTADO';
+      btnComprar.disabled = true;
     } else {
       btnComprar.disabled = false;
       btnComprar.textContent = 'COMPRAR ENTRADAS';
@@ -405,7 +409,10 @@ function renderProximos(eventos) {
 
   container.innerHTML = eventos.map((ev) => {
     const tv = ev.tandaVigente || null;
-    const agotado = ev.estaAgotado || tv === null;
+    const esExternoActivo = ev.esExterno && ev.linkExterno;
+    // Eventos externos no usan tandas: la venta vive en un sitio de terceros.
+    // Solo se marcan agotados cuando el admin lo pone a mano.
+    const agotado = ev.estaAgotado || (!esExternoActivo && tv === null);
     const precioMostrado = tv ? tv.precio : null;
     const imgTag = ev.flyerUrl
       ? `<img src="${esc(ev.flyerUrl)}" alt="${esc(ev.nombre)}" class="evento-card-img">`
@@ -462,8 +469,39 @@ function wireModalCompra() {
     const idRequested = rawId ? Number(rawId) : (eventoActual ? eventoActual.id : null);
     populateModalEventoSelect(idRequested);
     onEventoSeleccionadoChange();
+    // Reset del segundo campo de email — sino mantiene valor de compra anterior.
+    const confirmEl = document.getElementById('modal-email-confirm');
+    if (confirmEl) confirmEl.value = '';
+    onEmailChange();
   });
 }
+
+// Feedback visual del match de emails. No bloquea inputs, solo informa al
+// usuario en vivo si los dos campos coinciden o no.
+function onEmailChange() {
+  const email = (document.getElementById('modal-email')?.value || '').trim();
+  const confirm = (document.getElementById('modal-email-confirm')?.value || '').trim();
+  const hint = document.getElementById('modal-email-match');
+  if (!hint) return;
+
+  if (!email && !confirm) {
+    hint.textContent = '';
+    hint.style.color = '';
+    return;
+  }
+  if (!confirm) {
+    hint.textContent = '';
+    return;
+  }
+  if (email.toLowerCase() === confirm.toLowerCase()) {
+    hint.innerHTML = '<i class="bi bi-check-circle-fill"></i> Los emails coinciden';
+    hint.style.color = '#48bb78';
+  } else {
+    hint.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Los emails no coinciden';
+    hint.style.color = '#fc8181';
+  }
+}
+window.onEmailChange = onEmailChange;
 
 function populateModalEventoSelect(selectedId) {
   const select = document.getElementById('modal-evento-select');
@@ -543,9 +581,9 @@ function updateBtnPagarState(ev) {
     return;
   }
 
-  const agotado = ev.estaAgotado || !ev.tandaVigente;
-
-  if (agotado) {
+  // Orden: toggle manual → externo → sin tanda vigente → normal.
+  // Los eventos externos no usan tandas, por eso van antes del check de tanda vigente.
+  if (ev.estaAgotado) {
     if (label) label.textContent = 'AGOTADO';
     btn.disabled = true;
     return;
@@ -554,6 +592,12 @@ function updateBtnPagarState(ev) {
   if (ev.esExterno && ev.linkExterno) {
     if (label) label.textContent = 'VER ENTRADAS';
     btn.onclick = () => window.open(ev.linkExterno, '_blank', 'noopener');
+    return;
+  }
+
+  if (!ev.tandaVigente) {
+    if (label) label.textContent = 'AGOTADO';
+    btn.disabled = true;
     return;
   }
 
@@ -590,16 +634,22 @@ async function handleComprar() {
   const nombre = document.getElementById('modal-nombre').value.trim();
   const apellido = document.getElementById('modal-apellido').value.trim();
   const email = document.getElementById('modal-email').value.trim();
+  const emailConfirm = (document.getElementById('modal-email-confirm')?.value || '').trim();
   const telefono = document.getElementById('modal-telefono').value.trim();
   const cantidad = parseInt(document.getElementById('modal-cantidad').value);
 
-  if (!nombre || !apellido || !email || !cantidad) {
+  if (!nombre || !apellido || !email || !emailConfirm || !cantidad) {
     showModalError('Por favor completá todos los campos obligatorios.');
     return;
   }
 
   if (!isValidEmail(email)) {
     showModalError('Ingresá un email válido.');
+    return;
+  }
+
+  if (email.toLowerCase() !== emailConfirm.toLowerCase()) {
+    showModalError('Los emails no coinciden. Verificá que estén bien escritos.');
     return;
   }
 

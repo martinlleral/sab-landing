@@ -12,6 +12,7 @@ publicRouter.post('/check/:preferenciaId', controller.checkAndProcess);
 const adminRouter = express.Router();
 adminRouter.use(requireAdmin);
 adminRouter.delete('/pendientes', controller.adminEliminarPendientes);
+adminRouter.post('/:id/reenviar-mail', controller.adminReenviarMail);
 adminRouter.delete('/:id', controller.adminEliminar);
 adminRouter.get('/:id', controller.adminGetById);
 adminRouter.get('/', controller.adminListar);

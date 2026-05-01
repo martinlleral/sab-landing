@@ -713,7 +713,16 @@
             </div>
             <div class="col-12">
               <label class="form-label" for="modal-email">Email *</label>
-              <input type="email" class="form-control" id="modal-email" placeholder="juan@email.com" autocomplete="email">
+              <input type="email" class="form-control" id="modal-email" placeholder="juan@email.com" autocomplete="email" oninput="onEmailChange()">
+              <div class="form-text" style="color:#aaa; font-size:0.8rem; margin-top:4px;">
+                <i class="bi bi-info-circle me-1"></i>
+                Te enviaremos las entradas con QR a este mail. Revisalo con cuidado.
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="modal-email-confirm">Confirmar email *</label>
+              <input type="email" class="form-control" id="modal-email-confirm" placeholder="Repetí tu email" autocomplete="off" oninput="onEmailChange()" onpaste="event.preventDefault(); return false;">
+              <div id="modal-email-match" class="form-text" style="font-size:0.8rem; margin-top:4px; min-height:1.2em;"></div>
             </div>
             <div class="col-12">
               <label class="form-label" for="modal-telefono">Teléfono</label>

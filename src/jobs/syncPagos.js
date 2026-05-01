@@ -4,7 +4,9 @@ const mpService = require('../services/mercadopago.service');
 const { procesarPagoAprobado } = require('../services/pagos.service');
 
 const VENTANA_HORAS = 168;
+const HORAS_AUTOCANCEL = 72;
 const ESTADOS_TERMINALES = ['rejected', 'cancelled', 'charged_back', 'refunded'];
+const ESTADOS_ACTIVOS = ['pending', 'in_process', 'authorized'];
 
 let corriendo = false; // Guard para evitar ejecuciones solapadas
 
@@ -14,6 +16,7 @@ async function syncPagosPendientes() {
 
   try {
     const desde = new Date(Date.now() - VENTANA_HORAS * 60 * 60 * 1000);
+    const cutoffCancel = new Date(Date.now() - HORAS_AUTOCANCEL * 60 * 60 * 1000);
 
     const pendientes = await prisma.compra.findMany({
       where: {
@@ -28,37 +31,32 @@ async function syncPagosPendientes() {
 
     console.log(`🔄 Sync pagos MP: ${pendientes.length} compra(s) pendiente(s)`);
 
+    const expectedCollector = config.mercadopago.userId;
+
     for (const compra of pendientes) {
       try {
         const pagos = await mpService.buscarPagoPorCompra(compra.id);
 
-        if (!pagos.length) {
-          // Sin pagos registrados aún — normal si el usuario no completó el pago
-          continue;
+        // Filtrar primero pagos VÁLIDOS para esta compra (mismo collector + mismo monto).
+        // Esto desambigua ruido por external_references reciclados (ej: pruebas viejas).
+        const pagosValidos = pagos.filter((p) => {
+          if (expectedCollector && String(p.collector_id) !== String(expectedCollector)) {
+            return false;
+          }
+          if (Number(p.transaction_amount) !== Number(compra.totalPagado)) {
+            return false;
+          }
+          return true;
+        });
+
+        const descartados = pagos.length - pagosValidos.length;
+        if (descartados > 0) {
+          console.log(`[sync] compra=${compra.id}: ${descartados} pago(s) MP descartado(s) por collector/monto`);
         }
 
-        // Tomamos el pago más reciente con estado definitivo
-        const aprobado = pagos.find((p) => p.status === 'approved');
-        const terminal = pagos.find((p) => ESTADOS_TERMINALES.includes(p.status));
-
+        // 1) Approved válido → procesar (camino feliz)
+        const aprobado = pagosValidos.find((p) => p.status === 'approved');
         if (aprobado) {
-          const expectedCollector = config.mercadopago.userId;
-          if (expectedCollector && String(aprobado.collector_id) !== String(expectedCollector)) {
-            console.warn(
-              `[sync] WARN: collector_id mismatch compra=${compra.id} ` +
-              `(got ${aprobado.collector_id}, expected ${expectedCollector}) — skip`
-            );
-            continue;
-          }
-
-          if (Number(aprobado.transaction_amount) !== Number(compra.totalPagado)) {
-            console.warn(
-              `[sync] WARN: amount mismatch compra=${compra.id} ` +
-              `(pagado ${aprobado.transaction_amount}, esperado ${compra.totalPagado}) — skip`
-            );
-            continue;
-          }
-
           const resultado = await procesarPagoAprobado(compra.id, aprobado.id);
           if (resultado.ya_procesada) {
             console.log(`⏭  Compra #${compra.id} ya estaba procesada`);
@@ -67,7 +65,12 @@ async function syncPagosPendientes() {
               `✅ Compra #${compra.id} aprobada — ${resultado.entradas} entrada(s) generada(s) (pago ${aprobado.id})`
             );
           }
-        } else if (terminal) {
+          continue;
+        }
+
+        // 2) Terminal válido (rejected/cancelled/charged_back/refunded) → reflejar en BD
+        const terminal = pagosValidos.find((p) => ESTADOS_TERMINALES.includes(p.status));
+        if (terminal) {
           await prisma.compra.update({
             where: { id: compra.id },
             data: {
@@ -76,7 +79,28 @@ async function syncPagosPendientes() {
             },
           });
           console.log(`❌ Compra #${compra.id} → ${terminal.status} (pago ${terminal.id})`);
+          continue;
         }
+
+        // 3) Pago activo válido (pending/in_process/authorized en MP) → seguir esperando.
+        //    Cubre Rapipago/PagoFácil sin acreditar y revisiones de MP. NUNCA autocancelar acá.
+        const activo = pagosValidos.find((p) => ESTADOS_ACTIVOS.includes(p.status));
+        if (activo) {
+          console.log(`⏳ Compra #${compra.id} con pago ${activo.status} en MP — esperando`);
+          continue;
+        }
+
+        // 4) Sin ningún pago válido + compra vieja (>72h) → autocancelar (abandono)
+        if (compra.createdAt < cutoffCancel) {
+          await prisma.compra.update({
+            where: { id: compra.id },
+            data: { mpEstado: 'cancelled' },
+          });
+          console.log(`🗑  Compra #${compra.id} → cancelled (sin pago válido en ${HORAS_AUTOCANCEL}h)`);
+          continue;
+        }
+
+        // 5) Compra reciente sin pago válido → seguir esperando (usuario aún en checkout)
       } catch (err) {
         console.error(`Error procesando compra #${compra.id}:`, err.message);
       }

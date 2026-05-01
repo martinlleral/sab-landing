@@ -119,17 +119,29 @@ function buildPagination(container, currentPage, totalPages, onPageChange) {
     pages.push(i);
   }
 
+  // Render con data-page; el handler lo enganchamos abajo. Antes el código
+  // stringificaba la función entera dentro de onclick="...", lo que se rompía
+  // en cuanto onPageChange tenía template strings internos (backticks anidados
+  // con outer template string).
   container.innerHTML = `
-    <button class="bo-page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="(${onPageChange})(${currentPage - 1})">
+    <button class="bo-page-btn" ${currentPage === 1 ? 'disabled' : ''} data-page="${currentPage - 1}">
       <i class="bi bi-chevron-left"></i>
     </button>
     ${pages.map((p) => `
-      <button class="bo-page-btn ${p === currentPage ? 'active' : ''}" onclick="(${onPageChange})(${p})">${p}</button>
+      <button class="bo-page-btn ${p === currentPage ? 'active' : ''}" data-page="${p}">${p}</button>
     `).join('')}
-    <button class="bo-page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="(${onPageChange})(${currentPage + 1})">
+    <button class="bo-page-btn" ${currentPage === totalPages ? 'disabled' : ''} data-page="${currentPage + 1}">
       <i class="bi bi-chevron-right"></i>
     </button>
   `;
+
+  container.querySelectorAll('button[data-page]').forEach((btn) => {
+    if (btn.disabled) return;
+    btn.addEventListener('click', () => {
+      const p = parseInt(btn.dataset.page, 10);
+      if (Number.isFinite(p)) onPageChange(p);
+    });
+  });
 }
 
 // ============================================
