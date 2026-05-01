@@ -46,43 +46,33 @@
 
       <div class="bo-content">
 
-        <!-- Stats -->
-        <div class="row g-3 mb-4" id="stats-row">
-          <div class="col-sm-6 col-xl-3">
-            <div class="stat-card">
-              <div class="stat-icon text-primary"><i class="bi bi-calendar-event-fill"></i></div>
-              <div class="stat-body">
-                <div class="stat-value" id="stat-eventos">—</div>
-                <div class="stat-label">Eventos totales</div>
-              </div>
-            </div>
+        <!-- Stats globales: mismas definiciones que en evento-compras para que
+             los números sean coherentes entre dashboard global y vista de un evento. -->
+        <div class="bo-stats-grid mb-4">
+          <div class="bo-stat" style="border-left:3px solid #4299e1;">
+            <div class="bo-stat-value" style="color:#4299e1;" id="stat-eventos">—</div>
+            <div class="bo-stat-label">Eventos totales</div>
+            <div class="bo-stat-desc">Creados en el sistema (próximos y pasados)</div>
           </div>
-          <div class="col-sm-6 col-xl-3">
-            <div class="stat-card">
-              <div class="stat-icon text-success"><i class="bi bi-bag-check-fill"></i></div>
-              <div class="stat-body">
-                <div class="stat-value" id="stat-compras">—</div>
-                <div class="stat-label">Compras totales</div>
-              </div>
-            </div>
+          <div class="bo-stat" style="border-left:3px solid #cbd5e0;">
+            <div class="bo-stat-value" style="color:#cbd5e0;" id="stat-compras">—</div>
+            <div class="bo-stat-label">Compras totales</div>
+            <div class="bo-stat-desc">Personas que iniciaron una compra (cualquier estado)</div>
           </div>
-          <div class="col-sm-6 col-xl-3">
-            <div class="stat-card">
-              <div class="stat-icon text-warning"><i class="bi bi-ticket-perforated-fill"></i></div>
-              <div class="stat-body">
-                <div class="stat-value" id="stat-entradas">—</div>
-                <div class="stat-label">Entradas vendidas</div>
-              </div>
-            </div>
+          <div class="bo-stat" style="border-left:3px solid #f6c90e;">
+            <div class="bo-stat-value" style="color:#f6c90e;" id="stat-vendidas">—</div>
+            <div class="bo-stat-label">Vendidas</div>
+            <div class="bo-stat-desc">Entradas pagas con plata real</div>
           </div>
-          <div class="col-sm-6 col-xl-3">
-            <div class="stat-card">
-              <div class="stat-icon" style="color:#e63946"><i class="bi bi-currency-dollar"></i></div>
-              <div class="stat-body">
-                <div class="stat-value" id="stat-recaudado">—</div>
-                <div class="stat-label">Recaudado (aprox.)</div>
-              </div>
-            </div>
+          <div class="bo-stat" style="border-left:3px solid #90cdf4;">
+            <div class="bo-stat-value" style="color:#90cdf4;" id="stat-invitaciones">—</div>
+            <div class="bo-stat-label">Invitaciones</div>
+            <div class="bo-stat-desc">Entradas gratis enviadas desde backoffice</div>
+          </div>
+          <div class="bo-stat" style="border-left:3px solid #48bb78;">
+            <div class="bo-stat-value" style="color:#48bb78;" id="stat-recaudado">—</div>
+            <div class="bo-stat-label">Recaudado</div>
+            <div class="bo-stat-desc">Total cobrado por compras aprobadas</div>
           </div>
         </div>
 
@@ -124,24 +114,21 @@
 
     async function loadDashboard() {
       try {
-        const [eventosRes, comprasRes] = await Promise.all([
-          boFetch('/api/admin/eventos'),
-          boFetch('/api/admin/compras'),
+        // /api/admin/stats agrega en BD (vendidas + invitaciones + recaudado).
+        // /api/admin/compras pagina, lo usamos sólo para "Últimas compras".
+        const [stats, comprasRes] = await Promise.all([
+          boFetch('/api/admin/stats'),
+          boFetch('/api/admin/compras?limit=10'),
         ]);
 
-        document.getElementById('stat-eventos').textContent = eventosRes.total || 0;
-        document.getElementById('stat-compras').textContent = comprasRes.total || 0;
-
-        let entradas = 0, recaudado = 0;
-        (comprasRes.compras || []).forEach((c) => {
-          if (c.mpEstado === 'approved') {
-            entradas += c.cantidadEntradas;
-            recaudado += c.totalPagado;
-          }
-        });
-
-        document.getElementById('stat-entradas').textContent = entradas;
-        document.getElementById('stat-recaudado').textContent = `$ ${recaudado.toLocaleString('es-AR')}`;
+        document.getElementById('stat-eventos').textContent = stats.totalEventos;
+        document.getElementById('stat-compras').textContent = stats.totalCompras;
+        // Vendidas (con plata) e Invitaciones (gratis) separadas — coherente con
+        // los boxes del header de cada evento. Para saber el aforo total ocupado
+        // se suman a ojo, pero queda claro qué generó plata y qué fue regalado.
+        document.getElementById('stat-vendidas').textContent = stats.entradasVendidas;
+        document.getElementById('stat-invitaciones').textContent = stats.entradasInvitaciones;
+        document.getElementById('stat-recaudado').textContent = `$ ${stats.recaudado.toLocaleString('es-AR')}`;
 
         const tbody = document.getElementById('compras-body');
         if (!comprasRes.compras || !comprasRes.compras.length) {
@@ -149,7 +136,7 @@
           return;
         }
 
-        tbody.innerHTML = comprasRes.compras.slice(0, 10).map((c) => `
+        tbody.innerHTML = comprasRes.compras.map((c) => `
           <tr>
             <td>${c.id}</td>
             <td>${c.nombre} ${c.apellido}</td>

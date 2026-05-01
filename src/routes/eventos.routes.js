@@ -21,6 +21,7 @@ publicRouter.get('/proximos', controller.getProximos);
 const adminRouter = express.Router();
 adminRouter.use(requireAdmin);
 adminRouter.get('/pasados', controller.adminListarPasados);
+adminRouter.get('/:id/stats', controller.adminEventoStats);
 adminRouter.get('/:id/invitaciones', controller.adminListarInvitaciones);
 adminRouter.post('/:id/invitacion', controller.adminEnviarInvitacion);
 adminRouter.get('/:id', controller.adminGetById);

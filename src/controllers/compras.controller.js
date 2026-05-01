@@ -2,8 +2,12 @@ const crypto = require('crypto');
 const prisma = require('../utils/prisma');
 const config = require('../config');
 const mpService = require('../services/mercadopago.service');
+const brevoService = require('../services/brevo.service');
+const qrService = require('../services/qr.service');
 const { procesarPagoAprobado } = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Verifica la firma HMAC-SHA256 del webhook MP.
 // Manifest: id:<data.id>;request-id:<x-request-id>;ts:<ts>;
@@ -225,6 +229,14 @@ async function adminListar(req, res) {
     const skip = (page - 1) * limit;
     const where = {};
     if (req.query.eventoId) where.eventoId = parseInt(req.query.eventoId);
+    // Filtro server-side por estado MP. Antes el filtro era client-side sobre la
+    // página de 20 visible, lo que daba conteos incoherentes ("33 aprobados en
+    // total" vs "10 visibles cuando filtro Aprobados en página 1"). Ahora la
+    // BD filtra y el total devuelto refleja el filtro.
+    const ESTADOS_VALIDOS = ['approved', 'pending', 'rejected', 'cancelled'];
+    if (req.query.mpEstado && ESTADOS_VALIDOS.includes(req.query.mpEstado)) {
+      where.mpEstado = req.query.mpEstado;
+    }
 
     const [compras, total] = await Promise.all([
       prisma.compra.findMany({
@@ -307,4 +319,66 @@ async function adminEliminarPendientes(req, res) {
   }
 }
 
-module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminGetById, adminEliminar, adminEliminarPendientes };
+// Reenvía el mail de confirmación de una compra aprobada. Permite override del
+// destinatario (typo del comprador, mail alternativo). Si se cambia el email,
+// se actualiza también en la BD para que futuros reenvíos vayan al correcto.
+async function adminReenviarMail(req, res) {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido' });
+
+    const compra = await prisma.compra.findUnique({
+      where: { id },
+      include: { evento: true, entradas: { orderBy: { createdAt: 'asc' } } },
+    });
+    if (!compra) return res.status(404).json({ error: 'Compra no encontrada' });
+
+    if (compra.mpEstado !== 'approved') {
+      return res.status(400).json({ error: 'Solo se puede reenviar mail de compras aprobadas' });
+    }
+    if (!compra.entradas.length) {
+      return res.status(400).json({ error: 'La compra no tiene entradas generadas' });
+    }
+
+    const emailOverride = (req.body && typeof req.body.email === 'string') ? req.body.email.trim() : '';
+    const emailDestino = emailOverride || compra.email;
+    if (!EMAIL_REGEX.test(emailDestino)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    // Si el admin cambió el email, persistir el cambio para que futuros reenvíos
+    // y referencias en el sistema apunten al mail correcto.
+    const emailCambio = emailOverride && emailOverride.toLowerCase() !== compra.email.toLowerCase();
+    if (emailCambio) {
+      await prisma.compra.update({ where: { id }, data: { email: emailOverride } });
+    }
+
+    const entradasParaMail = [];
+    for (const entrada of compra.entradas) {
+      const qrBase64 = await qrService.generarQRBase64(entrada.codigoQR);
+      entradasParaMail.push({ ...entrada, qrBase64: qrBase64.split(',')[1] });
+    }
+
+    const adminEmail = req.session?.user?.email || 'admin';
+    console.log(`📧 [REENVIO] Admin=${adminEmail} compra=#${id} → ${emailDestino}${emailCambio ? ` (cambió de ${compra.email})` : ''}`);
+
+    await brevoService.enviarConfirmacion({
+      email: emailDestino,
+      nombre: compra.nombre,
+      evento: compra.evento,
+      entradas: entradasParaMail,
+    });
+
+    return res.json({
+      ok: true,
+      emailEnviado: emailDestino,
+      emailActualizado: emailCambio,
+      entradas: entradasParaMail.length,
+    });
+  } catch (err) {
+    console.error('Error en adminReenviarMail:', err);
+    return res.status(500).json({ error: 'Error al reenviar el mail: ' + err.message });
+  }
+}
+
+module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminGetById, adminEliminar, adminEliminarPendientes, adminReenviarMail };

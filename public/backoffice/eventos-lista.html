@@ -40,7 +40,7 @@
         <button class="bo-sidebar-toggle" onclick="toggleSidebar()">
           <i class="bi bi-list fs-4"></i>
         </button>
-        <h1 class="bo-page-title">Eventos Pasados</h1>
+        <h1 class="bo-page-title">Eventos</h1>
         <div class="bo-topbar-user" id="topbar-user">—</div>
       </header>
 
@@ -50,7 +50,7 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
           <p style="color:#888; font-size:0.9rem; margin:0;">
-            Lista de eventos pasados. Para crear uno nuevo, usá el botón de la derecha.
+            Todos los eventos del sindicato (próximos y pasados). Para crear uno nuevo, usá el botón de la derecha.
           </p>
           <a href="/backoffice/evento-detalle.html?modo=nuevo" class="btn-bo-primary">
             <i class="bi bi-plus-lg me-1"></i> Nuevo Evento
@@ -59,8 +59,26 @@
 
         <div class="bo-card">
           <div class="bo-card-header">
-            <h5 class="bo-card-title">Todos los Eventos</h5>
-            <div class="d-flex gap-2">
+            <h5 class="bo-card-title">Todos los Eventos <span id="card-total" style="color:#888; font-weight:400;">—</span></h5>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+              <span style="font-size:0.8rem; color:#888;">Cuándo:</span>
+              <select id="filtro-cuando" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;" onchange="renderActual()">
+                <option value="">Todos</option>
+                <option value="proximos">Próximos</option>
+                <option value="pasados">Pasados</option>
+              </select>
+              <span style="font-size:0.8rem; color:#888;">Publicado:</span>
+              <select id="filtro-publicado" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;" onchange="renderActual()">
+                <option value="">Todos</option>
+                <option value="si">Sí</option>
+                <option value="no">No</option>
+              </select>
+              <span style="font-size:0.8rem; color:#888;">Destacado:</span>
+              <select id="filtro-destacado" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;" onchange="renderActual()">
+                <option value="">Todos</option>
+                <option value="si">Sí</option>
+                <option value="no">No</option>
+              </select>
               <button class="btn-bo-secondary" onclick="loadEventos(currentPage)" title="Actualizar">
                 <i class="bi bi-arrow-clockwise"></i>
               </button>
@@ -71,12 +89,12 @@
             <table class="bo-table">
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th class="bo-th-sort" data-sort="id" title="Identificador único del evento. No es un contador — los IDs pueden tener saltos cuando se eliminan eventos.">ID <span class="bo-sort-arrow"></span></th>
                   <th>Flyer</th>
                   <th>Nombre</th>
-                  <th>Fecha</th>
+                  <th class="bo-th-sort" data-sort="fecha">Fecha <span class="bo-sort-arrow"></span></th>
                   <th>Precio</th>
-                  <th>Vendidas</th>
+                  <th class="bo-th-sort" data-sort="vendidas">Vendidas <span class="bo-sort-arrow"></span></th>
                   <th>Publicado</th>
                   <th>Destacado</th>
                   <th>Acciones</th>
@@ -99,16 +117,32 @@
   <script src="/backoffice/assets/js/bo.js"></script>
   <script>
     let currentPage = 1;
+    let todosLosEventos = [];
+    // Orden inicial: fecha descendente (los más cercanos / recientes primero).
+    // Antes el backend ordenaba por fecha desc — mantenemos ese default acá.
+    let sortBy = 'fecha';
+    let sortDir = 'desc';
 
     document.addEventListener('DOMContentLoaded', () => {
       loadEventos(1);
+      // Click en headers ordenables. Toggle asc/desc al volver a clickear la misma columna.
+      document.querySelectorAll('.bo-th-sort').forEach((th) => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.sort;
+          if (sortBy === col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          else { sortBy = col; sortDir = 'asc'; }
+          renderActual();
+        });
+      });
     });
 
     async function loadEventos(page) {
       currentPage = page;
       try {
         const data = await boFetch(`/api/admin/eventos?page=${page}&limit=15`);
-        renderTabla(data.eventos);
+        todosLosEventos = data.eventos || [];
+        document.getElementById('card-total').textContent = `(${data.total})`;
+        renderActual();
         buildPagination(
           document.getElementById('paginacion'),
           data.page,
@@ -119,6 +153,46 @@
         document.getElementById('eventos-body').innerHTML =
           `<tr><td colspan="9" class="text-center py-4" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
       }
+    }
+
+    // Aplica filtros + orden actuales y re-renderiza la tabla. Todo en cliente:
+    // la lista es chica (paginada de a 15, hoy son 6 eventos) y filtrar/ordenar
+    // en server agregaría complejidad sin beneficio.
+    function renderActual() {
+      const cuando = document.getElementById('filtro-cuando').value;
+      const pub = document.getElementById('filtro-publicado').value;
+      const dest = document.getElementById('filtro-destacado').value;
+      const ahora = Date.now();
+
+      let lista = todosLosEventos.filter((ev) => {
+        if (cuando === 'proximos' && new Date(ev.fecha).getTime() < ahora) return false;
+        if (cuando === 'pasados'  && new Date(ev.fecha).getTime() >= ahora) return false;
+        if (pub === 'si'  && !ev.estaPublicado) return false;
+        if (pub === 'no'  &&  ev.estaPublicado) return false;
+        if (dest === 'si' && !ev.esDestacado) return false;
+        if (dest === 'no' &&  ev.esDestacado) return false;
+        return true;
+      });
+
+      lista.sort((a, b) => {
+        let va, vb;
+        if (sortBy === 'id') { va = a.id; vb = b.id; }
+        else if (sortBy === 'fecha') { va = new Date(a.fecha).getTime(); vb = new Date(b.fecha).getTime(); }
+        else if (sortBy === 'vendidas') {
+          va = (a.tandas || []).reduce((s, t) => s + t.cantidadVendida, 0);
+          vb = (b.tandas || []).reduce((s, t) => s + t.cantidadVendida, 0);
+        } else { va = 0; vb = 0; }
+        return sortDir === 'asc' ? va - vb : vb - va;
+      });
+
+      // Reflejar el orden activo con flechas en el header.
+      document.querySelectorAll('.bo-th-sort').forEach((th) => {
+        const arrow = th.querySelector('.bo-sort-arrow');
+        if (th.dataset.sort === sortBy) arrow.textContent = sortDir === 'asc' ? '▲' : '▼';
+        else arrow.textContent = '';
+      });
+
+      renderTabla(lista);
     }
 
     function renderTabla(eventos) {

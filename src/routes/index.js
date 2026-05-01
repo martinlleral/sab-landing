@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 
 const authController = require('../controllers/auth.controller');
+const eventosController = require('../controllers/eventos.controller');
+const { requireAdmin } = require('../middleware/auth.middleware');
 const staticRoutes = require('./static.routes');
 const { publicRouter: eventosPublic, adminRouter: eventosAdmin } = require('./eventos.routes');
 const { publicRouter: comprasPublic, adminRouter: comprasAdmin } = require('./compras.routes');
@@ -26,6 +28,7 @@ router.use('/api/admin', (_req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
+router.get('/api/admin/stats', requireAdmin, eventosController.adminStatsGlobal);
 router.use('/api/admin/eventos', eventosAdmin);
 router.use('/api/admin/compras', comprasAdmin);
 router.use('/api/admin/entradas', entradasRoutes);

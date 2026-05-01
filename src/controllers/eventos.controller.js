@@ -309,6 +309,135 @@ async function adminEnviarInvitacion(req, res) {
   }
 }
 
+// Stats agregadas por evento. Calcula todo en BD (groupBy + aggregate) para
+// que el backoffice no tenga que iterar sobre la página visible. Es la fuente
+// de verdad para los boxes de "Vendidas / Invitaciones / Pendientes / Restante /
+// Recaudado" del header del evento. Hasta que exista el dashboard de Uriel,
+// estos números son la única herramienta para decidir, así que se devuelven
+// completos y siempre coherentes con la BD.
+async function adminEventoStats(req, res) {
+  try {
+    const eventoId = parseInt(req.params.id);
+    if (!eventoId) return res.status(400).json({ error: 'ID inválido' });
+
+    const evento = await prisma.evento.findUnique({
+      where: { id: eventoId },
+      include: { tandas: { orderBy: { orden: 'asc' } } },
+    });
+    if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    const [vendidasAgg, invitacionesAgg, pendientesAgg, rechazadasAgg, canceladasAgg] = await Promise.all([
+      prisma.compra.aggregate({
+        where: { eventoId, mpEstado: 'approved', totalPagado: { gt: 0 } },
+        _sum: { cantidadEntradas: true, totalPagado: true },
+        _count: { _all: true },
+      }),
+      prisma.compra.aggregate({
+        where: { eventoId, mpEstado: 'approved', totalPagado: 0 },
+        _sum: { cantidadEntradas: true },
+        _count: { _all: true },
+      }),
+      prisma.compra.aggregate({
+        where: { eventoId, mpEstado: 'pending' },
+        _sum: { cantidadEntradas: true },
+        _count: { _all: true },
+      }),
+      prisma.compra.count({ where: { eventoId, mpEstado: 'rejected' } }),
+      prisma.compra.count({ where: { eventoId, mpEstado: 'cancelled' } }),
+    ]);
+
+    const entradasVendidas = vendidasAgg._sum.cantidadEntradas || 0;
+    const entradasInvitaciones = invitacionesAgg._sum.cantidadEntradas || 0;
+    const entradasPendientes = pendientesAgg._sum.cantidadEntradas || 0;
+    const recaudado = vendidasAgg._sum.totalPagado || 0;
+
+    // Capacidad del evento: suma de capacidades de todas las tandas. Si alguna
+    // tanda tiene capacidad null (sin límite), el total del evento es null (∞).
+    const tandas = evento.tandas;
+    let capacidadEvento = 0;
+    let capacidadInfinita = false;
+    for (const t of tandas) {
+      if (t.capacidad === null) { capacidadInfinita = true; break; }
+      capacidadEvento += t.capacidad;
+    }
+    const vendidaEvento = tandas.reduce((s, t) => s + t.cantidadVendida, 0);
+    const restanteEvento = capacidadInfinita ? null : (capacidadEvento - vendidaEvento);
+
+    // Tanda vigente (la que el público está comprando ahora). Puede no existir
+    // si todas están agotadas o desactivadas.
+    const vigente = getTandaVigente(tandas);
+    const tandaVigente = vigente ? {
+      id: vigente.id,
+      nombre: vigente.nombre,
+      precio: vigente.precio,
+      capacidad: vigente.capacidad,
+      vendida: vigente.cantidadVendida,
+      restante: vigente.capacidad === null ? null : (vigente.capacidad - vigente.cantidadVendida),
+    } : null;
+
+    return res.json({
+      compras: {
+        total: vendidasAgg._count._all + invitacionesAgg._count._all + pendientesAgg._count._all + rechazadasAgg + canceladasAgg,
+        vendidas: vendidasAgg._count._all,
+        invitaciones: invitacionesAgg._count._all,
+        pendientes: pendientesAgg._count._all,
+        rechazadas: rechazadasAgg,
+        canceladas: canceladasAgg,
+      },
+      entradas: {
+        vendidas: entradasVendidas,
+        invitaciones: entradasInvitaciones,
+        pendientes: entradasPendientes,
+        aprobadas: entradasVendidas + entradasInvitaciones,
+      },
+      recaudado,
+      capacidad: {
+        evento: capacidadInfinita ? null : capacidadEvento,
+        vendidaEvento,
+        restanteEvento,
+        tandaVigente,
+      },
+    });
+  } catch (err) {
+    console.error('Error en adminEventoStats:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+// Stats globales del backoffice (dashboard). Mismo principio que el endpoint
+// por evento: todo agregado en BD para que el dashboard no tenga que sumar
+// sobre una página de 20 compras (el bug que motivó este endpoint).
+async function adminStatsGlobal(req, res) {
+  try {
+    const [totalEventos, totalCompras, vendidasAgg, invitacionesAgg] = await Promise.all([
+      prisma.evento.count(),
+      prisma.compra.count(),
+      prisma.compra.aggregate({
+        where: { mpEstado: 'approved', totalPagado: { gt: 0 } },
+        _sum: { cantidadEntradas: true, totalPagado: true },
+        _count: { _all: true },
+      }),
+      prisma.compra.aggregate({
+        where: { mpEstado: 'approved', totalPagado: 0 },
+        _sum: { cantidadEntradas: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    return res.json({
+      totalEventos,
+      totalCompras,
+      comprasAprobadas: vendidasAgg._count._all + invitacionesAgg._count._all,
+      entradasVendidas: vendidasAgg._sum.cantidadEntradas || 0,
+      entradasInvitaciones: invitacionesAgg._sum.cantidadEntradas || 0,
+      recaudado: vendidasAgg._sum.totalPagado || 0,
+    });
+  } catch (err) {
+    console.error('Error en adminStatsGlobal:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
 async function adminListarInvitaciones(req, res) {
   try {
     const eventoId = parseInt(req.params.id);
@@ -335,4 +464,6 @@ module.exports = {
   adminEliminar,
   adminEnviarInvitacion,
   adminListarInvitaciones,
+  adminEventoStats,
+  adminStatsGlobal,
 };

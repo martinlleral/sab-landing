@@ -51,66 +51,78 @@
         <!-- Info del evento -->
         <div class="bo-card mb-4" id="evento-info-card" style="display:none;">
           <div class="bo-card-body">
-            <div class="row align-items-center g-3">
-              <div class="col-auto">
-                <img id="evento-flyer" src="" alt="Flyer"
-                  style="width:80px; height:80px; object-fit:cover; border-radius:8px; border:1px solid #2a2a2a; display:none;">
-                <div id="evento-flyer-placeholder"
-                  style="width:80px; height:80px; background:#1e1e1e; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:2rem;">
-                  🎵
-                </div>
+
+            <!-- Encabezado: flyer + nombre + fecha + botón editar -->
+            <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+              <img id="evento-flyer" src="" alt="Flyer"
+                style="width:80px; height:80px; object-fit:cover; border-radius:8px; border:1px solid #2a2a2a; display:none;">
+              <div id="evento-flyer-placeholder"
+                style="width:80px; height:80px; background:#1e1e1e; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:2rem;">
+                🎵
               </div>
-              <div class="col">
+              <div style="flex:1; min-width:200px;">
                 <div id="evento-nombre" style="font-size:1.2rem; font-weight:700; letter-spacing:1px; text-transform:uppercase;"></div>
                 <div id="evento-fecha" style="color:#888; font-size:0.9rem; margin-top:4px;"></div>
                 <div id="evento-precio" style="color:#e63946; font-size:1rem; font-weight:600; margin-top:4px;"></div>
               </div>
-              <div class="col-auto">
-                <div style="text-align:center; background:#1e1e1e; border:1px solid #2a2a2a; border-radius:8px; padding:12px 20px;">
-                  <div id="stat-vendidas" style="font-size:1.8rem; font-weight:700; color:#f6c90e;">—</div>
-                  <div style="font-size:0.75rem; color:#888; letter-spacing:1px; text-transform:uppercase;">Vendidas</div>
-                </div>
+              <a id="btn-editar-evento" href="#" class="btn-bo-secondary">
+                <i class="bi bi-pencil me-1"></i> Editar evento
+              </a>
+            </div>
+
+            <!-- Boxes de stats. Hasta que exista el dashboard de Uriel, estos
+                 números son la única herramienta para decidir → cada box tiene
+                 una descripción explícita debajo del número, sin tooltip. -->
+            <div class="bo-stats-grid">
+              <div class="bo-stat" style="border-left:3px solid #f6c90e;">
+                <div class="bo-stat-value" style="color:#f6c90e;" id="stat-vendidas">—</div>
+                <div class="bo-stat-label">Vendidas</div>
+                <div class="bo-stat-desc">Entradas pagas con plata real</div>
               </div>
-              <div class="col-auto">
-                <div style="text-align:center; background:#1e1e1e; border:1px solid #2a2a2a; border-radius:8px; padding:12px 20px;">
-                  <div id="stat-invitaciones" style="font-size:1.8rem; font-weight:700; color:#90cdf4;">—</div>
-                  <div style="font-size:0.75rem; color:#888; letter-spacing:1px; text-transform:uppercase;">Invitaciones</div>
-                </div>
+              <div class="bo-stat" style="border-left:3px solid #90cdf4;">
+                <div class="bo-stat-value" style="color:#90cdf4;" id="stat-invitaciones">—</div>
+                <div class="bo-stat-label">Invitaciones</div>
+                <div class="bo-stat-desc">Entradas gratis enviadas desde backoffice</div>
               </div>
-              <div class="col-auto">
-                <div style="text-align:center; background:#1e1e1e; border:1px solid #2a2a2a; border-radius:8px; padding:12px 20px;">
-                  <div id="stat-restante" style="font-size:1.8rem; font-weight:700; color:#e2e8f0;">—</div>
-                  <div style="font-size:0.75rem; color:#888; letter-spacing:1px; text-transform:uppercase;">Capacidad restante</div>
-                </div>
+              <div class="bo-stat" style="border-left:3px solid #ed8936;">
+                <div class="bo-stat-value" style="color:#ed8936;" id="stat-pendientes">—</div>
+                <div class="bo-stat-label">Pendientes</div>
+                <div class="bo-stat-desc">Reservadas esperando confirmación de MP. Pueden caer.</div>
               </div>
-              <div class="col-auto">
-                <div style="text-align:center; background:#1e1e1e; border:1px solid #2a2a2a; border-radius:8px; padding:12px 20px;">
-                  <div id="stat-recaudado" style="font-size:1.8rem; font-weight:700; color:#48bb78;">—</div>
-                  <div style="font-size:0.75rem; color:#888; letter-spacing:1px; text-transform:uppercase;">Recaudado</div>
-                </div>
+              <div class="bo-stat" style="border-left:3px solid #e2e8f0;">
+                <div class="bo-stat-value" style="color:#e2e8f0;" id="stat-restante-evento">—</div>
+                <div class="bo-stat-label">Restante del evento</div>
+                <div class="bo-stat-desc" id="stat-restante-evento-desc">Sumando todas las tandas, lo que queda por vender</div>
               </div>
-              <div class="col-auto">
-                <a id="btn-editar-evento" href="#" class="btn-bo-secondary">
-                  <i class="bi bi-pencil me-1"></i> Editar evento
-                </a>
+              <div class="bo-stat" style="border-left:3px solid #a0aec0;">
+                <div class="bo-stat-value" style="color:#a0aec0;" id="stat-restante-tanda">—</div>
+                <div class="bo-stat-label">Restante tanda activa</div>
+                <div class="bo-stat-desc" id="stat-restante-tanda-desc">Sólo de la tanda vigente. Si llega a 0, activá la próxima.</div>
+              </div>
+              <div class="bo-stat" style="border-left:3px solid #48bb78;">
+                <div class="bo-stat-value" style="color:#48bb78;" id="stat-recaudado">—</div>
+                <div class="bo-stat-label">Recaudado</div>
+                <div class="bo-stat-desc">Solo compras aprobadas con pago real</div>
               </div>
             </div>
+
           </div>
         </div>
 
         <!-- Tabla de compras -->
         <div class="bo-card">
           <div class="bo-card-header">
-            <h5 class="bo-card-title"><i class="bi bi-bag-check me-2"></i>Listado de Compras</h5>
-            <div class="d-flex gap-2 align-items-center">
-              <span id="filtro-estado-label" style="font-size:0.8rem; color:#888;">Filtrar:</span>
-              <select id="filtro-estado" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;" onchange="aplicarFiltro()">
+            <h5 class="bo-card-title"><i class="bi bi-bag-check me-2"></i>Listado de Compras <span id="card-total-compras" style="color:#888; font-weight:400;">—</span></h5>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+              <span id="filtro-estado-label" style="font-size:0.8rem; color:#888;">Estado:</span>
+              <select id="filtro-estado" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;" onchange="loadCompras(1)">
                 <option value="">Todos</option>
                 <option value="approved">Aprobados</option>
                 <option value="pending">Pendientes</option>
                 <option value="rejected">Rechazados</option>
+                <option value="cancelled">Cancelados</option>
               </select>
-              <button class="btn-bo-secondary" onclick="loadCompras(currentPage)" title="Recargar">
+              <button class="btn-bo-secondary" onclick="loadCompras(currentPage); refreshStats();" title="Recargar">
                 <i class="bi bi-arrow-clockwise"></i>
               </button>
               <button class="btn-bo-secondary" style="color:#fc8181; border-color:#fc8181;" onclick="eliminarPendientes()" title="Eliminar todas las compras pendientes">
@@ -123,20 +135,20 @@
             <table class="bo-table">
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th class="bo-th-sort" data-sort="id" title="Identificador único de la compra. No es un contador — los IDs pueden tener saltos cuando se eliminan compras pendientes.">ID <span class="bo-sort-arrow"></span></th>
                   <th>Comprador</th>
                   <th>Email</th>
                   <th>Teléfono</th>
-                  <th>Cant.</th>
-                  <th>Total</th>
+                  <th class="bo-th-sort" data-sort="cantidad">Cant. <span class="bo-sort-arrow"></span></th>
+                  <th class="bo-th-sort" data-sort="total">Total <span class="bo-sort-arrow"></span></th>
                   <th>Estado MP</th>
-                  <th>Fecha</th>
+                  <th class="bo-th-sort" data-sort="fecha">Fecha <span class="bo-sort-arrow"></span></th>
                   <th>Entradas</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody id="compras-body">
-                <tr><td colspan="9" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
+                <tr><td colspan="10" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -164,23 +176,39 @@
   <script>
     const params = new URLSearchParams(window.location.search);
     const eventoId = parseInt(params.get('id'));
-    let eventoData = null; // cache del evento para que calcularStats acceda a tandas
     let currentPage = 1;
     let todasLasCompras = [];
+    // Default: más nuevas primero (mantiene comportamiento previo del backend).
+    let sortBy = 'fecha';
+    let sortDir = 'desc';
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
       if (!eventoId) {
         boAlert('No se especificó un evento. Volvé a la lista.', 'error');
         return;
       }
-      loadEvento();
-      loadCompras(1);
+      // Secuencial: primero datos del evento + stats (boxes del header), después la tabla.
+      // Antes corrían en paralelo y la race condition dejaba "Restante" en 0.
+      await loadEvento();
+      await loadCompras(1);
+      // Click en headers ordenables. Toggle asc/desc al volver a clickear la misma columna.
+      document.querySelectorAll('.bo-th-sort').forEach((th) => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.sort;
+          if (sortBy === col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          else { sortBy = col; sortDir = sortBy === 'fecha' ? 'desc' : 'asc'; }
+          aplicarFiltro();
+        });
+      });
     });
 
     async function loadEvento() {
       try {
-        const ev = await boFetch(`/api/admin/eventos/${eventoId}`);
-        eventoData = ev; // para calcularStats (capacidad restante desde tandas)
+        const [ev, stats] = await Promise.all([
+          boFetch(`/api/admin/eventos/${eventoId}`),
+          boFetch(`/api/admin/eventos/${eventoId}/stats`),
+        ]);
+
         document.getElementById('page-title').textContent = `Compras: ${ev.nombre}`;
         document.getElementById('evento-nombre').textContent = ev.nombre;
         document.getElementById('evento-fecha').textContent =
@@ -204,55 +232,109 @@
 
         document.getElementById('btn-editar-evento').href = `/backoffice/evento-detalle.html?id=${ev.id}`;
         document.getElementById('evento-info-card').style.display = 'block';
+
+        renderStats(stats);
       } catch (err) {
         boAlert('Error al cargar el evento: ' + err.message);
+      }
+    }
+
+    // Recarga sólo las stats (boxes del header) sin reconsultar el evento entero.
+    // Se llama después de acciones que las pueden mover (eliminar pendientes, reenviar mail no
+    // las mueve, eliminar compra rechazada/pendiente sí cambia el conteo).
+    async function refreshStats() {
+      try {
+        const stats = await boFetch(`/api/admin/eventos/${eventoId}/stats`);
+        renderStats(stats);
+      } catch (err) {
+        console.error('Error al refrescar stats:', err);
+      }
+    }
+
+    function renderStats(stats) {
+      document.getElementById('stat-vendidas').textContent = stats.entradas.vendidas;
+      document.getElementById('stat-invitaciones').textContent = stats.entradas.invitaciones;
+      document.getElementById('stat-pendientes').textContent = stats.entradas.pendientes;
+      document.getElementById('stat-recaudado').textContent = boPrecio(stats.recaudado);
+
+      // Restante del evento: suma de capacidades de todas las tandas - vendidas (real,
+      // contando invitaciones también porque consumen cupo). Si alguna tanda tiene
+      // capacidad infinita, el evento tiene capacidad infinita.
+      const restEv = stats.capacidad.restanteEvento;
+      const capEv  = stats.capacidad.evento;
+      document.getElementById('stat-restante-evento').textContent = restEv === null ? '∞' : restEv;
+      const descEv = document.getElementById('stat-restante-evento-desc');
+      if (capEv === null) {
+        descEv.textContent = 'Capacidad del evento sin límite';
+      } else {
+        descEv.textContent = `${stats.capacidad.vendidaEvento} vendidas de ${capEv} totales`;
+      }
+
+      // Restante de la tanda vigente. Puede no haber tanda vigente si todas están
+      // agotadas/desactivadas — caso real del evento Leo García con tandas exhaustas.
+      const tv = stats.capacidad.tandaVigente;
+      const restTandaEl = document.getElementById('stat-restante-tanda');
+      const descTandaEl = document.getElementById('stat-restante-tanda-desc');
+      if (!tv) {
+        restTandaEl.textContent = '—';
+        descTandaEl.textContent = 'No hay tanda vigente. Activá una desde "Editar evento".';
+      } else if (tv.capacidad === null) {
+        restTandaEl.textContent = '∞';
+        descTandaEl.textContent = `Tanda "${tv.nombre}" sin límite de cupo`;
+      } else {
+        restTandaEl.textContent = tv.restante;
+        descTandaEl.textContent = `Tanda "${tv.nombre}" — ${tv.vendida} vendidas de ${tv.capacidad}`;
       }
     }
 
     async function loadCompras(page) {
       currentPage = page;
       try {
-        const data = await boFetch(`/api/admin/compras?eventoId=${eventoId}&page=${page}&limit=20`);
+        const filtro = document.getElementById('filtro-estado').value;
+        // Filtro mpEstado se aplica en server (antes era client-side sobre la página
+        // visible, daba conteos engañosos). El total devuelto refleja el filtro,
+        // y por eso el card-header puede mostrar el conteo correcto del estado.
+        const params = new URLSearchParams({ eventoId, page, limit: 20 });
+        if (filtro) params.set('mpEstado', filtro);
+        const data = await boFetch(`/api/admin/compras?${params}`);
         todasLasCompras = data.compras || [];
+
+        // Etiqueta humana del filtro para el card-header.
+        const ETIQUETAS = { approved: 'Aprobados', pending: 'Pendientes', rejected: 'Rechazados', cancelled: 'Cancelados' };
+        const etiqueta = filtro ? ` — ${ETIQUETAS[filtro]}` : '';
+        document.getElementById('card-total-compras').textContent = `${etiqueta} (${data.total})`;
+
         aplicarFiltro();
-        calcularStats(data.compras || []);
         buildPagination(document.getElementById('paginacion'), data.page, data.totalPages, loadCompras);
       } catch (err) {
         document.getElementById('compras-body').innerHTML =
-          `<tr><td colspan="9" class="text-center py-4" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
+          `<tr><td colspan="10" class="text-center py-4" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
       }
     }
 
-    function calcularStats(compras) {
-      // Vendidas: aprobadas CON pago real (totalPagado > 0). Ingresos genuinos.
-      // Invitaciones: aprobadas con totalPagado = 0. Tebi pidió separarlas para no confundir.
-      const vendidas = compras.filter(c => c.mpEstado === 'approved' && c.totalPagado > 0);
-      const invitaciones = compras.filter(c => c.mpEstado === 'approved' && c.totalPagado === 0);
-      const totalVendidas = vendidas.reduce((s, c) => s + c.cantidadEntradas, 0);
-      const totalInvitaciones = invitaciones.reduce((s, c) => s + c.cantidadEntradas, 0);
-      const totalRecaudado = vendidas.reduce((s, c) => s + c.totalPagado, 0);
-
-      document.getElementById('stat-vendidas').textContent = totalVendidas;
-      document.getElementById('stat-invitaciones').textContent = totalInvitaciones;
-      document.getElementById('stat-recaudado').textContent = boPrecio(totalRecaudado);
-
-      // Capacidad restante = sum(tanda.capacidad) - sum(tanda.cantidadVendida) del evento.
-      // Si alguna tanda tiene capacidad = null (sin límite), la restante es ∞.
-      const tandas = eventoData?.tandas || [];
-      const capacidadTotal = tandas.reduce(
-        (s, t) => s === null || t.capacidad === null ? null : s + t.capacidad,
-        0,
-      );
-      const vendTandas = tandas.reduce((s, t) => s + t.cantidadVendida, 0);
-      const restanteEl = document.getElementById('stat-restante');
-      restanteEl.textContent = capacidadTotal === null ? '∞' : (capacidadTotal - vendTandas);
-    }
-
+    // Aplica orden actual al set de compras ya filtrado por server. Se llama
+    // tras loadCompras y al clickear un header ordenable. (El filtro de estado
+    // se aplica ahora en server, no acá.)
     function aplicarFiltro() {
-      const filtro = document.getElementById('filtro-estado').value;
-      const compras = filtro
-        ? todasLasCompras.filter(c => c.mpEstado === filtro)
-        : todasLasCompras;
+      let compras = todasLasCompras.slice();
+
+      compras.sort((a, b) => {
+        let va, vb;
+        if (sortBy === 'id') { va = a.id; vb = b.id; }
+        else if (sortBy === 'fecha') { va = new Date(a.createdAt).getTime(); vb = new Date(b.createdAt).getTime(); }
+        else if (sortBy === 'cantidad') { va = a.cantidadEntradas; vb = b.cantidadEntradas; }
+        else if (sortBy === 'total') { va = a.totalPagado; vb = b.totalPagado; }
+        else { va = 0; vb = 0; }
+        return sortDir === 'asc' ? va - vb : vb - va;
+      });
+
+      // Reflejar el orden activo en los headers.
+      document.querySelectorAll('.bo-th-sort').forEach((th) => {
+        const arrow = th.querySelector('.bo-sort-arrow');
+        if (th.dataset.sort === sortBy) arrow.textContent = sortDir === 'asc' ? '▲' : '▼';
+        else arrow.textContent = '';
+      });
+
       renderTabla(compras);
     }
 
@@ -284,11 +366,13 @@
             }
           </td>
           <td>
-            ${c.mpEstado !== 'approved'
-              ? `<button class="btn-bo-secondary" style="color:#fc8181; border-color:#fc8181; padding:4px 8px; font-size:0.8rem;" onclick="eliminarCompra(${c.id})" title="Eliminar compra">
+            ${c.mpEstado === 'approved'
+              ? `<button class="btn-bo-secondary" style="padding:4px 8px; font-size:0.8rem;" onclick="reenviarMail(${c.id}, ${JSON.stringify(c.email).replace(/"/g, '&quot;')})" title="Reenviar mail con QR">
+                   <i class="bi bi-envelope-arrow-up"></i> Reenviar
+                 </button>`
+              : `<button class="btn-bo-secondary" style="color:#fc8181; border-color:#fc8181; padding:4px 8px; font-size:0.8rem;" onclick="eliminarCompra(${c.id})" title="Eliminar compra">
                    <i class="bi bi-trash"></i>
                  </button>`
-              : ''
             }
           </td>
         </tr>`
@@ -359,12 +443,43 @@
       }
     }
 
+    async function reenviarMail(compraId, emailActual) {
+      const nuevoEmail = prompt(
+        `Reenviar mail con QR de la compra #${compraId}.\n\n` +
+        `Mail actual: ${emailActual}\n\n` +
+        `Si está bien escrito, dejá el campo como está y aceptá.\n` +
+        `Si hay un typo, corregilo — vamos a actualizar el mail del comprador y reenviar.`,
+        emailActual
+      );
+      if (nuevoEmail === null) return; // cancelado
+      const email = String(nuevoEmail).trim();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        boAlert('Email inválido', 'error');
+        return;
+      }
+      try {
+        const data = await boFetch(`/api/admin/compras/${compraId}/reenviar-mail`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const msg = data.emailActualizado
+          ? `Mail enviado a ${data.emailEnviado} (email del comprador actualizado)`
+          : `Mail enviado a ${data.emailEnviado}`;
+        boAlert(msg, 'success');
+        if (data.emailActualizado) loadCompras(currentPage);
+      } catch (err) {
+        boAlert('Error al reenviar: ' + err.message, 'error');
+      }
+    }
+
     async function eliminarCompra(id) {
       if (!confirm('¿Eliminar esta compra pendiente? Esta acción no se puede deshacer.')) return;
       try {
         await boFetch(`/api/admin/compras/${id}`, { method: 'DELETE' });
         boAlert('Compra eliminada correctamente', 'success');
         loadCompras(currentPage);
+        refreshStats();
       } catch (err) {
         boAlert('Error al eliminar: ' + err.message);
       }
@@ -381,6 +496,7 @@
         const data = await boFetch(`/api/admin/compras/pendientes?eventoId=${eventoId}`, { method: 'DELETE' });
         boAlert(`${data.eliminadas} compra(s) eliminada(s) correctamente`, 'success');
         loadCompras(currentPage);
+        refreshStats();
       } catch (err) {
         boAlert('Error al eliminar pendientes: ' + err.message);
       }
