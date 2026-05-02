@@ -409,6 +409,7 @@ async function adminReenviarMail(req, res) {
       nombre: compra.nombre,
       evento: compra.evento,
       entradas: entradasParaMail,
+      compra,
     });
 
     return res.json({

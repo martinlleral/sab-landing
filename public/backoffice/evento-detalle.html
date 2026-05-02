@@ -222,6 +222,7 @@
               <p style="color:#888;font-size:.875rem;margin-bottom:16px;">
                 Las tandas son <strong>secuenciales</strong>: solo una está vigente por vez (la primera en orden que no esté agotada ni vencida).
                 La vigente determina el precio que ve el público. Dejá capacidad o fecha límite en blanco para que esa condición no aplique.
+                <strong>Aporte %</strong> habilita la opción "Entrada con Aporte" en el checkout (0 = desactivada).
               </p>
               <div class="table-responsive">
                 <table class="bo-table bo-table-tandas">
@@ -229,17 +230,18 @@
                     <tr>
                       <th style="width:60px;">Orden</th>
                       <th>Nombre</th>
-                      <th style="width:120px;">Precio</th>
-                      <th style="width:120px;">Capacidad</th>
-                      <th style="width:90px;">Vendidas</th>
-                      <th style="width:200px;">Fecha límite</th>
-                      <th style="width:110px;">Estado</th>
+                      <th style="width:110px;">Precio</th>
+                      <th style="width:110px;">Capacidad</th>
+                      <th style="width:80px;">Vendidas</th>
+                      <th style="width:180px;">Fecha límite</th>
+                      <th style="width:90px;" title="Aporte 'A la Gorra' — porcentaje sobre el precio">Aporte&nbsp;%</th>
+                      <th style="width:100px;">Estado</th>
                       <th style="width:70px;">Activa</th>
                       <th style="width:100px;">Acciones</th>
                     </tr>
                   </thead>
                   <tbody id="tandas-body">
-                    <tr><td colspan="9" class="text-center py-3" style="color:#666;">Cargando...</td></tr>
+                    <tr><td colspan="10" class="text-center py-3" style="color:#666;">Cargando...</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -515,7 +517,7 @@
     function renderTandas(tandas) {
       const tbody = document.getElementById('tandas-body');
       if (!tandas.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-3" style="color:#666;">Sin tandas — agregá al menos una para que el evento sea vendible</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center py-3" style="color:#666;">Sin tandas — agregá al menos una para que el evento sea vendible</td></tr>';
         updateDirtyIndicatorGlobal();
         return;
       }
@@ -524,19 +526,22 @@
         const vendidasTxt = t.capacidad !== null ? `${t.cantidadVendida}/${t.capacidad}` : `${t.cantidadVendida}/∞`;
         const disabledBorrar = t.cantidadVendida > 0 ? 'disabled title="No se puede borrar una tanda con ventas"' : '';
         const fechaOriginal = toDatetimeLocal(t.fechaLimite);
+        const aporteOriginal = t.porcentajeAporte ?? 0;
         // data-original-* guarda los valores iniciales para detectar dirty-state.
         return `<tr data-tanda-id="${t.id}"
             data-original-orden="${t.orden}"
             data-original-nombre="${esc(t.nombre)}"
             data-original-precio="${t.precio}"
             data-original-capacidad="${t.capacidad ?? ''}"
-            data-original-fechaLimite="${fechaOriginal}">
+            data-original-fechaLimite="${fechaOriginal}"
+            data-original-porcentajeAporte="${aporteOriginal}">
           <td><input type="number" min="1" class="bo-form-control bo-form-control-sm" name="orden" value="${t.orden}" oninput="checkDirty(${t.id})"></td>
           <td><input type="text" class="bo-form-control bo-form-control-sm" name="nombre" value="${esc(t.nombre)}" oninput="checkDirty(${t.id})"></td>
           <td><input type="number" min="0" class="bo-form-control bo-form-control-sm" name="precio" value="${t.precio}" oninput="checkDirty(${t.id})"></td>
           <td><input type="number" min="${t.cantidadVendida}" class="bo-form-control bo-form-control-sm" name="capacidad" value="${t.capacidad ?? ''}" placeholder="∞" oninput="checkDirty(${t.id})"></td>
           <td style="color:#888;">${vendidasTxt}</td>
           <td><input type="datetime-local" class="bo-form-control bo-form-control-sm" name="fechaLimite" value="${fechaOriginal}" oninput="checkDirty(${t.id})"></td>
+          <td><input type="number" min="0" max="100" class="bo-form-control bo-form-control-sm" name="porcentajeAporte" value="${aporteOriginal}" placeholder="0" title="0 = sin aporte; >0 habilita 'Entrada con Aporte'" oninput="checkDirty(${t.id})"></td>
           <td><span class="${badge.cls}">${badge.text}</span></td>
           <td class="text-center">
             <div class="form-check form-switch d-inline-block">
@@ -568,6 +573,7 @@
         precio: get('precio').value,
         capacidad: get('capacidad').value,
         fechaLimite: get('fechaLimite').value,
+        porcentajeAporte: get('porcentajeAporte').value,
       };
       const orig = {
         orden: row.dataset.originalOrden,
@@ -575,13 +581,15 @@
         precio: row.dataset.originalPrecio,
         capacidad: row.dataset.originalCapacidad,
         fechaLimite: row.dataset.originalFechalimite,  // dataset lowercases el suffix compuesto
+        porcentajeAporte: row.dataset.originalPorcentajeaporte,
       };
       const dirty =
         curr.orden !== orig.orden ||
         curr.nombre !== orig.nombre ||
         curr.precio !== orig.precio ||
         curr.capacidad !== orig.capacidad ||
-        curr.fechaLimite !== orig.fechaLimite;
+        curr.fechaLimite !== orig.fechaLimite ||
+        curr.porcentajeAporte !== orig.porcentajeAporte;
       row.classList.toggle('tanda-row--dirty', dirty);
       const btn = row.querySelector('.btn-tanda-save');
       if (btn) {
@@ -629,12 +637,14 @@
       const get = (name) => row.querySelector(`[name="${name}"]`);
       const capRaw = get('capacidad').value.trim();
       const fechaRaw = get('fechaLimite').value;
+      const aporteRaw = get('porcentajeAporte').value.trim();
       return {
         orden: parseInt(get('orden').value, 10),
         nombre: get('nombre').value.trim(),
         precio: parseInt(get('precio').value, 10),
         capacidad: capRaw === '' ? null : parseInt(capRaw, 10),
         fechaLimite: fechaRaw ? new Date(fechaRaw).toISOString() : null,
+        porcentajeAporte: aporteRaw === '' ? 0 : parseInt(aporteRaw, 10),
         activa: get('activa').checked,
       };
     }

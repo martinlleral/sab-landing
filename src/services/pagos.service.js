@@ -79,6 +79,7 @@ async function procesarPagoAprobado(compraId, mpPaymentId) {
       nombre: compra.nombre,
       evento: compra.evento,
       entradas: entradasParaMail,
+      compra,
     });
   } catch (mailErr) {
     console.error('Error al enviar email (no crítico):', mailErr.message);

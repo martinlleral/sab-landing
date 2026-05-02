@@ -86,8 +86,30 @@ function buildQrAttachments(entradas) {
   }));
 }
 
-function buildHtml({ nombre, evento, entradas }) {
+function formatPesos(n) {
+  return Number(n || 0).toLocaleString('es-AR');
+}
+
+// Bloque visible solo cuando la compra fue "Entrada con Aporte". Agradece y
+// deja constancia del monto extra aportado (por entrada y total) para que el
+// comprador tenga registro en el mail. Vacío si tipoEntrada=base o no viene.
+function buildAporteBlock(compra) {
+  if (!compra || compra.tipoEntrada !== 'aporte' || !compra.excedenteUnitario) return '';
+  const totalAporte = compra.excedenteUnitario * compra.cantidadEntradas;
+  const porUnidad = compra.cantidadEntradas > 1
+    ? ` (${compra.cantidadEntradas} × $${formatPesos(compra.excedenteUnitario)})`
+    : '';
+  return `
+      <div style="background:#e8f5e9; border-radius:8px; padding:14px 16px; margin:16px 0; border-left:4px solid #48bb78;">
+        <p style="margin:0; color:#2f855a; font-size:14px;">
+          🌱 <strong>Entrada con Aporte</strong> — Gracias por sumar $${formatPesos(totalAporte)}${porUnidad} a la cooperativa.
+        </p>
+      </div>`;
+}
+
+function buildHtml({ nombre, evento, entradas, compra }) {
   const esSingular = entradas.length === 1;
+  const aporteBlock = buildAporteBlock(compra);
   // URL pública absoluta del QR. Usamos el PNG ya persistido en disk por
   // qrService.generarQR. Así evitamos data URLs (bloqueadas por Gmail mobile
   // y WhatsApp Web) y CIDs (renderizado inconsistente entre providers).
@@ -124,6 +146,8 @@ function buildHtml({ nombre, evento, entradas }) {
         ${evento.invitado ? `<p style="margin:4px 0;"><strong>Invitado especial:</strong> ${evento.invitado}</p>` : ''}
         <p style="margin:4px 0;"><strong>Dirección:</strong> Espacio Doble T — Calle 23 entre 43 y 44, Barrio La Loma, La Plata</p>
       </div>
+
+      ${aporteBlock}
 
       <h3 style="color:#111;">🎟️ ${esSingular ? 'Tu Entrada' : 'Tus Entradas'}</h3>
       ${qrItems}
@@ -165,11 +189,12 @@ function inlineCidsAsDataUrls(html, attachments) {
   return out;
 }
 
-async function enviarConfirmacion({ email, nombre, evento, entradas }) {
+async function enviarConfirmacion({ email, nombre, evento, entradas, compra }) {
   const http = useBrevoHttp();
-  console.log(`📧 Enviando confirmación a ${email} (${entradas.length} entrada(s), evento: ${evento.nombre}) — transport: ${http ? 'brevo-http' : 'smtp'}`);
+  const aporteTag = compra?.tipoEntrada === 'aporte' ? ' [aporte]' : '';
+  console.log(`📧 Enviando confirmación a ${email} (${entradas.length} entrada(s)${aporteTag}, evento: ${evento.nombre}) — transport: ${http ? 'brevo-http' : 'smtp'}`);
 
-  const html = buildHtml({ nombre, evento, entradas });
+  const html = buildHtml({ nombre, evento, entradas, compra });
   const attachments = buildQrAttachments(entradas);
   const subject = `🎟️ ${entradas.length === 1 ? 'Tu entrada' : 'Tus entradas'} para ${evento.nombre}`;
 
@@ -274,4 +299,4 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
   });
 }
 
-module.exports = { enviarConfirmacion, enviarInvitacion };
+module.exports = { enviarConfirmacion, enviarInvitacion, _buildHtmlForTest: buildHtml };

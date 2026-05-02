@@ -728,6 +728,15 @@
               <label class="form-label" for="modal-telefono">Teléfono</label>
               <input type="tel" class="form-control" id="modal-telefono" placeholder="11 1234-5678" autocomplete="tel">
             </div>
+            <div class="col-12" id="tipo-entrada-section" style="display:none;">
+              <label class="form-label">Tipo de entrada</label>
+              <div class="d-flex gap-2 flex-wrap" id="tipo-entrada-options">
+                <!-- renderizado por JS según tandaVigente.porcentajeAporte -->
+              </div>
+              <div class="form-text" style="font-size:.8rem;color:#a0aec0;margin-top:6px;">
+                <i class="bi bi-info-circle me-1"></i>El aporte va íntegro a la cooperativa.
+              </div>
+            </div>
             <div class="col-12">
               <label class="form-label" for="modal-cantidad">Cantidad de entradas *</label>
               <select class="form-select" id="modal-cantidad" onchange="updateTotal()">

@@ -18,6 +18,16 @@ function toDateOrNull(v) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// Aporte "A la Gorra" — entero 0-100. 0 = la tanda NO ofrece aporte; >0 habilita
+// la opción "Entrada con Aporte $X" en el checkout. Tope superior 100 % evita
+// configuraciones absurdas (un aporte de 500 % sería casi seguro un typo).
+function toPorcentajeAporte(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  return n;
+}
+
 // Adjunta `estado` (vigente/proxima/agotada/vencida/desactivada) a cada tanda
 // del array. Cálculo único: corre getTandaVigente una vez y deriva el resto.
 function adjuntarEstados(tandas) {
@@ -46,11 +56,16 @@ async function adminListar(req, res) {
 
 async function adminCrear(req, res) {
   try {
-    const { eventoId, nombre, precio, orden, activa, capacidad, fechaLimite } = req.body;
+    const { eventoId, nombre, precio, orden, activa, capacidad, fechaLimite, porcentajeAporte } = req.body;
 
     if (!eventoId) return res.status(400).json({ error: 'Falta eventoId' });
     if (!nombre || !precio || orden === undefined) {
       return res.status(400).json({ error: 'nombre, precio y orden son obligatorios' });
+    }
+
+    if (porcentajeAporte !== undefined && porcentajeAporte !== null && porcentajeAporte !== '' &&
+        toPorcentajeAporte(porcentajeAporte) === null) {
+      return res.status(400).json({ error: 'porcentajeAporte debe ser un entero entre 0 y 100' });
     }
 
     const evento = await prisma.evento.findUnique({ where: { id: parseInt(eventoId, 10) } });
@@ -67,6 +82,7 @@ async function adminCrear(req, res) {
           activa: activa === undefined ? true : toBool(activa),
           capacidad: toIntOrNull(capacidad),
           fechaLimite: toDateOrNull(fechaLimite),
+          porcentajeAporte: toPorcentajeAporte(porcentajeAporte) ?? 0,
         },
       });
       return res.status(201).json(tanda);
@@ -88,7 +104,7 @@ async function adminActualizar(req, res) {
     const existing = await prisma.tanda.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Tanda no encontrada' });
 
-    const { nombre, precio, orden, activa, capacidad, fechaLimite } = req.body;
+    const { nombre, precio, orden, activa, capacidad, fechaLimite, porcentajeAporte } = req.body;
 
     const data = {};
     if (nombre !== undefined) data.nombre = String(nombre).trim();
@@ -97,6 +113,13 @@ async function adminActualizar(req, res) {
     if (activa !== undefined) data.activa = toBool(activa);
     if (capacidad !== undefined) data.capacidad = toIntOrNull(capacidad);
     if (fechaLimite !== undefined) data.fechaLimite = toDateOrNull(fechaLimite);
+    if (porcentajeAporte !== undefined) {
+      const n = toPorcentajeAporte(porcentajeAporte);
+      if (n === null && porcentajeAporte !== null && porcentajeAporte !== '') {
+        return res.status(400).json({ error: 'porcentajeAporte debe ser un entero entre 0 y 100' });
+      }
+      data.porcentajeAporte = n ?? 0;
+    }
 
     // Proteger la regla: capacidad nunca puede bajar por debajo de lo ya vendido,
     // si quedara negativo se interpretaría como stock disponible infinito al restar.

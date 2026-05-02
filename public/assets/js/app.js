@@ -18,6 +18,11 @@ let eventosDisponibles = [];
 // { codigo, descuentoUnitario, tipo, valor } cuando hay uno validado.
 let cuponAplicado = null;
 
+// Tipo de entrada seleccionado en el modal: 'base' | 'aporte'. Por default 'base'.
+// Solo cambia a 'aporte' cuando la tanda vigente tiene porcentajeAporte > 0 Y
+// el comprador elige la opción "Entrada con Aporte".
+let tipoEntradaSeleccionado = 'base';
+
 // Sanitización XSS — escapar HTML en datos del CMS
 function esc(str) {
   if (!str) return '';
@@ -542,6 +547,9 @@ function onEventoSeleccionadoChange() {
   // evento. Si quedó uno del evento anterior, hay que quitarlo antes de mostrar
   // el nuevo precio para evitar mostrar un total con descuento que no aplica.
   if (cuponAplicado) quitarCupon();
+  // Cambiar de evento también resetea el tipo de entrada (cada tanda decide
+  // si ofrece aporte y con qué porcentaje).
+  tipoEntradaSeleccionado = 'base';
 
   const ev = getEventoSeleccionado();
   const nombreEl = document.getElementById('modal-evento-nombre');
@@ -573,6 +581,7 @@ function onEventoSeleccionadoChange() {
       flyerWrap.style.display = 'none';
     }
   }
+  renderTipoEntradaSection();
   updateTotal();
   updateBtnPagarState(ev);
 }
@@ -619,6 +628,15 @@ function updateBtnPagarState(ev) {
   btn.onclick = () => handleComprar();
 }
 
+// Calcula el excedente unitario en pesos cuando el comprador eligió "aporte".
+// Devuelve 0 si elige base o si la tanda no ofrece aporte.
+function calcularExcedenteUnitario() {
+  if (tipoEntradaSeleccionado !== 'aporte') return 0;
+  const ev = getEventoSeleccionado();
+  if (!ev || !ev.tandaVigente || !ev.tandaVigente.porcentajeAporte) return 0;
+  return Math.round(ev.tandaVigente.precio * (ev.tandaVigente.porcentajeAporte / 100));
+}
+
 function updateTotal() {
   const cantSelect = document.getElementById('modal-cantidad');
   const precioInput = document.getElementById('modal-precio-unit');
@@ -627,29 +645,117 @@ function updateTotal() {
   if (!cantSelect || !precioInput || !totalEl) return;
 
   const cant = parseInt(cantSelect.value) || 1;
-  const precio = parseInt(precioInput.value) || 0;
-  const subtotal = cant * precio;
+  const precioBase = parseInt(precioInput.value) || 0;
+  const excedente = calcularExcedenteUnitario();
+  const precioUnit = precioBase + excedente;
+  const subtotal = cant * precioUnit;
 
+  // El descuento del cupón se aplica solo sobre la base (regla A2 del Sprint 3).
+  // El aporte siempre llega íntegro a la coop, aún con cupón.
   const descuentoUnit = cuponAplicado?.descuentoUnitario || 0;
   const descuentoTotal = descuentoUnit * cant;
   const total = Math.max(0, subtotal - descuentoTotal);
 
   totalEl.textContent = `$ ${formatPrecio(total)}`;
 
-  // Breakdown visible solo cuando hay descuento aplicado.
+  // Breakdown visible cuando hay descuento O cuando hay excedente por aporte.
   const breakdown = document.getElementById('modal-breakdown');
   if (breakdown) {
-    if (descuentoTotal > 0) {
+    if (descuentoTotal > 0 || excedente > 0) {
       breakdown.style.display = 'block';
       const subEl = document.getElementById('modal-subtotal');
       const descEl = document.getElementById('modal-descuento');
       if (subEl) subEl.textContent = `$ ${formatPrecio(subtotal)}`;
-      if (descEl) descEl.textContent = `- $ ${formatPrecio(descuentoTotal)}`;
+      if (descEl) {
+        // Bootstrap .d-flex incluye !important, así que mutar style.display
+        // queda sin efecto. Alternamos clases d-flex/d-none (ambas !important)
+        // para que el toggle funcione siempre.
+        const descRow = descEl.parentElement;
+        if (descRow) {
+          if (descuentoTotal > 0) {
+            descRow.classList.remove('d-none');
+            descRow.classList.add('d-flex');
+            descEl.textContent = `- $ ${formatPrecio(descuentoTotal)}`;
+          } else {
+            descRow.classList.remove('d-flex');
+            descRow.classList.add('d-none');
+          }
+        }
+      }
     } else {
       breakdown.style.display = 'none';
     }
   }
 }
+
+// ============================================
+// TIPO DE ENTRADA (base vs aporte "A la Gorra")
+// ============================================
+
+function renderTipoEntradaSection() {
+  const section = document.getElementById('tipo-entrada-section');
+  const opts = document.getElementById('tipo-entrada-options');
+  if (!section || !opts) return;
+
+  const ev = getEventoSeleccionado();
+  const tanda = ev?.tandaVigente;
+  const porcentaje = tanda?.porcentajeAporte || 0;
+
+  // Sin aporte habilitado → ocultar sección y resetear a base
+  if (!tanda || porcentaje <= 0) {
+    section.style.display = 'none';
+    tipoEntradaSeleccionado = 'base';
+    return;
+  }
+
+  // Calcular precios para mostrar en cada card
+  const precioBase = tanda.precio;
+  const excedente = Math.round(precioBase * (porcentaje / 100));
+  const precioConAporte = precioBase + excedente;
+
+  section.style.display = 'block';
+
+  const cardStyle = (active) => `
+    flex:1;min-width:140px;padding:12px 14px;
+    background:${active ? 'rgba(196,56,75,.08)' : '#0a0a0a'};
+    border:1px solid ${active ? '#c4384b' : '#2a2a2a'};
+    border-radius:6px;cursor:pointer;
+    color:${active ? '#f0ece8' : '#b0aaa2'};
+    text-align:left;transition:all .15s;
+  `.replace(/\s+/g, ' ').trim();
+
+  const baseActive = tipoEntradaSeleccionado === 'base';
+  const aporteActive = tipoEntradaSeleccionado === 'aporte';
+
+  opts.innerHTML = `
+    <button type="button" data-tipo="base" style="${cardStyle(baseActive)}">
+      <div style="font-size:.78rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">
+        ${baseActive ? '<i class="bi bi-check-circle-fill me-1" style="color:#c4384b;"></i>' : ''}Entrada Base
+      </div>
+      <div style="font-size:1.1rem;font-weight:600;">$ ${formatPrecio(precioBase)}</div>
+    </button>
+    <button type="button" data-tipo="aporte" style="${cardStyle(aporteActive)}">
+      <div style="font-size:.78rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">
+        ${aporteActive ? '<i class="bi bi-check-circle-fill me-1" style="color:#c4384b;"></i>' : ''}Entrada con Aporte
+      </div>
+      <div style="font-size:1.1rem;font-weight:600;">$ ${formatPrecio(precioConAporte)}</div>
+      <div style="font-size:.72rem;color:#48bb78;margin-top:2px;">+$ ${formatPrecio(excedente)} a la coop</div>
+    </button>
+  `;
+
+  opts.querySelectorAll('button[data-tipo]').forEach((btn) => {
+    btn.addEventListener('click', () => seleccionarTipoEntrada(btn.dataset.tipo));
+  });
+}
+
+function seleccionarTipoEntrada(tipo) {
+  if (tipo !== 'base' && tipo !== 'aporte') return;
+  if (tipoEntradaSeleccionado === tipo) return;
+  tipoEntradaSeleccionado = tipo;
+  renderTipoEntradaSection();  // re-render para marcar el activo
+  updateTotal();
+}
+window.seleccionarTipoEntrada = seleccionarTipoEntrada;
 
 // ============================================
 // CUPÓN DE DESCUENTO (modal de compra)
@@ -726,7 +832,11 @@ async function aplicarCupon() {
     const result = await fetchJSON(API.validarCupon, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventoId: evento.id, codigo }),
+      body: JSON.stringify({
+        eventoId: evento.id,
+        codigo,
+        tipoEntrada: tipoEntradaSeleccionado,
+      }),
     });
     if (!result.ok) throw new Error(result.error || 'Cupón no válido');
 
@@ -815,6 +925,7 @@ async function handleComprar() {
       cantidad,
     };
     if (cuponAplicado) body.cuponCodigo = cuponAplicado.codigo;
+    if (tipoEntradaSeleccionado === 'aporte') body.tipoEntrada = 'aporte';
 
     const result = await fetchJSON(API.preferencia, {
       method: 'POST',
