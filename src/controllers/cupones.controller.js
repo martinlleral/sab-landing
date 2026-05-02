@@ -216,26 +216,34 @@ async function adminEliminar(req, res) {
   }
 }
 
-// Mapea los .code del helper de precios a mensajes user-friendly + decide si el
-// mensaje puede revelar info (CUPON_OTRO_EVENTO se uniforma con CUPON_INVALIDO
-// para no exponer la existencia del código en otros eventos).
-function mensajeUsuarioCupon(code) {
-  switch (code) {
+// Mapea los .code internos del helper de precios al par {code, error} público.
+// Tanto el mensaje COMO el code se uniforman para los casos que podrían revelar
+// la existencia de un código (CUPON_OTRO_EVENTO, CUPON_TIPO_INVALIDO) — todos
+// caen en CUPON_INVALIDO/"Cupón no válido". Los códigos válidos pero no aplicables
+// (vencido, agotado, aporte) sí mantienen su code específico para que el front
+// pueda darle UX al comprador.
+function respuestaUsuarioCupon(internalCode) {
+  switch (internalCode) {
     case 'CUPON_VENCIDO':
-      return 'Este cupón está vencido';
+      return { code: 'CUPON_VENCIDO', error: 'Este cupón está vencido' };
     case 'CUPON_AGOTADO':
-      return 'Este cupón ya alcanzó su tope de usos';
+      return { code: 'CUPON_AGOTADO', error: 'Este cupón ya alcanzó su tope de usos' };
     case 'APORTE_NO_HABILITADO':
-      return 'Esta tanda no admite entrada con aporte';
+      return { code: 'APORTE_NO_HABILITADO', error: 'Esta tanda no admite entrada con aporte' };
     case 'TIPO_ENTRADA_INVALIDO':
-      return 'Tipo de entrada inválido';
+      return { code: 'TIPO_ENTRADA_INVALIDO', error: 'Tipo de entrada inválido' };
     case 'CUPON_INVALIDO':
     case 'CUPON_OTRO_EVENTO':
     case 'CUPON_TIPO_INVALIDO':
     default:
-      return 'Cupón no válido';
+      return { code: 'CUPON_INVALIDO', error: 'Cupón no válido' };
   }
 }
+
+// Tope defensivo para el codigo recibido. Códigos reales son cortos (≤ 12 chars
+// típico). 50 deja margen para campañas largas tipo "AMIGOS-DEL-COLECTIVO-2026"
+// pero corta payloads de KB/MB que solo sirven para CPU-burn.
+const CODIGO_MAX_LEN = 50;
 
 // Endpoint público: preview de descuento sin reservar uso ni crear Compra.
 // Lo usa el modal de checkout del público para mostrar el precio nuevo antes
@@ -244,12 +252,25 @@ async function validarPublico(req, res) {
   try {
     const { eventoId, codigo, tipoEntrada } = req.body || {};
 
-    if (!eventoId || !codigo) {
+    // Presencia: distinguir "no vino" de "vino con valor inválido" (ej. 0).
+    if (eventoId === undefined || eventoId === null || codigo === undefined || codigo === null || codigo === '') {
       return res.status(400).json({ ok: false, error: 'Faltan eventoId o codigo' });
     }
 
+    const eventoIdNum = parseInt(eventoId, 10);
+    if (!Number.isInteger(eventoIdNum) || eventoIdNum <= 0) {
+      return res.status(400).json({ ok: false, error: 'eventoId inválido' });
+    }
+
+    if (typeof codigo !== 'string' && typeof codigo !== 'number') {
+      return res.status(400).json({ ok: false, error: 'codigo inválido' });
+    }
+    if (String(codigo).length > CODIGO_MAX_LEN) {
+      return res.status(400).json({ ok: false, error: 'Código demasiado largo' });
+    }
+
     const evento = await prisma.evento.findUnique({
-      where: { id: parseInt(eventoId, 10) },
+      where: { id: eventoIdNum },
       include: { tandas: true },
     });
     if (!evento || !evento.estaPublicado || evento.estaAgotado) {
@@ -266,11 +287,12 @@ async function validarPublico(req, res) {
       precio = await calcularPrecioFinal(tandaVigente, { tipoEntrada, cuponCodigo: codigo });
     } catch (err) {
       if (err.code) {
-        return res.status(400).json({
-          ok: false,
-          error: mensajeUsuarioCupon(err.code),
-          code: err.code,
-        });
+        // Logging interno con el code real para auditar bruteforce/intentos sospechosos.
+        // El response al cliente puede llevar el code uniformado (ver respuestaUsuarioCupon).
+        if (err.code === 'CUPON_OTRO_EVENTO') {
+          console.warn(`[cupones/validar] intento con código de otro evento: eventoId=${eventoIdNum}`);
+        }
+        return res.status(400).json({ ok: false, ...respuestaUsuarioCupon(err.code) });
       }
       throw err;
     }

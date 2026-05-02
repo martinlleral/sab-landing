@@ -189,11 +189,12 @@ async function main() {
     const rOtroEvento = await call(mockReq({ eventoId: ev5.id, codigo: 'OTROEVENTO' }));
 
     checks.push({
-      name: '🔒 cupón inexistente → "Cupón no válido"',
+      name: '🔒 cupón inexistente → "Cupón no válido" + code=CUPON_INVALIDO',
       pass:
         rNoExiste.statusCode === 400 &&
-        rNoExiste.body?.error === 'Cupón no válido',
-      detail: `error="${rNoExiste.body?.error}"`,
+        rNoExiste.body?.error === 'Cupón no válido' &&
+        rNoExiste.body?.code === 'CUPON_INVALIDO',
+      detail: `error="${rNoExiste.body?.error}" code=${rNoExiste.body?.code}`,
     });
     checks.push({
       name: '🔒 cupón de otro evento → MISMO mensaje "Cupón no válido" (no revela existencia)',
@@ -203,9 +204,18 @@ async function main() {
       detail: `error="${rOtroEvento.body?.error}"`,
     });
     checks.push({
-      name: '🔒 mensajes idénticos garantizan que un atacante no puede deducir si un código existe',
-      pass: rNoExiste.body?.error === rOtroEvento.body?.error,
-      detail: `idénticos=${rNoExiste.body?.error === rOtroEvento.body?.error}`,
+      name: '🔒 cupón de otro evento → code=CUPON_INVALIDO (NO debe filtrar CUPON_OTRO_EVENTO)',
+      pass:
+        rOtroEvento.body?.code === 'CUPON_INVALIDO' &&
+        rOtroEvento.body?.code !== 'CUPON_OTRO_EVENTO',
+      detail: `code=${rOtroEvento.body?.code}`,
+    });
+    checks.push({
+      name: '🔒 mensajes Y codes idénticos garantizan que un atacante no puede deducir si un código existe',
+      pass:
+        rNoExiste.body?.error === rOtroEvento.body?.error &&
+        rNoExiste.body?.code === rOtroEvento.body?.code,
+      detail: `error idéntico=${rNoExiste.body?.error === rOtroEvento.body?.error} code idéntico=${rNoExiste.body?.code === rOtroEvento.body?.code}`,
     });
 
     // ============================================
@@ -235,6 +245,35 @@ async function main() {
 
     const r7b = await call(mockReq({ eventoId: 1 }));
     checks.push({ name: 'sin codigo → 400', pass: r7b.statusCode === 400, detail: `status=${r7b.statusCode}` });
+
+    // Validaciones de input — fail fast antes de tocar Prisma
+    const r7c = await call(mockReq({ eventoId: 'abc', codigo: 'X' }));
+    checks.push({
+      name: '🔒 eventoId no numérico → 400 con error específico (no llega a Prisma)',
+      pass: r7c.statusCode === 400 && /eventoId inv/i.test(r7c.body?.error),
+      detail: `status=${r7c.statusCode} error="${r7c.body?.error}"`,
+    });
+
+    const r7d = await call(mockReq({ eventoId: 0, codigo: 'X' }));
+    checks.push({
+      name: '🔒 eventoId=0 → 400 (rechaza no-positivos)',
+      pass: r7d.statusCode === 400 && /eventoId inv/i.test(r7d.body?.error),
+      detail: `status=${r7d.statusCode} error="${r7d.body?.error}"`,
+    });
+
+    const r7e = await call(mockReq({ eventoId: 1, codigo: 'A'.repeat(51) }));
+    checks.push({
+      name: '🔒 codigo > 50 chars → 400 con error específico (CPU-burn defense)',
+      pass: r7e.statusCode === 400 && /demasiado largo/i.test(r7e.body?.error),
+      detail: `status=${r7e.statusCode} error="${r7e.body?.error}"`,
+    });
+
+    const r7f = await call(mockReq({ eventoId: 1, codigo: { hack: true } }));
+    checks.push({
+      name: '🔒 codigo de tipo objeto → 400 (rechaza tipos no string/number)',
+      pass: r7f.statusCode === 400 && /codigo inv/i.test(r7f.body?.error),
+      detail: `status=${r7f.statusCode} error="${r7f.body?.error}"`,
+    });
 
     const evNoPub = await setupEvento({ sufijo: 'nopub', estaPublicado: false });
     await crearCupon(evNoPub.tandas[0].eventoId, { codigo: 'XXX' });
