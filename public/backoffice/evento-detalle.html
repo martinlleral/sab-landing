@@ -323,12 +323,118 @@
           </div>
         </div>
 
+        <!-- Cupones de descuento (solo en modo edición) -->
+        <div id="cupones-section" style="display:none;" class="mt-4">
+          <div class="bo-card">
+            <div class="bo-card-header d-flex justify-content-between align-items-center">
+              <h5 class="bo-card-title mb-0"><i class="bi bi-tag me-2"></i>Cupones de descuento</h5>
+              <button type="button" class="btn-bo-primary btn-sm" id="btn-abrir-cupon">
+                <i class="bi bi-plus-lg"></i> Agregar cupón
+              </button>
+            </div>
+            <div class="bo-card-body">
+              <p style="color:#888;font-size:.875rem;margin-bottom:16px;">
+                Los códigos son <strong>case-insensitive</strong> (los compradores pueden ingresarlos en mayúscula o minúscula).
+                El descuento se aplica solo sobre el <strong>precio base</strong> de la tanda — si la entrada incluye aporte "A la Gorra",
+                ese excedente nunca se descuenta.
+              </p>
+
+              <!-- Formulario de creación (oculto por default) -->
+              <div id="cupon-crear-card" style="display:none;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:16px;margin-bottom:16px;">
+                <h6 style="color:#cbd5e0;margin-bottom:12px;"><i class="bi bi-plus-circle me-2"></i>Nuevo cupón</h6>
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <label class="bo-form-label">Código *</label>
+                    <input type="text" class="bo-form-control" id="cupon-codigo" placeholder="AMIGOS25" style="text-transform:uppercase;" maxlength="40">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="bo-form-label">Tipo *</label>
+                    <select class="bo-form-control" id="cupon-tipo">
+                      <option value="porcentaje">Porcentaje</option>
+                      <option value="monto">Monto fijo</option>
+                    </select>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="bo-form-label">Valor *</label>
+                    <div class="input-group">
+                      <input type="number" class="bo-form-control" id="cupon-valor" min="1" placeholder="25">
+                      <span class="input-group-text" id="cupon-valor-sufijo" style="background:#2a2a2a;color:#cbd5e0;border-color:#2a2a2a;">%</span>
+                    </div>
+                  </div>
+                  <div class="col-md-2">
+                    <label class="bo-form-label">Tope de usos</label>
+                    <input type="number" class="bo-form-control" id="cupon-tope-usos" min="1" placeholder="∞">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="bo-form-label">Vence (opcional)</label>
+                    <input type="datetime-local" class="bo-form-control" id="cupon-valido-hasta">
+                  </div>
+                  <div class="col-md-3 d-flex align-items-end">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="cupon-activo" checked>
+                      <label class="form-check-label bo-switch-label" for="cupon-activo">Activo</label>
+                    </div>
+                  </div>
+                  <div class="col-md-5 d-flex align-items-end gap-2">
+                    <button type="button" class="btn-bo-primary flex-fill" id="btn-cupon-crear">
+                      <i class="bi bi-plus-lg me-1"></i>Crear cupón
+                    </button>
+                    <button type="button" class="btn-bo-secondary" id="btn-cupon-cancelar">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Warnings post-creación (regla C) -->
+              <div id="cupones-warnings" style="display:none;margin-bottom:16px;"></div>
+
+              <div class="table-responsive">
+                <table class="bo-table">
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th style="width:120px;">Tipo</th>
+                      <th style="width:100px;">Valor</th>
+                      <th style="width:120px;">Usos</th>
+                      <th style="width:180px;">Vence</th>
+                      <th style="width:80px;">Activo</th>
+                      <th style="width:60px;">Detalle</th>
+                      <th style="width:60px;">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cupones-body">
+                    <tr><td colspan="8" class="text-center py-3" style="color:#666;">Cargando...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="cupones-feedback" style="display:none;margin-top:12px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal de detalle (usos del cupón) -->
+        <div class="modal fade" id="cupon-detalle-modal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content" style="background:#1a1a1a;color:#cbd5e0;border:1px solid #2a2a2a;">
+              <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+                <h5 class="modal-title" id="cupon-detalle-titulo">Usos del cupón</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+              </div>
+              <div class="modal-body" id="cupon-detalle-body">
+                Cargando...
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </main>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/backoffice/assets/js/bo.js"></script>
+  <script src="/backoffice/assets/js/cupones.js"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const eventoId = params.get('id');
@@ -343,6 +449,7 @@
         document.getElementById('tandas-section').style.display = 'block';
         document.getElementById('compras-section').style.display = 'block';
         document.getElementById('invitaciones-section').style.display = 'block';
+        document.getElementById('cupones-section').style.display = 'block';
 
         // En edición, precio/cupo se gestionan vía Tandas. Ocultamos la card
         // tradicional + quitamos `required` para que el form pueda submitear.
@@ -356,6 +463,7 @@
         loadEvento(eventoId);
         cargarTandas();
         cargarInvitaciones();
+        initCupones(parseInt(eventoId, 10));
       }
 
       document.getElementById('eventoForm').addEventListener('submit', saveEvento);
