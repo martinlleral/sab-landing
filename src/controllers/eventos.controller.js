@@ -17,7 +17,7 @@ async function getDestacado(req, res) {
   try {
     const evento = await prisma.evento.findFirst({
       where: { esDestacado: true, estaPublicado: true },
-      include: { tandas: true },
+      include: { tandas: { orderBy: { orden: 'asc' } } },
     });
     if (!evento) return res.status(404).json({ error: 'No hay evento destacado' });
     return res.json(adjuntarTandaVigente(evento));
@@ -36,7 +36,7 @@ async function getProximos(req, res) {
       },
       orderBy: { fecha: 'asc' },
       take: 3,
-      include: { tandas: true },
+      include: { tandas: { orderBy: { orden: 'asc' } } },
     });
     return res.json(eventos.map(adjuntarTandaVigente));
   } catch (err) {

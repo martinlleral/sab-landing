@@ -134,8 +134,8 @@
           <p class="hero-guest" id="hero-invitado-wrap">
             Invitado especial: <strong id="hero-invitado"></strong>
           </p>
-          <p class="hero-precio" id="hero-precio-wrap">
-            Desde <strong id="hero-precio">$12.000</strong>
+          <p class="hero-precio" id="hero-precio-wrap" style="display:none;">
+            <strong id="hero-precio">—</strong>
           </p>
           <button class="btn-comprar" id="btn-comprar" data-bs-toggle="modal" data-bs-target="#modalCompra">
             COMPRAR ENTRADAS
@@ -696,6 +696,9 @@
             <div class="nombre" id="modal-evento-nombre">—</div>
             <div class="fecha" id="modal-evento-fecha">—</div>
           </div>
+
+          <!-- Tandas del evento (visible solo cuando hay 2+) -->
+          <div id="modal-tandas-info" style="display:none;margin-top:14px;margin-bottom:6px;"></div>
 
           <!-- Error -->
           <div id="modal-error" class="alert alert-danger py-2 small" style="display:none;"></div>

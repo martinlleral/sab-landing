@@ -339,9 +339,14 @@ function renderDestacado(evento) {
   // La card "Cuándo" usa 2 líneas — día de la semana (ej. "Miércoles") arriba
   // y fecha corta sin año (ej. "29 de abril") debajo. La hora queda en su
   // línea como detail.
-  // Precio mostrado = tandaVigente.precio. Si no hay tanda vigente, ocultamos
-  // el precio (el evento no es vendible ahora).
-  const precioMostrado = tandaVigente ? tandaVigente.precio : null;
+  // Precio público: usa la primera tanda (más barata histórica) con etiqueta
+  // "Desde " si hay 2+ tandas. Si el evento se quedó sin tandas vigentes pero
+  // existió alguna, igual mostramos el precio histórico — la disponibilidad
+  // se comunica por el botón ("AGOTADO"), no escondiendo el precio.
+  const precioInfo = getPrecioPublico(evento);
+  const precioPublicoTxt = precioInfo.precio !== null
+    ? `${precioInfo.label}$${formatPrecio(precioInfo.precio)}`
+    : null;
 
   const infoDia = document.getElementById('info-dia');
   const infoFecha = document.getElementById('info-fecha');
@@ -350,16 +355,18 @@ function renderDestacado(evento) {
   if (infoDia) infoDia.textContent = formatDiaSemana(evento.fecha);
   if (infoFecha) infoFecha.textContent = formatFechaCorta(evento.fecha);
   if (infoHora) infoHora.textContent = evento.hora + ' hs';
-  if (infoPrecio) infoPrecio.textContent = precioMostrado ? `$${formatPrecio(precioMostrado)}` : '—';
+  if (infoPrecio) infoPrecio.textContent = precioPublicoTxt || '—';
 
-  // Precio visible en hero
-  const elPrecio = document.getElementById('hero-precio');
+  // Hero: el wrap completo se reescribe para condicionar el "Desde " sin que
+  // quede pegado al $ cuando no corresponde (caso 1 sola tanda).
   const elPrecioWrap = document.getElementById('hero-precio-wrap');
-  if (elPrecio && precioMostrado) {
-    elPrecio.textContent = `$${formatPrecio(precioMostrado)}`;
-  }
   if (elPrecioWrap) {
-    elPrecioWrap.style.display = precioMostrado ? '' : 'none';
+    if (precioInfo.precio !== null) {
+      elPrecioWrap.innerHTML = `${precioInfo.label}<strong id="hero-precio">$${formatPrecio(precioInfo.precio)}</strong>`;
+      elPrecioWrap.style.display = '';
+    } else {
+      elPrecioWrap.style.display = 'none';
+    }
   }
 
   if (btnComprar) {
@@ -423,7 +430,10 @@ function renderProximos(eventos) {
     // Eventos externos no usan tandas: la venta vive en un sitio de terceros.
     // Solo se marcan agotados cuando el admin lo pone a mano.
     const agotado = ev.estaAgotado || (!esExternoActivo && tv === null);
-    const precioMostrado = tv ? tv.precio : null;
+    // Precio público de la card: misma regla que el hero — primera tanda con
+    // "Desde " si hay 2+. El estado "agotado" se comunica por el overlay y el
+    // botón disabled, no ocultando el precio.
+    const precioInfo = getPrecioPublico(ev);
     const imgTag = ev.flyerUrl
       ? `<img src="${esc(ev.flyerUrl)}" alt="${esc(ev.nombre)}" class="evento-card-img">`
       : `<img src="/assets/img/event-default.jpg" alt="${esc(ev.nombre)}" class="evento-card-img evento-card-img--default">`;
@@ -437,8 +447,8 @@ function renderProximos(eventos) {
       : `<button type="button" class="btn-comprar-card" data-bs-toggle="modal" data-bs-target="#modalCompra" data-evento-id="${ev.id}">
            <i class="bi bi-ticket-perforated me-1"></i> Comprar
          </button>`;
-    const precioLinea = precioMostrado
-      ? `<div class="evento-card-precio">$ ${formatPrecio(precioMostrado)}</div>`
+    const precioLinea = precioInfo.precio !== null
+      ? `<div class="evento-card-precio">${precioInfo.label}$ ${formatPrecio(precioInfo.precio)}</div>`
       : '';
     return `
     <div class="col-md-4 mb-4">
@@ -563,6 +573,7 @@ function onEventoSeleccionadoChange() {
     if (fechaEl) fechaEl.textContent = '—';
     if (precioEl) precioEl.value = 0;
     if (flyerWrap) flyerWrap.style.display = 'none';
+    renderTandasInfo(null);
     updateTotal();
     updateBtnPagarState(null);
     return;
@@ -581,6 +592,7 @@ function onEventoSeleccionadoChange() {
       flyerWrap.style.display = 'none';
     }
   }
+  renderTandasInfo(ev);
   renderTipoEntradaSection();
   updateTotal();
   updateBtnPagarState(ev);
@@ -1086,6 +1098,87 @@ function formatFechaCorta(fechaStr) {
 
 function formatPrecio(valor) {
   return Number(valor).toLocaleString('es-AR');
+}
+
+// Etiqueta de precio público (hero, cards, "El Evento"):
+// usa la primera tanda por orden (la más barata histórica del evento) y
+// agrega "Desde " solo si hay 2+ tandas distintas. Si solo hay una tanda,
+// es engañoso decir "Desde" — el precio no escala. Devuelve {label, precio}
+// con precio=null cuando el evento no tiene tandas (estado patológico).
+function getPrecioPublico(evento) {
+  const tandas = evento && evento.tandas;
+  if (!Array.isArray(tandas) || tandas.length === 0) {
+    return { label: '', precio: null };
+  }
+  const primera = tandas[0];
+  return {
+    label: tandas.length >= 2 ? 'Desde ' : '',
+    precio: primera.precio,
+  };
+}
+
+// Renderiza la lista de tandas dentro del modal de compra. Solo se muestra
+// cuando el evento tiene 2+ tandas — con una sola, no aporta info.
+//
+// Estados de cada tanda:
+//   - vigente   → la que se está cobrando ahora (badge ACTUAL, color SAB)
+//   - anterior  → ya pasó (orden < vigente.orden), tachada con precio histórico
+//   - próxima   → todavía no abrió (orden > vigente.orden), grisada con badge
+//   - todas-pasadas → si no hay vigente, todas se pintan como "cerrada"
+function renderTandasInfo(evento) {
+  const wrap = document.getElementById('modal-tandas-info');
+  if (!wrap) return;
+
+  const tandas = (evento && Array.isArray(evento.tandas)) ? evento.tandas : [];
+  if (tandas.length < 2) {
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    return;
+  }
+
+  const vigente = evento.tandaVigente || null;
+  const ordenVigente = vigente ? vigente.orden : null;
+
+  const filas = tandas.map((t) => {
+    let estado;
+    if (vigente && t.id === vigente.id) estado = 'vigente';
+    else if (ordenVigente !== null && t.orden < ordenVigente) estado = 'anterior';
+    else if (ordenVigente !== null && t.orden > ordenVigente) estado = 'proxima';
+    else estado = 'cerrada'; // sin vigente: el evento ya no vende
+
+    const precioFmt = `$ ${formatPrecio(t.precio)}`;
+    if (estado === 'vigente') {
+      return `
+        <div class="tanda-row tanda-row--vigente d-flex justify-content-between align-items-center" style="padding:8px 12px;background:rgba(196,56,75,.12);border:1px solid rgba(196,56,75,.4);border-radius:6px;margin-bottom:6px;">
+          <div>
+            <span style="color:#c4384b;font-weight:600;font-size:.78rem;letter-spacing:1px;text-transform:uppercase;margin-right:8px;">Actual</span>
+            <span style="color:#f0ece8;font-size:.9rem;">${esc(t.nombre)}</span>
+          </div>
+          <strong style="color:#f0ece8;font-size:1rem;">${precioFmt}</strong>
+        </div>`;
+    }
+    if (estado === 'anterior' || estado === 'cerrada') {
+      return `
+        <div class="tanda-row tanda-row--anterior d-flex justify-content-between align-items-center" style="padding:6px 12px;color:#6b6760;margin-bottom:4px;">
+          <span style="font-size:.85rem;">${esc(t.nombre)}</span>
+          <s style="font-size:.85rem;">${precioFmt}</s>
+        </div>`;
+    }
+    // proxima
+    return `
+      <div class="tanda-row tanda-row--proxima d-flex justify-content-between align-items-center" style="padding:6px 12px;color:#a0aca8;margin-bottom:4px;">
+        <span style="font-size:.85rem;">
+          <span style="font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:#6b8074;margin-right:6px;">Próxima</span>${esc(t.nombre)}
+        </span>
+        <span style="font-size:.85rem;">${precioFmt}</span>
+      </div>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div style="font-size:.78rem;letter-spacing:1px;text-transform:uppercase;color:#a0aca8;margin-bottom:8px;">Tandas del evento</div>
+    ${filas}
+  `;
+  wrap.style.display = 'block';
 }
 
 function isValidEmail(email) {
