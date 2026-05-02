@@ -22,61 +22,66 @@ model Home {
 }
 
 model Evento {
-  id            Int      @id @default(autoincrement())
+  id            Int               @id @default(autoincrement())
   nombre        String
   descripcion   String
   fecha         DateTime
   hora          String
-  invitado      String   @default("")
-  flyerUrl      String   @default("")
-  esDestacado   Boolean  @default(false)
-  estaPublicado Boolean  @default(false)
-  estaAgotado   Boolean  @default(false)
-  esExterno     Boolean  @default(false)
+  invitado      String            @default("")
+  flyerUrl      String            @default("")
+  esDestacado   Boolean           @default(false)
+  estaPublicado Boolean           @default(false)
+  estaAgotado   Boolean           @default(false)
+  esExterno     Boolean           @default(false)
   linkExterno   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
   compras       Compra[]
   tandas        Tanda[]
+  cupones       CuponDescuento[]
 }
 
 model Tanda {
-  id              Int       @id @default(autoincrement())
-  eventoId        Int
-  evento          Evento    @relation(fields: [eventoId], references: [id])
-  nombre          String
-  precio          Int
-  orden           Int
-  activa          Boolean   @default(true)
-  capacidad       Int?
-  cantidadVendida Int       @default(0)
-  fechaLimite     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  compras         Compra[]
+  id               Int       @id @default(autoincrement())
+  eventoId         Int
+  evento           Evento    @relation(fields: [eventoId], references: [id])
+  nombre           String
+  precio           Int
+  orden            Int
+  activa           Boolean   @default(true)
+  capacidad        Int?
+  cantidadVendida  Int       @default(0)
+  fechaLimite      DateTime?
+  porcentajeAporte Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  compras          Compra[]
 
   @@unique([eventoId, orden])
 }
 
 model Compra {
-  id               Int       @id @default(autoincrement())
-  eventoId         Int
-  evento           Evento    @relation(fields: [eventoId], references: [id])
-  tandaId          Int?
-  tanda            Tanda?    @relation(fields: [tandaId], references: [id])
-  email            String
-  nombre           String
-  apellido         String
-  telefono         String    @default("")
-  cantidadEntradas Int
-  precioUnitario   Int
-  totalPagado      Int
-  mpPreferenciaId  String    @default("")
-  mpPagoId         String    @default("")
-  mpEstado         String    @default("pending")
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  entradas         Entrada[]
+  id                 Int         @id @default(autoincrement())
+  eventoId           Int
+  evento             Evento      @relation(fields: [eventoId], references: [id])
+  tandaId            Int?
+  tanda              Tanda?      @relation(fields: [tandaId], references: [id])
+  email              String
+  nombre             String
+  apellido           String
+  telefono           String      @default("")
+  cantidadEntradas   Int
+  precioUnitario     Int
+  totalPagado        Int
+  tipoEntrada        String      @default("base")
+  excedenteUnitario  Int         @default(0)
+  mpPreferenciaId    String      @default("")
+  mpPagoId           String      @default("")
+  mpEstado           String      @default("pending")
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  entradas           Entrada[]
+  cuponUsos          CuponUso[]
 }
 
 model Entrada {
@@ -101,4 +106,32 @@ model Usuario {
   activo    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model CuponDescuento {
+  id            Int        @id @default(autoincrement())
+  eventoId      Int
+  evento        Evento     @relation(fields: [eventoId], references: [id])
+  codigo        String     @unique
+  tipo          String
+  valor         Int
+  topeUsos      Int?
+  usosActuales  Int        @default(0)
+  validoHasta   DateTime?
+  activo        Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  usos          CuponUso[]
+}
+
+model CuponUso {
+  id                Int            @id @default(autoincrement())
+  cuponId           Int
+  cupon             CuponDescuento @relation(fields: [cuponId], references: [id])
+  compraId          Int
+  compra            Compra         @relation(fields: [compraId], references: [id])
+  descuentoAplicado Int
+  createdAt         DateTime       @default(now())
+
+  @@unique([compraId])
 }
