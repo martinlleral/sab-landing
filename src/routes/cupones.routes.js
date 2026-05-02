@@ -1,6 +1,11 @@
 const express = require('express');
 const controller = require('../controllers/cupones.controller');
 const { requireAdmin } = require('../middleware/auth.middleware');
+const { cuponesValidarLimiter } = require('../middleware/rate-limit');
+
+// Rutas públicas: montadas en /api/cupones
+const publicRouter = express.Router();
+publicRouter.post('/validar', cuponesValidarLimiter, controller.validarPublico); // POST /api/cupones/validar
 
 // Rutas admin: montadas en /api/admin/cupones
 const adminRouter = express.Router();
@@ -11,4 +16,4 @@ adminRouter.post('/', controller.adminCrear);          // POST /api/admin/cupone
 adminRouter.patch('/:id', controller.adminActualizar); // PATCH /api/admin/cupones/:id
 adminRouter.delete('/:id', controller.adminEliminar);  // DELETE /api/admin/cupones/:id (solo si usosActuales=0)
 
-module.exports = { adminRouter };
+module.exports = { publicRouter, adminRouter };

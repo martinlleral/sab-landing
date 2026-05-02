@@ -26,4 +26,17 @@ const comprasLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes. Esperá un momento.' },
 });
 
-module.exports = { loginLimiter, comprasLimiter };
+// Rate limiter para /api/cupones/validar
+// Objetivo: el endpoint es público y permite chequear si un código de cupón
+// existe/aplica. Sin límite, alguien podría brute-forcear el espacio de códigos.
+// 30 req/min por IP es holgado para uso humano legítimo (alguien probando
+// 2-3 códigos antes de pagar) pero corta scripts. NO afecta crearPreferencia.
+const cuponesValidarLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_CUPON_VALIDAR_MAX, 10) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos de validación. Esperá un momento.' },
+});
+
+module.exports = { loginLimiter, comprasLimiter, cuponesValidarLimiter };

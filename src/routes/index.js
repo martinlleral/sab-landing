@@ -9,7 +9,7 @@ const { publicRouter: eventosPublic, adminRouter: eventosAdmin } = require('./ev
 const { publicRouter: comprasPublic, adminRouter: comprasAdmin } = require('./compras.routes');
 const { publicRouter: homePublic, adminRouter: homeAdmin } = require('./home.routes');
 const { adminRouter: tandasAdmin } = require('./tandas.routes');
-const { adminRouter: cuponesAdmin } = require('./cupones.routes');
+const { publicRouter: cuponesPublic, adminRouter: cuponesAdmin } = require('./cupones.routes');
 const entradasRoutes = require('./entradas.routes');
 const usuariosRoutes = require('./usuarios.routes');
 const backofficeRoutes = require('./backoffice.routes');
@@ -23,6 +23,7 @@ router.get('/api/auth/me', authController.me);
 router.use('/api/eventos', eventosPublic);
 router.use('/api/compras', comprasPublic);
 router.use('/api/home', homePublic);
+router.use('/api/cupones', cuponesPublic);
 
 // API admin — Cache-Control: no-store para no filtrar datos privados vía proxies o btn "atrás"
 router.use('/api/admin', (_req, res, next) => {

@@ -748,6 +748,46 @@
           <!-- Precio oculto -->
           <input type="hidden" id="modal-precio-unit" value="0">
 
+          <!-- Cupón de descuento (plegable) -->
+          <div class="cupon-section mt-3">
+            <button type="button" id="btn-cupon-toggle" class="btn btn-link p-0 text-decoration-none" onclick="toggleCuponPanel()" style="color:#90cdf4;font-size:.9rem;">
+              <i class="bi bi-tag me-1"></i>¿Tenés un código de descuento?
+            </button>
+
+            <div id="cupon-panel" style="display:none;margin-top:8px;">
+              <div id="cupon-form" class="d-flex gap-2">
+                <input type="text" class="form-control form-control-sm" id="modal-cupon-codigo" placeholder="Ej: AMIGOS25" style="text-transform:uppercase;" maxlength="40" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();aplicarCupon();}">
+                <button type="button" class="btn btn-outline-light btn-sm" id="btn-cupon-aplicar" onclick="aplicarCupon()" style="white-space:nowrap;">
+                  Aplicar
+                </button>
+              </div>
+              <div id="cupon-feedback" style="font-size:.8rem;margin-top:4px;min-height:1em;"></div>
+            </div>
+
+            <div id="cupon-activo" style="display:none;background:rgba(72,187,120,.1);border:1px solid rgba(72,187,120,.3);border-radius:6px;padding:8px 12px;margin-top:8px;align-items:center;justify-content:space-between;">
+              <div>
+                <i class="bi bi-check-circle-fill me-2" style="color:#48bb78;"></i>
+                <strong id="cupon-activo-codigo" style="color:#48bb78;">—</strong>
+                <span id="cupon-activo-desc" style="color:#a0aec0;font-size:.8rem;margin-left:6px;">—</span>
+              </div>
+              <button type="button" onclick="quitarCupon()" style="color:#fc8181;font-size:.85rem;border:none;background:transparent;padding:0;">
+                Quitar
+              </button>
+            </div>
+          </div>
+
+          <!-- Breakdown (solo cuando hay descuento) -->
+          <div id="modal-breakdown" style="display:none;font-size:.85rem;color:#a0aec0;margin-top:12px;">
+            <div class="d-flex justify-content-between" style="margin-bottom:4px;">
+              <span>Subtotal</span>
+              <span id="modal-subtotal">$ 0</span>
+            </div>
+            <div class="d-flex justify-content-between" style="color:#48bb78;">
+              <span>Descuento</span>
+              <span id="modal-descuento">- $ 0</span>
+            </div>
+          </div>
+
           <!-- Total -->
           <div class="total-display mt-3">
             <div class="total-label">Total a pagar</div>

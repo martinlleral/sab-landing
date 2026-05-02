@@ -1,5 +1,6 @@
 const prisma = require('../utils/prisma');
-const { TIPO_CUPON, normalizarCodigo } = require('../services/precios.service');
+const { TIPO_CUPON, normalizarCodigo, calcularPrecioFinal } = require('../services/precios.service');
+const { getTandaVigente } = require('../services/tandas.service');
 
 function toBool(v) {
   return v === 'true' || v === true;
@@ -215,7 +216,93 @@ async function adminEliminar(req, res) {
   }
 }
 
+// Mapea los .code del helper de precios a mensajes user-friendly + decide si el
+// mensaje puede revelar info (CUPON_OTRO_EVENTO se uniforma con CUPON_INVALIDO
+// para no exponer la existencia del código en otros eventos).
+function mensajeUsuarioCupon(code) {
+  switch (code) {
+    case 'CUPON_VENCIDO':
+      return 'Este cupón está vencido';
+    case 'CUPON_AGOTADO':
+      return 'Este cupón ya alcanzó su tope de usos';
+    case 'APORTE_NO_HABILITADO':
+      return 'Esta tanda no admite entrada con aporte';
+    case 'TIPO_ENTRADA_INVALIDO':
+      return 'Tipo de entrada inválido';
+    case 'CUPON_INVALIDO':
+    case 'CUPON_OTRO_EVENTO':
+    case 'CUPON_TIPO_INVALIDO':
+    default:
+      return 'Cupón no válido';
+  }
+}
+
+// Endpoint público: preview de descuento sin reservar uso ni crear Compra.
+// Lo usa el modal de checkout del público para mostrar el precio nuevo antes
+// de ir a MP. Rate-limited (ver middleware/rate-limit.js).
+async function validarPublico(req, res) {
+  try {
+    const { eventoId, codigo, tipoEntrada } = req.body || {};
+
+    if (!eventoId || !codigo) {
+      return res.status(400).json({ ok: false, error: 'Faltan eventoId o codigo' });
+    }
+
+    const evento = await prisma.evento.findUnique({
+      where: { id: parseInt(eventoId, 10) },
+      include: { tandas: true },
+    });
+    if (!evento || !evento.estaPublicado || evento.estaAgotado) {
+      return res.status(400).json({ ok: false, error: 'Evento no disponible' });
+    }
+
+    const tandaVigente = getTandaVigente(evento.tandas);
+    if (!tandaVigente) {
+      return res.status(400).json({ ok: false, error: 'Entradas no disponibles para este evento' });
+    }
+
+    let precio;
+    try {
+      precio = await calcularPrecioFinal(tandaVigente, { tipoEntrada, cuponCodigo: codigo });
+    } catch (err) {
+      if (err.code) {
+        return res.status(400).json({
+          ok: false,
+          error: mensajeUsuarioCupon(err.code),
+          code: err.code,
+        });
+      }
+      throw err;
+    }
+
+    if (!precio.cupon) {
+      // calcularPrecioFinal puede devolver cupon=null si cuponCodigo viene vacío
+      // tras normalizar — defensa adicional aunque ya validamos arriba.
+      return res.status(400).json({ ok: false, error: 'Cupón no válido' });
+    }
+
+    return res.json({
+      ok: true,
+      cupon: {
+        codigo: precio.cupon.codigo,
+        tipo: precio.cupon.tipo,
+        valor: precio.cupon.valor,
+      },
+      precio: {
+        base: precio.precioBase,
+        descuento: precio.descuentoUnitario,
+        excedente: precio.excedenteUnitario,
+        total: precio.precioUnitarioFinal,
+      },
+    });
+  } catch (err) {
+    console.error('Error en validarPublico cupon:', err);
+    return res.status(500).json({ ok: false, error: 'Error interno del servidor' });
+  }
+}
+
 module.exports = {
+  validarPublico,
   adminListar,
   adminGetById,
   adminCrear,

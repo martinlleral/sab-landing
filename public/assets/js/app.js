@@ -7,11 +7,16 @@ const API = {
   destacado: '/api/eventos/destacado',
   proximos: '/api/eventos/proximos',
   preferencia: '/api/compras/preferencia',
+  validarCupon: '/api/cupones/validar',
 };
 
 let eventoActual = null;
 let eventosProximos = [];
 let eventosDisponibles = [];
+
+// Estado del cupón aplicado en el modal de compra. null = sin cupón.
+// { codigo, descuentoUnitario, tipo, valor } cuando hay uno validado.
+let cuponAplicado = null;
 
 // Sanitización XSS — escapar HTML en datos del CMS
 function esc(str) {
@@ -473,6 +478,10 @@ function wireModalCompra() {
     const confirmEl = document.getElementById('modal-email-confirm');
     if (confirmEl) confirmEl.value = '';
     onEmailChange();
+    // Reset del cupón al abrir el modal (estado fresco para cada compra).
+    quitarCupon();
+    const cuponPanel = document.getElementById('cupon-panel');
+    if (cuponPanel) cuponPanel.style.display = 'none';
   });
 }
 
@@ -529,6 +538,11 @@ function getEventoSeleccionado() {
 }
 
 function onEventoSeleccionadoChange() {
+  // Cambiar de evento invalida cualquier cupón aplicado: los cupones son por
+  // evento. Si quedó uno del evento anterior, hay que quitarlo antes de mostrar
+  // el nuevo precio para evitar mostrar un total con descuento que no aplica.
+  if (cuponAplicado) quitarCupon();
+
   const ev = getEventoSeleccionado();
   const nombreEl = document.getElementById('modal-evento-nombre');
   const fechaEl = document.getElementById('modal-evento-fecha');
@@ -614,9 +628,139 @@ function updateTotal() {
 
   const cant = parseInt(cantSelect.value) || 1;
   const precio = parseInt(precioInput.value) || 0;
-  const total = cant * precio;
+  const subtotal = cant * precio;
+
+  const descuentoUnit = cuponAplicado?.descuentoUnitario || 0;
+  const descuentoTotal = descuentoUnit * cant;
+  const total = Math.max(0, subtotal - descuentoTotal);
+
   totalEl.textContent = `$ ${formatPrecio(total)}`;
+
+  // Breakdown visible solo cuando hay descuento aplicado.
+  const breakdown = document.getElementById('modal-breakdown');
+  if (breakdown) {
+    if (descuentoTotal > 0) {
+      breakdown.style.display = 'block';
+      const subEl = document.getElementById('modal-subtotal');
+      const descEl = document.getElementById('modal-descuento');
+      if (subEl) subEl.textContent = `$ ${formatPrecio(subtotal)}`;
+      if (descEl) descEl.textContent = `- $ ${formatPrecio(descuentoTotal)}`;
+    } else {
+      breakdown.style.display = 'none';
+    }
+  }
 }
+
+// ============================================
+// CUPÓN DE DESCUENTO (modal de compra)
+// ============================================
+
+function toggleCuponPanel() {
+  const panel = document.getElementById('cupon-panel');
+  if (!panel) return;
+  const wasHidden = panel.style.display === 'none' || !panel.style.display;
+  panel.style.display = wasHidden ? 'block' : 'none';
+  if (wasHidden) {
+    const inp = document.getElementById('modal-cupon-codigo');
+    if (inp) inp.focus();
+  }
+}
+window.toggleCuponPanel = toggleCuponPanel;
+
+function setCuponFeedback(msg, isError = false) {
+  const el = document.getElementById('cupon-feedback');
+  if (!el) return;
+  el.innerHTML = msg
+    ? `<span style="color:${isError ? '#fc8181' : '#48bb78'};">${msg}</span>`
+    : '';
+}
+
+function renderCuponPanel() {
+  const form = document.getElementById('cupon-form');
+  const activo = document.getElementById('cupon-activo');
+  const toggle = document.getElementById('btn-cupon-toggle');
+
+  if (cuponAplicado) {
+    if (form) form.style.display = 'none';
+    if (toggle) toggle.style.display = 'none';
+    if (activo) {
+      activo.style.display = 'flex';
+      const codEl = document.getElementById('cupon-activo-codigo');
+      const descEl = document.getElementById('cupon-activo-desc');
+      if (codEl) codEl.textContent = cuponAplicado.codigo;
+      if (descEl) {
+        descEl.textContent = cuponAplicado.tipo === 'porcentaje'
+          ? `${cuponAplicado.valor}% off`
+          : `$ ${formatPrecio(cuponAplicado.valor)} off`;
+      }
+    }
+  } else {
+    if (form) form.style.display = 'flex';
+    if (activo) activo.style.display = 'none';
+    if (toggle) toggle.style.display = 'inline-block';
+  }
+}
+
+async function aplicarCupon() {
+  const inp = document.getElementById('modal-cupon-codigo');
+  const codigo = (inp?.value || '').trim();
+  if (!codigo) {
+    setCuponFeedback('⚠️ Ingresá un código', true);
+    return;
+  }
+  const evento = getEventoSeleccionado();
+  if (!evento) {
+    setCuponFeedback('⚠️ Seleccioná un evento primero', true);
+    return;
+  }
+
+  const btn = document.getElementById('btn-cupon-aplicar');
+  const originalLabel = btn ? btn.innerHTML : 'Aplicar';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  }
+  setCuponFeedback('');
+
+  try {
+    const result = await fetchJSON(API.validarCupon, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventoId: evento.id, codigo }),
+    });
+    if (!result.ok) throw new Error(result.error || 'Cupón no válido');
+
+    cuponAplicado = {
+      codigo: result.cupon.codigo,
+      descuentoUnitario: result.precio.descuento,
+      tipo: result.cupon.tipo,
+      valor: result.cupon.valor,
+    };
+    renderCuponPanel();
+    updateTotal();
+  } catch (err) {
+    cuponAplicado = null;
+    setCuponFeedback(`❌ ${err.message}`, true);
+    renderCuponPanel();
+    updateTotal();
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalLabel;
+    }
+  }
+}
+window.aplicarCupon = aplicarCupon;
+
+function quitarCupon() {
+  cuponAplicado = null;
+  const inp = document.getElementById('modal-cupon-codigo');
+  if (inp) inp.value = '';
+  setCuponFeedback('');
+  renderCuponPanel();
+  updateTotal();
+}
+window.quitarCupon = quitarCupon;
 
 document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'modal-cantidad') {
@@ -662,17 +806,20 @@ async function handleComprar() {
   if (errorEl) errorEl.style.display = 'none';
 
   try {
+    const body = {
+      eventoId: evento.id,
+      email,
+      nombre,
+      apellido,
+      telefono,
+      cantidad,
+    };
+    if (cuponAplicado) body.cuponCodigo = cuponAplicado.codigo;
+
     const result = await fetchJSON(API.preferencia, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventoId: evento.id,
-        email,
-        nombre,
-        apellido,
-        telefono,
-        cantidad,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (result.init_point) {
