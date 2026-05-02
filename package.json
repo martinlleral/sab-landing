@@ -17,7 +17,10 @@
     "test:smoke:mail": "node scripts/smoke-mail.js",
     "test:loadtest": "node scripts/loadtest-checkout.js",
     "test:integration:qr": "node tests/integration/qr-persistence.test.js",
-    "test:integration:precios": "node tests/integration/precios.test.js"
+    "test:integration:precios": "node tests/integration/precios.test.js",
+    "test:integration:cupones": "node tests/integration/cupones-admin.test.js",
+    "test:integration:compras-cupones": "node tests/integration/compras-cupones.test.js",
+    "test:integration:pagos-cancel": "node tests/integration/pagos-cancelacion.test.js"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const prisma = require('../utils/prisma');
 const qrService = require('./qr.service');
 const brevoService = require('./brevo.service');
+const { liberarCupon } = require('./precios.service');
 
 /**
  * Procesa una compra aprobada: actualiza estado, genera entradas con QR y envía email.
@@ -86,4 +87,46 @@ async function procesarPagoAprobado(compraId, mpPaymentId) {
   return { procesada: true, entradas: entradasParaMail.length };
 }
 
-module.exports = { procesarPagoAprobado };
+/**
+ * Marca una compra `pending` como cancelada/rechazada/etc y libera el cupón
+ * asociado si lo tenía. Atómico: si liberar el cupón falla, el cambio de
+ * estado de la compra también hace rollback (queda pending y el job reintenta).
+ *
+ * Se invoca desde el job `syncPagosPendientes` cuando MP devuelve un estado
+ * terminal o cuando expira la ventana de autocancel. NO se invoca para compras
+ * que ya estuvieron approved — el job filtra esas antes de entrar acá, así que
+ * liberar el cupón siempre es seguro (nunca liberamos un uso real).
+ *
+ * Idempotente: si ya está en estado terminal, devuelve { ya_procesada: true }
+ * sin tocar el cupón.
+ *
+ * @param {number} compraId
+ * @param {'cancelled'|'rejected'|'charged_back'|'refunded'} nuevoEstado
+ * @param {string|number|null} [mpPagoId]
+ * @returns {Promise<{ ya_procesada: boolean } | { procesada: boolean, libero_cupon: boolean }>}
+ */
+async function procesarPagoCancelado(compraId, nuevoEstado, mpPagoId = null) {
+  return prisma.$transaction(async (tx) => {
+    const dataUpdate = { mpEstado: nuevoEstado };
+    if (mpPagoId) dataUpdate.mpPagoId = String(mpPagoId);
+
+    const lockResult = await tx.compra.updateMany({
+      where: { id: compraId, mpEstado: 'pending' },
+      data: dataUpdate,
+    });
+
+    if (lockResult.count === 0) {
+      return { ya_procesada: true };
+    }
+
+    // CuponUso tiene @@unique([compraId]) — a lo sumo 1 por compra.
+    const uso = await tx.cuponUso.findUnique({ where: { compraId } });
+    if (uso) {
+      await liberarCupon(tx, uso.cuponId);
+    }
+
+    return { procesada: true, libero_cupon: !!uso };
+  });
+}
+
+module.exports = { procesarPagoAprobado, procesarPagoCancelado };

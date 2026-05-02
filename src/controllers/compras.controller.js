@@ -6,6 +6,7 @@ const brevoService = require('../services/brevo.service');
 const qrService = require('../services/qr.service');
 const { procesarPagoAprobado } = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
+const { calcularPrecioFinal, reservarCupon, validarCupon } = require('../services/precios.service');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -49,7 +50,7 @@ function verifyMpSignature(req, secret) {
 
 async function crearPreferencia(req, res) {
   try {
-    const { eventoId, email, nombre, apellido, telefono, cantidad } = req.body;
+    const { eventoId, email, nombre, apellido, telefono, cantidad, tipoEntrada, cuponCodigo } = req.body;
 
     if (!eventoId || !email || !nombre || !apellido || !cantidad) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
@@ -77,26 +78,67 @@ async function crearPreferencia(req, res) {
       }
     }
 
-    const total = tandaVigente.precio * cant;
+    // Cálculo del precio (aplica tipoEntrada y, si vino, valida cupón). Errores
+    // del helper traen .code para mapear a 400 con mensaje específico.
+    let precioCalc;
+    try {
+      precioCalc = await calcularPrecioFinal(tandaVigente, { tipoEntrada, cuponCodigo });
+    } catch (err) {
+      if (err.code) return res.status(400).json({ error: err.message, code: err.code });
+      throw err;
+    }
 
-    const compra = await prisma.compra.create({
-      data: {
-        eventoId: evento.id,
-        tandaId: tandaVigente.id,
-        email,
-        nombre,
-        apellido,
-        telefono: telefono || '',
-        cantidadEntradas: cant,
-        precioUnitario: tandaVigente.precio,
-        totalPagado: total,
-        mpEstado: 'pending',
-      },
-    });
+    const totalPagado = precioCalc.precioUnitarioFinal * cant;
+
+    // Tx atómica: si hay cupón, re-validamos dentro de la tx (defensa contra
+    // cambios del admin entre cálculo y reserva), reservamos el uso, creamos
+    // Compra y CuponUso. Si rompe el tope por race, el rollback deja todo intacto.
+    let compra;
+    try {
+      compra = await prisma.$transaction(async (tx) => {
+        if (precioCalc.cupon) {
+          const cuponActual = await tx.cuponDescuento.findUnique({ where: { id: precioCalc.cupon.id } });
+          validarCupon(cuponActual, tandaVigente.eventoId);
+          await reservarCupon(tx, precioCalc.cupon.id);
+        }
+
+        const nueva = await tx.compra.create({
+          data: {
+            eventoId: evento.id,
+            tandaId: tandaVigente.id,
+            email,
+            nombre,
+            apellido,
+            telefono: telefono || '',
+            cantidadEntradas: cant,
+            precioUnitario: tandaVigente.precio,
+            tipoEntrada: precioCalc.tipoEntrada,
+            excedenteUnitario: precioCalc.excedenteUnitario,
+            totalPagado,
+            mpEstado: 'pending',
+          },
+        });
+
+        if (precioCalc.cupon) {
+          await tx.cuponUso.create({
+            data: {
+              cuponId: precioCalc.cupon.id,
+              compraId: nueva.id,
+              descuentoAplicado: precioCalc.descuentoUnitario * cant,
+            },
+          });
+        }
+
+        return nueva;
+      });
+    } catch (err) {
+      if (err.code) return res.status(400).json({ error: err.message, code: err.code });
+      throw err;
+    }
 
     const preferencia = await mpService.crearPreferencia({
       titulo: `${evento.nombre} — ${cant} entrada(s)`,
-      precio: tandaVigente.precio,
+      precio: precioCalc.precioUnitarioFinal,
       cantidad: cant,
       email,
       preferenciaId: String(compra.id),

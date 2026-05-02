@@ -1,7 +1,7 @@
 const prisma = require('../utils/prisma');
 const config = require('../config');
 const mpService = require('../services/mercadopago.service');
-const { procesarPagoAprobado } = require('../services/pagos.service');
+const { procesarPagoAprobado, procesarPagoCancelado } = require('../services/pagos.service');
 
 const VENTANA_HORAS = 168;
 const HORAS_AUTOCANCEL = 72;
@@ -69,16 +69,12 @@ async function syncPagosPendientes() {
         }
 
         // 2) Terminal válido (rejected/cancelled/charged_back/refunded) → reflejar en BD
+        //    + liberar cupón si la compra lo tenía (atómico vía procesarPagoCancelado).
         const terminal = pagosValidos.find((p) => ESTADOS_TERMINALES.includes(p.status));
         if (terminal) {
-          await prisma.compra.update({
-            where: { id: compra.id },
-            data: {
-              mpEstado: terminal.status,
-              mpPagoId: String(terminal.id),
-            },
-          });
-          console.log(`❌ Compra #${compra.id} → ${terminal.status} (pago ${terminal.id})`);
+          const r = await procesarPagoCancelado(compra.id, terminal.status, terminal.id);
+          const cuponMsg = r.libero_cupon ? ' (cupón liberado)' : '';
+          console.log(`❌ Compra #${compra.id} → ${terminal.status} (pago ${terminal.id})${cuponMsg}`);
           continue;
         }
 
@@ -90,13 +86,12 @@ async function syncPagosPendientes() {
           continue;
         }
 
-        // 4) Sin ningún pago válido + compra vieja (>72h) → autocancelar (abandono)
+        // 4) Sin ningún pago válido + compra vieja (>72h) → autocancelar (abandono).
+        //    Libera el cupón asociado si lo tenía (atómico).
         if (compra.createdAt < cutoffCancel) {
-          await prisma.compra.update({
-            where: { id: compra.id },
-            data: { mpEstado: 'cancelled' },
-          });
-          console.log(`🗑  Compra #${compra.id} → cancelled (sin pago válido en ${HORAS_AUTOCANCEL}h)`);
+          const r = await procesarPagoCancelado(compra.id, 'cancelled');
+          const cuponMsg = r.libero_cupon ? ' (cupón liberado)' : '';
+          console.log(`🗑  Compra #${compra.id} → cancelled (sin pago válido en ${HORAS_AUTOCANCEL}h)${cuponMsg}`);
           continue;
         }
 
