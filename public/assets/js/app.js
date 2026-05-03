@@ -710,6 +710,14 @@ function renderTipoEntradaSection() {
   if (!section || !opts) return;
 
   const ev = getEventoSeleccionado();
+
+  // Eventos externos: el botón lleva a otro sitio, ningún tipo de entrada se cobra acá.
+  if (ev?.esExterno && ev?.linkExterno) {
+    section.style.display = 'none';
+    tipoEntradaSeleccionado = 'base';
+    return;
+  }
+
   const tanda = ev?.tandaVigente;
   const porcentaje = tanda?.porcentajeAporte || 0;
 
@@ -1128,6 +1136,13 @@ function getPrecioPublico(evento) {
 function renderTandasInfo(evento) {
   const wrap = document.getElementById('modal-tandas-info');
   if (!wrap) return;
+
+  // Eventos externos: la "tanda vigente" la maneja el sitio externo, no nuestra base.
+  if (evento?.esExterno && evento?.linkExterno) {
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    return;
+  }
 
   const tandas = (evento && Array.isArray(evento.tandas)) ? evento.tandas : [];
   if (tandas.length < 2) {
