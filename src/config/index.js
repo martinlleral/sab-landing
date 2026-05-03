@@ -17,7 +17,7 @@ module.exports = {
     port: parseInt(process.env.SMTP_PORT) || 587,
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
-    from: process.env.EMAIL_FROM || 'noreply@sindicatodeboleros.com',
+    from: process.env.EMAIL_FROM || 'entradas@sindicatoargentinodeboleros.com.ar',
     fromName: process.env.EMAIL_FROM_NAME || 'Sindicato Argentino de Boleros',
   },
   // Si BREVO_API_KEY está seteada, el servicio de mail usa HTTP API de Brevo
