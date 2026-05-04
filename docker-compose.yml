@@ -32,6 +32,9 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_PASS=${ADMIN_PASS:-}
+      # Supabase (lectura del waitlist desde el dashboard de Reportes)
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
       - PORT=3000
     restart: unless-stopped
     deploy:
