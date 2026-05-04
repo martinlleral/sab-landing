@@ -13,6 +13,10 @@ router.get('/dashboard.html', requireAdmin, (_req, res) => {
   res.sendFile(path.join(BACKOFFICE_DIR, 'dashboard.html'));
 });
 
+router.get('/reportes.html', requireAdmin, (_req, res) => {
+  res.sendFile(path.join(BACKOFFICE_DIR, 'reportes.html'));
+});
+
 router.get('/home-cms.html', requireAdmin, (_req, res) => {
   res.sendFile(path.join(BACKOFFICE_DIR, 'home-cms.html'));
 });

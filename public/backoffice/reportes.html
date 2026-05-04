@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reportes — SAB Backoffice</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/backoffice/assets/css/bo.css">
+  <style>
+    /* Charts: altura fija para que respondan bien en mobile sin estirarse */
+    .chart-box { position: relative; height: 280px; }
+    .chart-box-sm { position: relative; height: 220px; }
+    .bo-tabs { display: flex; gap: 4px; }
+    .bo-tab-btn {
+      background: transparent; border: 1px solid #2a2a2a; color: #aaa;
+      padding: 4px 12px; font-size: 0.8rem; border-radius: 4px; cursor: pointer;
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .bo-tab-btn.active { background: #e63946; border-color: #e63946; color: #fff; }
+    .bo-tab-btn:hover:not(.active) { border-color: #444; color: #fff; }
+    .reportes-filtros {
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 20px;
+    }
+    .reportes-filtros label {
+      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: #aaa;
+      margin-bottom: 4px; display: block;
+    }
+    .reportes-section-title {
+      font-size: 0.95rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+      color: #f6c90e; margin-top: 28px; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .reportes-section-title i { color: #e63946; }
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    .kpi-mini {
+      background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 8px; padding: 12px;
+    }
+    .kpi-mini-label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+    .kpi-mini-value { font-size: 1.4rem; font-weight: 700; color: #fff; line-height: 1.1; margin-top: 4px; }
+    .kpi-mini-desc { font-size: 0.7rem; color: #666; margin-top: 4px; }
+    .empty-state { color: #666; font-size: 0.85rem; padding: 16px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="bo-layout">
+
+    <aside class="bo-sidebar" id="sidebar">
+      <div class="bo-sidebar-brand">S.A. <span>BOLEROS</span></div>
+      <nav class="bo-nav">
+        <a href="/backoffice/dashboard.html" class="bo-nav-link">
+          <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <a href="/backoffice/reportes.html" class="bo-nav-link active">
+          <i class="bi bi-bar-chart-line"></i> Reportes
+        </a>
+        <a href="/backoffice/home-cms.html" class="bo-nav-link">
+          <i class="bi bi-house-gear"></i> Home CMS
+        </a>
+        <a href="/backoffice/eventos-lista.html" class="bo-nav-link">
+          <i class="bi bi-calendar-event"></i> Eventos
+        </a>
+        <a href="/backoffice/lector-qr.html" class="bo-nav-link">
+          <i class="bi bi-qr-code-scan"></i> Lector QR
+        </a>
+        <div class="bo-nav-divider"></div>
+        <a href="#" class="bo-nav-link text-danger" onclick="handleLogout()">
+          <i class="bi bi-box-arrow-right"></i> Cerrar sesión
+        </a>
+      </nav>
+    </aside>
+
+    <main class="bo-main">
+      <header class="bo-topbar">
+        <button class="bo-sidebar-toggle" onclick="toggleSidebar()">
+          <i class="bi bi-list fs-4"></i>
+        </button>
+        <h1 class="bo-page-title">Reportes</h1>
+        <div class="bo-topbar-user" id="topbar-user">—</div>
+      </header>
+
+      <div class="bo-content">
+        <div id="bo-alert" class="bo-alert"></div>
+
+        <!-- FILTROS -->
+        <div class="bo-card mb-3">
+          <div class="bo-card-body">
+            <div class="reportes-filtros">
+              <div>
+                <label for="filtro-evento">Evento</label>
+                <select id="filtro-evento" class="bo-form-select" style="min-width: 240px;">
+                  <option value="">Todos los eventos</option>
+                </select>
+              </div>
+              <div>
+                <label for="filtro-desde">Desde</label>
+                <input type="date" id="filtro-desde" class="bo-form-select">
+              </div>
+              <div>
+                <label for="filtro-hasta">Hasta</label>
+                <input type="date" id="filtro-hasta" class="bo-form-select">
+              </div>
+              <div>
+                <button class="btn-bo-primary" id="btn-aplicar-filtros">
+                  <i class="bi bi-arrow-clockwise me-1"></i> Aplicar
+                </button>
+              </div>
+              <div>
+                <button class="btn-bo-secondary" id="btn-limpiar-filtros">
+                  <i class="bi bi-x-circle me-1"></i> Limpiar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- § 1. RESUMEN -->
+        <div class="reportes-section-title"><i class="bi bi-pie-chart-fill"></i> Resumen</div>
+        <div class="bo-stats-grid">
+          <div class="bo-stat" style="border-left:3px solid #4299e1;">
+            <div class="bo-stat-value" style="color:#4299e1;" id="r-eventos">—</div>
+            <div class="bo-stat-label">Eventos</div>
+            <div class="bo-stat-desc">En el sistema (todos los estados)</div>
+          </div>
+          <div class="bo-stat" style="border-left:3px solid #f6c90e;">
+            <div class="bo-stat-value" style="color:#f6c90e;" id="r-vendidas">—</div>
+            <div class="bo-stat-label">Entradas vendidas</div>
+            <div class="bo-stat-desc">Con plata real (excluye invitaciones)</div>
+          </div>
+          <div class="bo-stat" style="border-left:3px solid #90cdf4;">
+            <div class="bo-stat-value" style="color:#90cdf4;" id="r-invitaciones">—</div>
+            <div class="bo-stat-label">Invitaciones</div>
+            <div class="bo-stat-desc">Entradas gratis enviadas desde backoffice</div>
+          </div>
+          <div class="bo-stat" style="border-left:3px solid #ed8936;">
+            <div class="bo-stat-value" style="color:#ed8936;" id="r-pendientes">—</div>
+            <div class="bo-stat-label">Pendientes</div>
+            <div class="bo-stat-desc">Esperando confirmación de MP</div>
+          </div>
+          <div class="bo-stat" style="border-left:3px solid #48bb78;">
+            <div class="bo-stat-value" style="color:#48bb78;" id="r-recaudado">—</div>
+            <div class="bo-stat-label">Recaudado total</div>
+            <div class="bo-stat-desc">Base + aporte extra</div>
+          </div>
+          <div class="bo-stat" style="border-left:3px solid #a78bfa;">
+            <div class="bo-stat-value" style="color:#a78bfa;" id="r-aporte">—</div>
+            <div class="bo-stat-label">Aporte extra (A la Gorra)</div>
+            <div class="bo-stat-desc">Solo el excedente sobre el precio base</div>
+          </div>
+          <div class="bo-stat" style="border-left:3px solid #38b2ac;">
+            <div class="bo-stat-value" style="color:#38b2ac;" id="r-asistencia">—</div>
+            <div class="bo-stat-label">Asistencia</div>
+            <div class="bo-stat-desc">Entradas validadas con QR / aprobadas</div>
+          </div>
+        </div>
+
+        <!-- § 2. VENTAS EN EL TIEMPO -->
+        <div class="reportes-section-title"><i class="bi bi-graph-up"></i> Ventas en el tiempo</div>
+        <div class="bo-card">
+          <div class="bo-card-header">
+            <h5 class="bo-card-title">Compras y recaudado</h5>
+            <div class="bo-tabs">
+              <button class="bo-tab-btn active" data-granularidad="dia">Por día</button>
+              <button class="bo-tab-btn" data-granularidad="hora">Por hora</button>
+            </div>
+          </div>
+          <div class="bo-card-body">
+            <div class="chart-box"><canvas id="chart-timeline"></canvas></div>
+            <div id="chart-timeline-empty" class="empty-state" style="display:none;">Sin datos de ventas para este filtro.</div>
+          </div>
+        </div>
+
+        <!-- § 3. A LA GORRA -->
+        <div class="reportes-section-title"><i class="bi bi-heart-fill"></i> A la Gorra</div>
+        <div class="row g-3">
+          <div class="col-md-7">
+            <div class="bo-card h-100">
+              <div class="bo-card-header"><h5 class="bo-card-title">Recaudación por aporte extra</h5></div>
+              <div class="bo-card-body">
+                <div class="kpi-row">
+                  <div class="kpi-mini">
+                    <div class="kpi-mini-label">Aporte extra total</div>
+                    <div class="kpi-mini-value" id="aporte-total" style="color:#a78bfa;">—</div>
+                    <div class="kpi-mini-desc">Excedente sobre precio base</div>
+                  </div>
+                  <div class="kpi-mini">
+                    <div class="kpi-mini-label">Compras con aporte</div>
+                    <div class="kpi-mini-value" id="aporte-compras">—</div>
+                    <div class="kpi-mini-desc">Eligieron pagar más</div>
+                  </div>
+                  <div class="kpi-mini">
+                    <div class="kpi-mini-label">% Conversión</div>
+                    <div class="kpi-mini-value" id="aporte-pct">—</div>
+                    <div class="kpi-mini-desc">Cuántos eligen aporte cuando se ofrece</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-5">
+            <div class="bo-card h-100">
+              <div class="bo-card-header"><h5 class="bo-card-title">Por evento</h5></div>
+              <div class="bo-card-body">
+                <div class="chart-box-sm"><canvas id="chart-aporte-eventos"></canvas></div>
+                <div id="chart-aporte-empty" class="empty-state" style="display:none;">Aún no hay aportes extra.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- § 4. POR EVENTO (drill-down) -->
+        <div class="reportes-section-title"><i class="bi bi-zoom-in"></i> Por evento <span id="evento-titulo" style="color:#888; font-weight:400; text-transform:none; letter-spacing:0; font-size:0.85rem;"></span></div>
+        <div id="seccion-por-evento" style="display:none;">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="bo-card h-100">
+                <div class="bo-card-header"><h5 class="bo-card-title">Distribución por tanda</h5></div>
+                <div class="bo-card-body">
+                  <div class="chart-box-sm"><canvas id="chart-tandas"></canvas></div>
+                  <div id="chart-tandas-empty" class="empty-state" style="display:none;">Sin datos de tandas.</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="bo-card h-100">
+                <div class="bo-card-header"><h5 class="bo-card-title">Cadencia de venta</h5></div>
+                <div class="bo-card-body">
+                  <div id="cadencia-lista"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bo-card mt-3">
+            <div class="bo-card-header"><h5 class="bo-card-title">Validación de entradas (QR)</h5></div>
+            <div class="bo-card-body">
+              <div class="kpi-row">
+                <div class="kpi-mini">
+                  <div class="kpi-mini-label">Total entradas aprobadas</div>
+                  <div class="kpi-mini-value" id="qr-total">—</div>
+                </div>
+                <div class="kpi-mini">
+                  <div class="kpi-mini-label">Validadas (asistieron)</div>
+                  <div class="kpi-mini-value" id="qr-validadas" style="color:#48bb78;">—</div>
+                </div>
+                <div class="kpi-mini">
+                  <div class="kpi-mini-label">% asistencia</div>
+                  <div class="kpi-mini-value" id="qr-pct" style="color:#38b2ac;">—</div>
+                  <div class="kpi-mini-desc">No-shows = 100% − asistencia</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="seccion-por-evento-vacio" class="empty-state">
+          Seleccioná un evento del filtro para ver el drill-down (tandas, cadencia, validación QR).
+        </div>
+
+        <!-- § 5. COMPARATIVA ENTRE EVENTOS -->
+        <div class="reportes-section-title"><i class="bi bi-bar-chart-fill"></i> Comparativa entre eventos</div>
+        <div class="bo-card">
+          <div class="table-responsive">
+            <table class="bo-table">
+              <thead>
+                <tr>
+                  <th>Evento</th>
+                  <th>Fecha</th>
+                  <th>Vendidas</th>
+                  <th>Invitaciones</th>
+                  <th>Recaudado</th>
+                  <th>Aporte extra</th>
+                  <th>% ocupación</th>
+                </tr>
+              </thead>
+              <tbody id="comparativa-body">
+                <tr><td colspan="7" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- § 6. TOP CUPONES -->
+        <div class="reportes-section-title"><i class="bi bi-tag-fill"></i> Top cupones por descuento</div>
+        <div class="bo-card">
+          <div class="table-responsive">
+            <table class="bo-table">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Evento</th>
+                  <th>Tipo</th>
+                  <th>Usos</th>
+                  <th>Descuento total</th>
+                  <th>% de tope agotado</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="top-cupones-body">
+                <tr><td colspan="7" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- § 7. COMUNIDAD (Waitlist → Suscripciones) -->
+        <div class="reportes-section-title"><i class="bi bi-people-fill"></i> Comunidad <span style="color:#888; font-weight:400; text-transform:none; letter-spacing:0; font-size:0.8rem;">(Waitlist hoy → Suscripciones cuando se implementen)</span></div>
+        <div id="seccion-comunidad">
+          <div class="kpi-row mb-3">
+            <div class="kpi-mini">
+              <div class="kpi-mini-label">Total inscriptos</div>
+              <div class="kpi-mini-value" id="wl-total">—</div>
+            </div>
+            <div class="kpi-mini">
+              <div class="kpi-mini-label">Hoy</div>
+              <div class="kpi-mini-value" id="wl-hoy" style="color:#f6c90e;">—</div>
+            </div>
+            <div class="kpi-mini">
+              <div class="kpi-mini-label">Últimos 7 días</div>
+              <div class="kpi-mini-value" id="wl-semana">—</div>
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="bo-card h-100">
+                <div class="bo-card-header"><h5 class="bo-card-title">Inscripciones por día (últimos 30)</h5></div>
+                <div class="bo-card-body">
+                  <div class="chart-box-sm"><canvas id="chart-wl-dia"></canvas></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="bo-card h-100">
+                <div class="bo-card-header"><h5 class="bo-card-title">Por hora hoy</h5></div>
+                <div class="bo-card-body">
+                  <div class="chart-box-sm"><canvas id="chart-wl-hora"></canvas></div>
+                  <div id="chart-wl-hora-empty" class="empty-state" style="display:none;">Sin inscripciones hoy todavía.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-md-7">
+              <div class="bo-card h-100">
+                <div class="bo-card-header"><h5 class="bo-card-title">Intereses</h5></div>
+                <div class="bo-card-body">
+                  <div class="chart-box-sm"><canvas id="chart-wl-intereses"></canvas></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-5">
+              <div class="bo-card h-100">
+                <div class="bo-card-header"><h5 class="bo-card-title">Relación con el SAB</h5></div>
+                <div class="bo-card-body">
+                  <div class="chart-box-sm"><canvas id="chart-wl-relacion"></canvas></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="seccion-comunidad-vacio" class="empty-state" style="display:none;">
+          La integración con Supabase no está configurada en el servidor. Faltan SUPABASE_URL y SUPABASE_KEY en el .env.
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="/backoffice/assets/js/bo.js"></script>
+  <script src="/backoffice/assets/js/reportes.js"></script>
+</body>
+</html>
