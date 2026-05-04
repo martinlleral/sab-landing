@@ -27,6 +27,14 @@ module.exports = {
     apiKey: process.env.BREVO_API_KEY || '',
   },
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
+  // Supabase: hoy solo lectura de waitlist_socios desde el dashboard de
+  // Reportes. La key puede ser anon (si la tabla permite SELECT vía RLS) o
+  // service (más permisos). Si está vacía, el endpoint /dashboard/waitlist
+  // devuelve {disponible:false} sin romper la página.
+  supabase: {
+    url: process.env.SUPABASE_URL || '',
+    key: process.env.SUPABASE_KEY || '',
+  },
   uploadLimits: {
     fileSize: 5 * 1024 * 1024, // 5MB
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
