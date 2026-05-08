@@ -13,10 +13,28 @@ function adjuntarTandaVigente(evento) {
   return { ...evento, tandaVigente: vigente };
 }
 
+// Threshold mínimo de `fecha` para que un evento siga visible en la portada:
+// el evento debe seguir mostrándose durante todo el día calendario ART
+// (Argentina, UTC-3) hasta las 00:00 ART del día siguiente. Las fechas se
+// guardan a las 12:00 UTC del día del evento (parsearFechaLocal), así que el
+// threshold es el mediodía UTC del día calendario ART actual.
+function umbralVisibilidadART() {
+  const ahora = new Date();
+  const ahoraART = new Date(ahora.getTime() - 3 * 60 * 60 * 1000);
+  const yyyy = ahoraART.getUTCFullYear();
+  const mm = String(ahoraART.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(ahoraART.getUTCDate()).padStart(2, '0');
+  return new Date(`${yyyy}-${mm}-${dd}T12:00:00.000Z`);
+}
+
 async function getDestacado(req, res) {
   try {
     const evento = await prisma.evento.findFirst({
-      where: { esDestacado: true, estaPublicado: true },
+      where: {
+        esDestacado: true,
+        estaPublicado: true,
+        fecha: { gte: umbralVisibilidadART() },
+      },
       include: { tandas: { orderBy: { orden: 'asc' } } },
     });
     if (!evento) return res.status(404).json({ error: 'No hay evento destacado' });
@@ -32,7 +50,7 @@ async function getProximos(req, res) {
     const eventos = await prisma.evento.findMany({
       where: {
         estaPublicado: true,
-        fecha: { gte: new Date() },
+        fecha: { gte: umbralVisibilidadART() },
       },
       orderBy: { fecha: 'asc' },
       take: 3,
