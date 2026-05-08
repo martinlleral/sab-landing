@@ -140,6 +140,65 @@
                 </div>
               </div>
 
+              <!-- Overrides de los box "El Evento" (avanzado, colapsado por default) -->
+              <div class="bo-card mb-4">
+                <details>
+                  <summary style="cursor:pointer; padding:14px 20px; list-style:none; display:flex; align-items:center; justify-content:space-between;">
+                    <span style="font-size:0.95rem; font-weight:600; text-transform:uppercase; letter-spacing:1px;">
+                      <i class="bi bi-grid-3x3-gap me-2"></i>Overrides de los box (avanzado)
+                    </span>
+                    <i class="bi bi-chevron-down" style="color:#888;"></i>
+                  </summary>
+                  <div class="bo-card-body" style="border-top:1px solid #1e1e1e;">
+                    <p style="color:#888;font-size:.875rem;margin-bottom:16px;">
+                      Pisan los textos que se muestran en los box <strong>Cuándo / Dónde / Entrada</strong> de la sección "El Evento" en la home pública,
+                      pero solo cuando este evento es el destacado.
+                      <strong>Dejá vacío</strong> para usar el valor automático (fecha/hora del evento, precio de la tanda vigente, defaults del Home CMS).
+                    </p>
+
+                    <div style="font-size:0.78rem; color:#666; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Cuándo</div>
+                    <div class="row g-3 mb-4">
+                      <div class="col-md-4">
+                        <label class="bo-form-label" for="boxDiaOverride">Día</label>
+                        <input type="text" class="bo-form-control" id="boxDiaOverride" name="boxDiaOverride" placeholder="Ej: Miércoles">
+                      </div>
+                      <div class="col-md-4">
+                        <label class="bo-form-label" for="boxFechaOverride">Fecha</label>
+                        <input type="text" class="bo-form-control" id="boxFechaOverride" name="boxFechaOverride" placeholder="Ej: 14 de mayo">
+                      </div>
+                      <div class="col-md-4">
+                        <label class="bo-form-label" for="boxHoraOverride">Hora</label>
+                        <input type="text" class="bo-form-control" id="boxHoraOverride" name="boxHoraOverride" placeholder="Ej: 21:00 hs">
+                      </div>
+                    </div>
+
+                    <div style="font-size:0.78rem; color:#666; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Dónde</div>
+                    <div class="row g-3 mb-4">
+                      <div class="col-md-6">
+                        <label class="bo-form-label" for="boxLugarOverride">Lugar</label>
+                        <input type="text" class="bo-form-control" id="boxLugarOverride" name="boxLugarOverride" placeholder="Default Home CMS">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="bo-form-label" for="boxCiudadOverride">Ciudad</label>
+                        <input type="text" class="bo-form-control" id="boxCiudadOverride" name="boxCiudadOverride" placeholder="Default Home CMS">
+                      </div>
+                    </div>
+
+                    <div style="font-size:0.78rem; color:#666; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Entrada</div>
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <label class="bo-form-label" for="boxPrecioOverride">Precio</label>
+                        <input type="text" class="bo-form-control" id="boxPrecioOverride" name="boxPrecioOverride" placeholder="Ej: $5.000 o A la gorra">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="bo-form-label" for="boxEtiquetaEntradaOverride">Etiqueta</label>
+                        <input type="text" class="bo-form-control" id="boxEtiquetaEntradaOverride" name="boxEtiquetaEntradaOverride" placeholder="Default Home CMS">
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              </div>
+
             </div>
 
             <!-- Col lateral -->
@@ -813,6 +872,26 @@
         const img = document.getElementById('flyer-preview');
         img.src = ev.flyerUrl;
         img.style.display = 'block';
+      }
+
+      // Overrides de los box. Si alguno está cargado, abrir el details para que
+      // sea visible al editar (sino queda colapsado por simpleza visual).
+      const overrideFields = [
+        'boxDiaOverride', 'boxFechaOverride', 'boxHoraOverride',
+        'boxLugarOverride', 'boxCiudadOverride',
+        'boxPrecioOverride', 'boxEtiquetaEntradaOverride',
+      ];
+      let algunOverride = false;
+      for (const f of overrideFields) {
+        const el = document.getElementById(f);
+        if (el) {
+          el.value = ev[f] || '';
+          if (ev[f]) algunOverride = true;
+        }
+      }
+      if (algunOverride) {
+        const det = document.querySelector('details');
+        if (det) det.open = true;
       }
     }
 

@@ -13,6 +13,9 @@ const API = {
 let eventoActual = null;
 let eventosProximos = [];
 let eventosDisponibles = [];
+// Datos de Home cargados al init. Usados para resolver los defaults de los box
+// "El Evento" cuando el evento destacado no trae overrides propios.
+let homeData = null;
 
 // Estado del cupón aplicado en el modal de compra. null = sin cupón.
 // { codigo, descuentoUnitario, tipo, valor } cuando hay uno validado.
@@ -40,7 +43,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function loadAll() {
-  await Promise.all([loadHome(), loadDestacado(), loadProximos()]);
+  // loadHome primero porque el render del destacado depende de homeData
+  // (defaults globales para los box "El Evento" cuando no hay override).
+  // El costo es despreciable — ambos son fetches a DB local.
+  await loadHome();
+  await Promise.all([loadDestacado(), loadProximos()]);
   buildEventosDisponibles();
   wireModalCompra();
 }
@@ -60,6 +67,7 @@ function buildEventosDisponibles() {
 async function loadHome() {
   try {
     const data = await fetchJSON(API.home);
+    homeData = data;
 
     const slides = ['slider1Url', 'slider2Url', 'slider3Url'].map((k) => data[k]).filter(Boolean);
     buildSlider(slides);
@@ -348,14 +356,29 @@ function renderDestacado(evento) {
     ? `${precioInfo.label}$${formatPrecio(precioInfo.precio)}`
     : null;
 
+  // Box "El Evento": jerarquía override → derivado del evento → default Home.
+  // Cada línea evalúa primero el override del Evento; si está vacío, cae al
+  // valor calculado/default. Esto le da a Tebi (cliente) tres puntos de
+  // edición sin perder los automáticos cuando no hay nada que pisar.
+  const pick = (override, fallback) => (override && override.trim()) ? override.trim() : fallback;
+  const homeBoxLugar    = (homeData && homeData.boxLugar)           || 'Espacio Doble T';
+  const homeBoxCiudad   = (homeData && homeData.boxCiudad)          || 'La Plata';
+  const homeBoxEtiqueta = (homeData && homeData.boxEtiquetaEntrada) || 'Anticipada online';
+
   const infoDia = document.getElementById('info-dia');
   const infoFecha = document.getElementById('info-fecha');
   const infoHora = document.getElementById('info-hora');
+  const infoLugar = document.getElementById('info-lugar');
+  const infoCiudad = document.getElementById('info-ciudad');
   const infoPrecio = document.getElementById('info-precio');
-  if (infoDia) infoDia.textContent = formatDiaSemana(evento.fecha);
-  if (infoFecha) infoFecha.textContent = formatFechaCorta(evento.fecha);
-  if (infoHora) infoHora.textContent = evento.hora + ' hs';
-  if (infoPrecio) infoPrecio.textContent = precioPublicoTxt || '—';
+  const infoEtiqueta = document.getElementById('info-etiqueta-entrada');
+  if (infoDia)      infoDia.textContent      = pick(evento.boxDiaOverride,             formatDiaSemana(evento.fecha));
+  if (infoFecha)    infoFecha.textContent    = pick(evento.boxFechaOverride,           formatFechaCorta(evento.fecha));
+  if (infoHora)     infoHora.textContent     = pick(evento.boxHoraOverride,            evento.hora + ' hs');
+  if (infoLugar)    infoLugar.textContent    = pick(evento.boxLugarOverride,           homeBoxLugar);
+  if (infoCiudad)   infoCiudad.textContent   = pick(evento.boxCiudadOverride,          homeBoxCiudad);
+  if (infoPrecio)   infoPrecio.textContent   = pick(evento.boxPrecioOverride,          precioPublicoTxt || '—');
+  if (infoEtiqueta) infoEtiqueta.textContent = pick(evento.boxEtiquetaEntradaOverride, homeBoxEtiqueta);
 
   // Hero: el wrap completo se reescribe para condicionar el "Desde " sin que
   // quede pegado al $ cuando no corresponde (caso 1 sola tanda).

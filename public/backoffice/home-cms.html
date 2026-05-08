@@ -145,6 +145,36 @@
               </div>
             </div>
 
+            <!-- Box "El Evento" — defaults globales -->
+            <div class="col-12">
+              <div class="bo-card">
+                <div class="bo-card-header">
+                  <h5 class="bo-card-title"><i class="bi bi-grid-3x3-gap me-2"></i>Box "El Evento" — defaults</h5>
+                </div>
+                <div class="bo-card-body">
+                  <p class="small mb-3" style="color:#666;">
+                    Textos por defecto de los box <strong>Dónde</strong> y <strong>Entrada</strong> en la sección "El Evento" de la home pública.
+                    Cada evento puede pisar estos valores con sus propios overrides desde "Editar evento".
+                    El box <strong>Cuándo</strong> se calcula desde la fecha/hora del evento — el override correspondiente vive en cada evento.
+                  </p>
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="boxLugar">Dónde — Lugar</label>
+                      <input type="text" class="bo-form-control" id="boxLugar" name="boxLugar" placeholder="Espacio Doble T">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="boxCiudad">Dónde — Ciudad</label>
+                      <input type="text" class="bo-form-control" id="boxCiudad" name="boxCiudad" placeholder="La Plata">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="boxEtiquetaEntrada">Entrada — Etiqueta</label>
+                      <input type="text" class="bo-form-control" id="boxEtiquetaEntrada" name="boxEtiquetaEntrada" placeholder="Anticipada online">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- YouTube URL -->
             <div class="col-md-6">
               <div class="bo-card h-100">
@@ -215,6 +245,9 @@
         document.getElementById('totalEdiciones').value = data.totalEdiciones ?? 0;
         document.getElementById('totalShows').value = data.totalShows ?? 0;
         document.getElementById('totalPersonas').value = data.totalPersonas ?? 0;
+        document.getElementById('boxLugar').value = data.boxLugar ?? '';
+        document.getElementById('boxCiudad').value = data.boxCiudad ?? '';
+        document.getElementById('boxEtiquetaEntrada').value = data.boxEtiquetaEntrada ?? '';
 
         ['1', '2', '3'].forEach((n) => {
           const url = data[`slider${n}Url`];

@@ -16,11 +16,17 @@ async function updateHome(req, res) {
     const home = await prisma.home.findFirst();
     if (!home) return res.status(404).json({ error: 'No se encontró configuración de home' });
 
-    const { textoEvento, youtubeUrl, totalEdiciones, totalShows, totalPersonas } = req.body;
+    const {
+      textoEvento, youtubeUrl, totalEdiciones, totalShows, totalPersonas,
+      boxLugar, boxCiudad, boxEtiquetaEntrada,
+    } = req.body;
     const data = {};
 
     if (textoEvento !== undefined) data.textoEvento = textoEvento;
     if (youtubeUrl !== undefined) data.youtubeUrl = youtubeUrl;
+    if (boxLugar !== undefined) data.boxLugar = String(boxLugar).trim();
+    if (boxCiudad !== undefined) data.boxCiudad = String(boxCiudad).trim();
+    if (boxEtiquetaEntrada !== undefined) data.boxEtiquetaEntrada = String(boxEtiquetaEntrada).trim();
 
     // Stats numéricos — parseInt + guardia contra NaN/negativos
     const parseStat = (v) => {

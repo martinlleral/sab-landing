@@ -148,6 +148,14 @@ function parsearFechaLocal(fechaStr) {
   return new Date(fechaStr + 'T12:00:00.000Z');
 }
 
+// Campos override de los box "El Evento" en home pública. Si están vacíos,
+// el frontend cae a lo derivado del evento o a los defaults de Home.
+const BOX_OVERRIDE_FIELDS = [
+  'boxDiaOverride', 'boxFechaOverride', 'boxHoraOverride',
+  'boxLugarOverride', 'boxCiudadOverride',
+  'boxPrecioOverride', 'boxEtiquetaEntradaOverride',
+];
+
 async function adminCrear(req, res) {
   try {
     const {
@@ -167,30 +175,35 @@ async function adminCrear(req, res) {
     // Evento + Tanda "General" default atómicamente. La tanda es la fuente
     // de verdad de venta. Los campos precio/cupo del form se usan sólo
     // para poblar la tanda default — el Evento ya no los persiste.
-    const evento = await prisma.evento.create({
-      data: {
-        nombre,
-        descripcion,
-        fecha: parsearFechaLocal(fecha),
-        hora,
-        invitado: invitado || '',
-        flyerUrl,
-        esDestacado: esDestacado === 'true' || esDestacado === true,
-        estaPublicado: estaPublicado === 'true' || estaPublicado === true,
-        estaAgotado: estaAgotado === 'true' || estaAgotado === true,
-        esExterno: esExterno === 'true' || esExterno === true,
-        linkExterno: linkExterno || null,
-        tandas: {
-          create: [{
-            nombre: 'General',
-            precio: precioInt,
-            orden: 1,
-            activa: true,
-            capacidad: cupoInt > 0 ? cupoInt : null,
-            cantidadVendida: 0,
-          }],
-        },
+    const dataEvento = {
+      nombre,
+      descripcion,
+      fecha: parsearFechaLocal(fecha),
+      hora,
+      invitado: invitado || '',
+      flyerUrl,
+      esDestacado: esDestacado === 'true' || esDestacado === true,
+      estaPublicado: estaPublicado === 'true' || estaPublicado === true,
+      estaAgotado: estaAgotado === 'true' || estaAgotado === true,
+      esExterno: esExterno === 'true' || esExterno === true,
+      linkExterno: linkExterno || null,
+      tandas: {
+        create: [{
+          nombre: 'General',
+          precio: precioInt,
+          orden: 1,
+          activa: true,
+          capacidad: cupoInt > 0 ? cupoInt : null,
+          cantidadVendida: 0,
+        }],
       },
+    };
+    for (const f of BOX_OVERRIDE_FIELDS) {
+      if (req.body[f] !== undefined) dataEvento[f] = String(req.body[f]).trim();
+    }
+
+    const evento = await prisma.evento.create({
+      data: dataEvento,
       include: { tandas: true },
     });
 
@@ -224,6 +237,9 @@ async function adminEditar(req, res) {
     if (esExterno !== undefined) data.esExterno = esExterno === 'true' || esExterno === true;
     if (linkExterno !== undefined) data.linkExterno = linkExterno || null;
     if (req.file) data.flyerUrl = `/assets/img/uploads/eventos/${req.file.filename}`;
+    for (const f of BOX_OVERRIDE_FIELDS) {
+      if (req.body[f] !== undefined) data[f] = String(req.body[f]).trim();
+    }
 
     const evento = await prisma.evento.update({ where: { id }, data });
     return res.json(evento);

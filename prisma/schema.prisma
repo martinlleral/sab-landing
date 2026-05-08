@@ -18,6 +18,11 @@ model Home {
   totalEdiciones Int      @default(0)
   totalShows     Int      @default(0)
   totalPersonas  Int      @default(0)
+  // Defaults globales para los box "El Evento" en home pública. Son la línea
+  // de fallback cuando el evento destacado no trae overrides propios.
+  boxLugar           String @default("Espacio Doble T")
+  boxCiudad          String @default("La Plata")
+  boxEtiquetaEntrada String @default("Anticipada online")
   updatedAt      DateTime @updatedAt
 }
 
@@ -34,6 +39,16 @@ model Evento {
   estaAgotado   Boolean           @default(false)
   esExterno     Boolean           @default(false)
   linkExterno   String?
+  // Overrides opcionales para los box "El Evento" en home pública. Si están
+  // vacíos, el frontend cae a lo derivado del evento (fecha/hora/precio) o a
+  // los defaults de Home (lugar/ciudad/etiquetaEntrada).
+  boxDiaOverride             String @default("")
+  boxFechaOverride           String @default("")
+  boxHoraOverride            String @default("")
+  boxLugarOverride           String @default("")
+  boxCiudadOverride          String @default("")
+  boxPrecioOverride          String @default("")
+  boxEtiquetaEntradaOverride String @default("")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   compras       Compra[]
