@@ -280,18 +280,65 @@ async function adminListar(req, res) {
       where.mpEstado = req.query.mpEstado;
     }
 
+    // Búsqueda libre por nombre/apellido/email del comprador. SQLite + Prisma
+    // usa LIKE, case-insensitive para ASCII por default. Para acentos exactos,
+    // un "Gomez" no matchea "Gómez" — mantenemos la solución simple porque el
+    // caso típico es búsqueda parcial de apellido.
+    const q = (req.query.q || '').trim();
+    if (q) {
+      where.OR = [
+        { nombre: { contains: q } },
+        { apellido: { contains: q } },
+        { email: { contains: q } },
+      ];
+    }
+
+    // Filtro de validación de entradas. Solo tiene sentido sobre compras
+    // approved (las únicas que tienen QR generado), así que forzamos approved
+    // si el filtro está activo aunque no venga mpEstado explícito.
+    const validacion = req.query.validacion;
+    if (validacion === 'pendiente') {
+      where.mpEstado = 'approved';
+      where.entradas = { some: { validada: false } };
+    } else if (validacion === 'validada') {
+      where.mpEstado = 'approved';
+      // every: true requiere también `some: {}` para excluir compras sin
+      // entradas generadas (every aplica vacuously sobre conjuntos vacíos).
+      where.entradas = { some: {}, every: { validada: true } };
+    }
+
+    // orderBy: 'nombre' (default A-Z para uso en la puerta del evento) o 'fecha'
+    // (más recientes primero, comportamiento previo al sprint 4).
+    const orderBy = req.query.orderBy === 'fecha'
+      ? { createdAt: 'desc' }
+      : [{ apellido: 'asc' }, { nombre: 'asc' }];
+
+    // Cuando hay búsqueda activa, ignorar paginación y devolver hasta 200
+    // resultados — el operador busca un nombre puntual en la puerta y la
+    // paginación entorpece. Cinturón en 200 por seguridad de payload.
+    const skipFinal = q ? 0 : skip;
+    const takeFinal = q ? 200 : limit;
+
     const [compras, total] = await Promise.all([
       prisma.compra.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-        include: { evento: { select: { nombre: true, fecha: true } } },
+        orderBy,
+        skip: skipFinal,
+        take: takeFinal,
+        include: {
+          evento: { select: { nombre: true, fecha: true } },
+          entradas: { select: { id: true, validada: true } },
+        },
       }),
       prisma.compra.count({ where }),
     ]);
 
-    return res.json({ compras, total, page, totalPages: Math.ceil(total / limit) });
+    return res.json({
+      compras,
+      total,
+      page: q ? 1 : page,
+      totalPages: q ? 1 : Math.ceil(total / limit),
+    });
   } catch (err) {
     console.error('Error en adminListar compras:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });

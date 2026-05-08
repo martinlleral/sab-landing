@@ -134,24 +134,55 @@
             </div>
           </div>
 
+          <!-- Fila de búsqueda + filtros adicionales (control de acceso en puerta del evento) -->
+          <div style="padding:12px 20px; border-bottom:1px solid #1e1e1e; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <div style="flex:1; min-width:240px; position:relative;">
+              <i class="bi bi-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#666; font-size:0.9rem;"></i>
+              <input
+                type="text"
+                id="input-busqueda"
+                class="bo-form-control"
+                placeholder="Buscar por nombre, apellido o email..."
+                autocomplete="off"
+                style="padding-left:36px;"
+              >
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span style="font-size:0.8rem; color:#888;">Validación:</span>
+              <select id="filtro-validacion" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;" onchange="loadCompras(1)">
+                <option value="">Todas</option>
+                <option value="pendiente">Falta validar</option>
+                <option value="validada">Validadas</option>
+              </select>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span style="font-size:0.8rem; color:#888;">Ordenar:</span>
+              <select id="filtro-orden" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;" onchange="loadCompras(1)">
+                <option value="nombre">Nombre A-Z</option>
+                <option value="fecha">Más recientes</option>
+              </select>
+            </div>
+          </div>
+
           <div class="table-responsive">
             <table class="bo-table">
               <thead>
                 <tr>
                   <th class="bo-th-sort" data-sort="id" title="Identificador único de la compra. No es un contador — los IDs pueden tener saltos cuando se eliminan compras pendientes.">ID <span class="bo-sort-arrow"></span></th>
-                  <th>Comprador</th>
+                  <th class="bo-th-sort" data-sort="nombre">Comprador <span class="bo-sort-arrow"></span></th>
                   <th>Email</th>
                   <th>Teléfono</th>
                   <th class="bo-th-sort" data-sort="cantidad">Cant. <span class="bo-sort-arrow"></span></th>
                   <th class="bo-th-sort" data-sort="total">Total <span class="bo-sort-arrow"></span></th>
                   <th>Estado MP</th>
+                  <th>Validación</th>
                   <th class="bo-th-sort" data-sort="fecha">Fecha <span class="bo-sort-arrow"></span></th>
                   <th>Entradas</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody id="compras-body">
-                <tr><td colspan="10" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
+                <tr><td colspan="11" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -181,9 +212,12 @@
     const eventoId = parseInt(params.get('id'));
     let currentPage = 1;
     let todasLasCompras = [];
-    // Default: más nuevas primero (mantiene comportamiento previo del backend).
-    let sortBy = 'fecha';
-    let sortDir = 'desc';
+    // Default: alfabético por apellido (uso en la puerta del evento — staff
+    // busca compradores que llegan sin QR). El backend también ordena así
+    // por default; el sort client-side se aplica encima del set ya cargado.
+    let sortBy = 'nombre';
+    let sortDir = 'asc';
+    let busquedaTimer = null;
 
     document.addEventListener('DOMContentLoaded', async () => {
       if (!eventoId) {
@@ -202,6 +236,12 @@
           else { sortBy = col; sortDir = sortBy === 'fecha' ? 'desc' : 'asc'; }
           aplicarFiltro();
         });
+      });
+      // Debounce en el input de búsqueda. 350ms balancea responsividad vs.
+      // requests innecesarios al backend mientras el usuario tipea.
+      document.getElementById('input-busqueda').addEventListener('input', () => {
+        clearTimeout(busquedaTimer);
+        busquedaTimer = setTimeout(() => loadCompras(1), 350);
       });
     });
 
@@ -294,24 +334,38 @@
       currentPage = page;
       try {
         const filtro = document.getElementById('filtro-estado').value;
+        const validacion = document.getElementById('filtro-validacion').value;
+        const orden = document.getElementById('filtro-orden').value;
+        const q = document.getElementById('input-busqueda').value.trim();
         // Filtro mpEstado se aplica en server (antes era client-side sobre la página
         // visible, daba conteos engañosos). El total devuelto refleja el filtro,
         // y por eso el card-header puede mostrar el conteo correcto del estado.
         const params = new URLSearchParams({ eventoId, page, limit: 20 });
         if (filtro) params.set('mpEstado', filtro);
+        if (validacion) params.set('validacion', validacion);
+        if (orden) params.set('orderBy', orden);
+        if (q) params.set('q', q);
         const data = await boFetch(`/api/admin/compras?${params}`);
         todasLasCompras = data.compras || [];
 
-        // Etiqueta humana del filtro para el card-header.
+        // Etiqueta humana del filtro para el card-header. Si hay búsqueda activa,
+        // mostrar también la cantidad de resultados encontrados.
         const ETIQUETAS = { approved: 'Aprobados', pending: 'Pendientes', rejected: 'Rechazados', cancelled: 'Cancelados' };
         const etiqueta = filtro ? ` — ${ETIQUETAS[filtro]}` : '';
-        document.getElementById('card-total-compras').textContent = `${etiqueta} (${data.total})`;
+        const sufijoBusqueda = q ? ` · "${q}"` : '';
+        document.getElementById('card-total-compras').textContent = `${etiqueta}${sufijoBusqueda} (${data.total})`;
 
         aplicarFiltro();
-        buildPagination(document.getElementById('paginacion'), data.page, data.totalPages, loadCompras);
+        // Cuando hay búsqueda activa el backend devuelve todo sin paginar; ocultamos
+        // el paginador para no confundir al operador.
+        if (q) {
+          document.getElementById('paginacion').innerHTML = '';
+        } else {
+          buildPagination(document.getElementById('paginacion'), data.page, data.totalPages, loadCompras);
+        }
       } catch (err) {
         document.getElementById('compras-body').innerHTML =
-          `<tr><td colspan="10" class="text-center py-4" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
+          `<tr><td colspan="11" class="text-center py-4" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
       }
     }
 
@@ -322,6 +376,12 @@
       let compras = todasLasCompras.slice();
 
       compras.sort((a, b) => {
+        if (sortBy === 'nombre') {
+          const va = `${a.apellido || ''} ${a.nombre || ''}`.toLocaleLowerCase('es');
+          const vb = `${b.apellido || ''} ${b.nombre || ''}`.toLocaleLowerCase('es');
+          const cmp = va.localeCompare(vb, 'es', { sensitivity: 'base' });
+          return sortDir === 'asc' ? cmp : -cmp;
+        }
         let va, vb;
         if (sortBy === 'id') { va = a.id; vb = b.id; }
         else if (sortBy === 'fecha') { va = new Date(a.createdAt).getTime(); vb = new Date(b.createdAt).getTime(); }
@@ -341,17 +401,35 @@
       renderTabla(compras);
     }
 
+    // Pildora de validación: cuenta entradas validadas vs total. Solo aplica
+    // a compras approved (las únicas con QR). Códigos visuales:
+    //   - verde: todas validadas (cliente entró completo)
+    //   - amarillo: parcial (algunos miembros del grupo aún no entraron)
+    //   - gris: 0 validadas (todavía no llegó nadie del grupo)
+    function pildoraValidacion(c) {
+      if (c.mpEstado !== 'approved') return '<span style="color:#444; font-size:0.78rem;">—</span>';
+      const entradas = c.entradas || [];
+      const total = entradas.length;
+      if (!total) return '<span style="color:#444; font-size:0.78rem;">sin QR</span>';
+      const validadas = entradas.filter((e) => e.validada).length;
+      let color, bg, border;
+      if (validadas === total)      { color = '#48bb78'; bg = '#0d2b1a'; border = '#2d5a27'; }
+      else if (validadas === 0)     { color = '#888';    bg = '#1e1e1e'; border = '#2a2a2a'; }
+      else                           { color = '#f6c90e'; bg = '#2b1e0d'; border = '#6b4c00'; }
+      return `<span style="background:${bg}; border:1px solid ${border}; color:${color}; padding:3px 9px; border-radius:999px; font-size:0.75rem; font-weight:600; white-space:nowrap;">${validadas}/${total}</span>`;
+    }
+
     function renderTabla(compras) {
       const tbody = document.getElementById('compras-body');
       if (!compras.length) {
-        tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4" style="color:#666;">No hay compras con este filtro</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4" style="color:#666;">No hay compras con este filtro</td></tr>';
         return;
       }
 
       tbody.innerHTML = compras.map((c) => `
         <tr>
           <td style="color:#666;">${c.id}</td>
-          <td style="font-weight:500;">${c.nombre} ${c.apellido}</td>
+          <td style="font-weight:500;">${c.apellido}, ${c.nombre}</td>
           <td style="color:#888; font-size:0.85rem;">${c.email}</td>
           <td style="color:#888; font-size:0.85rem;">${c.telefono || '—'}</td>
           <td style="text-align:center;">
@@ -359,6 +437,7 @@
           </td>
           <td style="font-weight:600;">${boPrecio(c.totalPagado)}</td>
           <td><span class="badge-estado ${c.mpEstado}">${c.mpEstado}</span></td>
+          <td>${pildoraValidacion(c)}</td>
           <td style="color:#888; font-size:0.85rem;">${boFechaHora(c.createdAt)}</td>
           <td>
             ${c.mpEstado === 'approved'
