@@ -51,6 +51,7 @@
     "image": "https://sindicatoargentinodeboleros.com.ar/assets/img/logo-sab.png",
     "description": "Orquesta cooperativa de 19 artistas de La Plata. Boleros en vivo todos los miércoles.",
     "genre": ["Bolero", "Música popular"],
+    "foundingDate": "2023-11",
     "foundingLocation": {
       "@type": "Place",
       "name": "La Plata, Buenos Aires, Argentina"
@@ -59,6 +60,28 @@
       "https://www.instagram.com/sindicatoargentinodeboleros/",
       "https://open.spotify.com/intl-es/artist/5zWAsjuY5R96Od9beHFGYI",
       "https://www.youtube.com/@SindicatoArgentinodeBoleros"
+    ],
+    "member": [
+      { "@type": "Person", "name": "Agustina Bril", "roleName": "Viola" },
+      { "@type": "Person", "name": "Aldana Altmann", "roleName": "Violín" },
+      { "@type": "Person", "name": "Arié Gaffet", "roleName": "Clarinete", "sameAs": "https://www.instagram.com/arie.gaffet" },
+      { "@type": "Person", "name": "Camila González", "roleName": "Bailarina" },
+      { "@type": "Person", "name": "Camilo Fernández Basile", "roleName": "Trombón", "sameAs": "https://www.instagram.com/cml.frnndz.bsl" },
+      { "@type": "Person", "name": "Diana Díaz", "roleName": "Cantante" },
+      { "@type": "Person", "name": "Esteban Ramos", "roleName": "Producción", "sameAs": "https://www.instagram.com/estebanramostebi" },
+      { "@type": "Person", "name": "Eugenio Demarchi", "roleName": "Piano", "sameAs": "https://www.instagram.com/geniodemar" },
+      { "@type": "Person", "name": "Eugenio Masa", "roleName": "Bajo y coros", "sameAs": "https://www.instagram.com/masaeuge" },
+      { "@type": "Person", "name": "Frederico Reyna Lascano", "roleName": "Cantante", "sameAs": "https://www.instagram.com/fredereyna_musico" },
+      { "@type": "Person", "name": "Gabriella Giambelluca", "roleName": "Cantante" },
+      { "@type": "Person", "name": "Gerónimo Franco", "roleName": "Guitarra", "sameAs": "https://www.instagram.com/gerofranco" },
+      { "@type": "Person", "name": "Guido Dommarco", "roleName": "Trompeta" },
+      { "@type": "Person", "name": "Joaquín Doorish Folkel", "roleName": "Batería", "sameAs": "https://www.instagram.com/doorish.folkel" },
+      { "@type": "Person", "name": "Joaquín Sanabria", "roleName": "Bailarín" },
+      { "@type": "Person", "name": "Jorge Mauricio Gismondi", "roleName": "Percusión", "sameAs": "https://www.instagram.com/maurigismondi" },
+      { "@type": "Person", "name": "Malena Medone", "roleName": "Violoncello" },
+      { "@type": "Person", "name": "Natalia Berriel", "roleName": "Viola", "sameAs": "https://www.instagram.com/natberriel" },
+      { "@type": "Person", "name": "Patricio Jara", "roleName": "Percusión", "sameAs": "https://www.instagram.com/patinho.jara" },
+      { "@type": "Person", "name": "Uriel Fernández", "roleName": "Clarinete", "sameAs": "https://www.instagram.com/urielo.fernandez" }
     ]
   }
   </script>
@@ -349,7 +372,7 @@
       .qs-eyebrow{display:inline-block;color:#e63946;font-family:'Oswald',sans-serif;font-size:.95rem;letter-spacing:.25em;text-transform:uppercase;margin-bottom:.6rem;font-weight:600}
       .qs-title{font-family:'Oswald',sans-serif;font-size:clamp(2.2rem,5vw,3.5rem);font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.04em;line-height:1.05;margin-bottom:1.4rem}
       .qs-title em{font-style:normal;color:#e63946}
-      .qs-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:3.5rem;align-items:center;max-width:1200px;margin:0 auto;padding:0 1.5rem}
+      .qs-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:3.5rem;align-items:center}
       @media(max-width:900px){.qs-grid{grid-template-columns:1fr;gap:2rem}}
       .qs-photo-wrap{position:relative;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);transform:rotate(-1deg);transition:transform .4s ease}
       .qs-photo-wrap:hover{transform:rotate(0deg) scale(1.01)}
@@ -374,11 +397,20 @@
       .qs-cta-ig{color:#e1306c}
     </style>
     <section id="quienes-somos">
-      <div class="qs-grid">
-        <div class="qs-photo-wrap">
-          <img class="qs-photo" src="/assets/img/sab-grupal.jpg" alt="Foto grupal del Sindicato Argentino de Boleros" loading="lazy" width="1100" height="1649">
-        </div>
-        <div>
+      <div class="qs-flip-container" id="qs-section-flipper">
+        <div class="qs-flip-inner">
+          <div class="qs-flip-front">
+            <div class="qs-grid">
+              <div class="qs-col-photo">
+                <div class="qs-photo-wrap">
+                  <img class="qs-photo" src="/assets/img/sab-grupal.jpg" alt="Foto grupal del Sindicato Argentino de Boleros" loading="lazy" width="1100" height="1649">
+                </div>
+                <button type="button" class="elenco-cta" id="elenco-flip-trigger" aria-pressed="false" aria-controls="qs-section-flipper">
+                  <i class="bi bi-people-fill" aria-hidden="true"></i>
+                  <span class="elenco-cta-label">Conocé al elenco</span>
+                </button>
+              </div>
+              <div>
           <span class="qs-eyebrow">Quiénes somos</span>
           <h2 class="qs-title">Una orquesta <em>cooperativa</em> de boleros</h2>
           <p class="qs-lead">Somos una <strong>orquesta popular y cooperativa</strong> que rinde homenaje al bolero fusionando su elegancia romántica tradicional con sonidos contemporáneos. Nacimos en La Plata en noviembre de 2023 junto al ciclo <strong>Amor de Miércoles</strong>, donde cortamos la semana platense con romance, baile y encuentro.</p>
@@ -405,7 +437,103 @@
           </div>
         </div>
       </div>
+          </div><!-- /.qs-flip-front -->
+          <div class="qs-flip-back" aria-hidden="true">
+            <div class="qs-back-head">
+              <h2 class="qs-back-title">El <em>Sindicato</em></h2>
+            </div>
+            <div class="elenco-grid" data-grid="flip"></div>
+            <div class="qs-back-foot">
+              <button type="button" class="elenco-cta elenco-cta-back" id="elenco-flip-back-cta">
+                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                Volver a Quiénes Somos
+              </button>
+            </div>
+          </div><!-- /.qs-flip-back -->
+        </div><!-- /.qs-flip-inner -->
+      </div><!-- /.qs-flip-container -->
     </section>
+
+    <!-- Estilos del flip "El Sindicato" en Quiénes Somos -->
+    <style>
+      /* Columna foto + CTA elenco (front del flip) */
+      .qs-col-photo{display:flex;flex-direction:column;gap:1rem;align-items:stretch}
+      .elenco-cta{
+        background:transparent;border:1px solid rgba(230,57,70,.5);color:#f0ece8;
+        padding:.8rem 1.4rem;border-radius:30px;
+        font-family:'Oswald',sans-serif;font-size:.85rem;letter-spacing:.12em;
+        text-transform:uppercase;cursor:pointer;transition:all .25s;
+        display:inline-flex;align-items:center;justify-content:center;gap:.55rem
+      }
+      .elenco-cta:hover{background:rgba(230,57,70,.12);border-color:#e63946;color:#fff;transform:translateY(-1px)}
+      .elenco-cta i{font-size:1rem}
+
+      /* Flip a nivel sección — la carta es toda la qs-grid */
+      /* La altura del .qs-flip-container la setea el JS según lado visible (front/back),
+         para que el back en absolute no genere espacio fantasma debajo del front */
+      .qs-flip-container{perspective:2000px;width:100%;max-width:1200px;margin:0 auto;padding:0 1.5rem;position:relative;transition:height 1s cubic-bezier(.22,.61,.36,1)}
+      .qs-flip-inner{
+        position:relative;width:100%;height:100%;
+        transform-style:preserve-3d;
+        transition:transform 1s cubic-bezier(.22,.61,.36,1)
+      }
+      .qs-flip-front{
+        width:100%;
+        -webkit-backface-visibility:hidden;backface-visibility:hidden
+      }
+      .qs-flip-back{
+        position:absolute;top:0;left:0;width:100%;
+        -webkit-backface-visibility:hidden;backface-visibility:hidden;
+        transform:rotateY(180deg);
+        background:linear-gradient(160deg,#1a0f12 0%,#0a0a0a 100%);
+        border:1px solid rgba(230,57,70,.25);
+        border-radius:12px;
+        padding:3rem 2.5rem 2rem;
+        display:flex;flex-direction:column;gap:1.8rem;
+        box-shadow:0 20px 60px rgba(0,0,0,.5)
+      }
+      @media(max-width:640px){.qs-flip-back{padding:2rem 1.2rem 1.5rem}}
+      .qs-flip-container.flipped .qs-flip-inner{transform:rotateY(180deg)}
+
+      /* Header del reverso */
+      .qs-back-head{text-align:center;padding-bottom:1rem;border-bottom:1px solid rgba(230,57,70,.2)}
+      .qs-back-title{font-family:'Oswald',sans-serif;font-size:clamp(1.8rem,3.5vw,2.5rem);font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.04em;line-height:1.05;margin:0}
+      .qs-back-title em{font-style:normal;color:#e63946}
+
+      /* Pie del reverso con botón Volver */
+      .qs-back-foot{display:flex;justify-content:center;padding-top:.6rem;border-top:1px solid rgba(255,255,255,.06)}
+
+      /* Grilla de cards del reverso */
+      .elenco-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.6rem}
+      @media(max-width:900px){.elenco-grid{grid-template-columns:repeat(3,1fr);gap:1.3rem}}
+      @media(max-width:640px){.elenco-grid{grid-template-columns:repeat(2,1fr);gap:1rem}}
+      @media(max-width:380px){.elenco-grid{grid-template-columns:1fr}}
+
+      .elenco-card{
+        background:rgba(255,255,255,.025);
+        border:1px solid rgba(255,255,255,.07);
+        border-radius:12px;
+        padding:2rem 1.2rem 1.7rem;
+        text-align:center;
+        transition:all .25s;
+        display:flex;flex-direction:column;gap:.85rem;align-items:center;
+        min-height:230px;justify-content:space-between
+      }
+      .elenco-card:hover{border-color:rgba(230,57,70,.4);background:rgba(230,57,70,.05);transform:translateY(-3px)}
+      .elenco-card-avatar{
+        width:84px;height:84px;border-radius:50%;
+        background:linear-gradient(135deg,#e63946 0%,#8a1c2a 100%);
+        color:#fff;display:flex;align-items:center;justify-content:center;
+        font-family:'Oswald',sans-serif;font-size:1.75rem;font-weight:700;letter-spacing:.05em;
+        box-shadow:0 4px 14px rgba(230,57,70,.25)
+      }
+      .elenco-card-body{display:flex;flex-direction:column;gap:.35rem;flex:1;justify-content:center}
+      .elenco-card-nombre{font-family:'Open Sans',sans-serif;font-size:1rem;color:#f0ece8;font-weight:600;line-height:1.3;margin:0;letter-spacing:.005em}
+      .elenco-card-rol{font-family:'Open Sans',sans-serif;font-size:.85rem;color:#b0aaa2;font-style:italic;margin:0;line-height:1.35;font-weight:400}
+      .elenco-card-ig{color:#e1306c;font-size:1.3rem;text-decoration:none;display:inline-flex;width:38px;height:38px;align-items:center;justify-content:center;border-radius:50%;transition:all .2s}
+      .elenco-card-ig:hover{color:#fff;background:rgba(225,48,108,.18)}
+      .elenco-card-ig-placeholder{display:inline-block;height:38px}
+    </style>
 
     <!-- WAITLIST — SUMATE AL SINDICATO -->
     <style>
@@ -832,5 +960,109 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <!-- App JS -->
   <script src="/assets/js/app.js"></script>
+
+  <!-- ELENCO (datos + render + flip toggle) -->
+  <script>
+  (function(){
+    const ELENCO = [
+      { nombre: "Agustina Bril",            rol: "Viola",          ig: null },
+      { nombre: "Aldana Altmann",           rol: "Violín",         ig: null },
+      { nombre: "Arié Gaffet",              rol: "Clarinete",      ig: "arie.gaffet" },
+      { nombre: "Camila González",          rol: "Bailarina",      ig: null },
+      { nombre: "Camilo Fernández Basile",  rol: "Trombón",        ig: "cml.frnndz.bsl" },
+      { nombre: "Diana Díaz",               rol: "Cantante",       ig: null },
+      { nombre: "Esteban Ramos",            rol: "Producción",     ig: "estebanramostebi" },
+      { nombre: "Eugenio Demarchi",         rol: "Piano",          ig: "geniodemar" },
+      { nombre: "Eugenio Masa",             rol: "Bajo y coros",   ig: "masaeuge" },
+      { nombre: "Frederico Reyna Lascano",  rol: "Cantante",       ig: "fredereyna_musico" },
+      { nombre: "Gabriella Giambelluca",    rol: "Cantante",       ig: null },
+      { nombre: "Gerónimo Franco",          rol: "Guitarra",       ig: "gerofranco" },
+      { nombre: "Guido Dommarco",           rol: "Trompeta",       ig: null },
+      { nombre: "Joaquín Doorish Folkel",   rol: "Batería",        ig: "doorish.folkel" },
+      { nombre: "Joaquín Sanabria",         rol: "Bailarín",       ig: null },
+      { nombre: "Jorge Mauricio Gismondi",  rol: "Percusión",      ig: "maurigismondi" },
+      { nombre: "Malena Medone",            rol: "Violoncello",    ig: null },
+      { nombre: "Natalia Berriel",          rol: "Viola",          ig: "natberriel" },
+      { nombre: "Patricio Jara",            rol: "Percusión",      ig: "patinho.jara" },
+      { nombre: "Uriel Fernández",          rol: "Clarinete",      ig: "urielo.fernandez" }
+    ];
+
+    const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const initials = nombre => nombre.split(/\s+/).slice(0,2).map(w => w[0] || '').join('').toUpperCase();
+    const igHref = handle => handle ? 'https://instagram.com/' + encodeURIComponent(handle) : null;
+
+    function renderCardGrid(target){
+      const grid = document.querySelector('[data-grid="' + target + '"]');
+      if (!grid) return;
+      grid.innerHTML = ELENCO.map(p => {
+        const ini = initials(p.nombre);
+        const href = igHref(p.ig);
+        const igBlock = href
+          ? '<a class="elenco-card-ig" href="' + href + '" target="_blank" rel="noopener" aria-label="Instagram de ' + escapeHtml(p.nombre) + '"><i class="bi bi-instagram"></i></a>'
+          : '<span class="elenco-card-ig-placeholder" aria-hidden="true"></span>';
+        return ''
+          + '<article class="elenco-card">'
+          +   '<div class="elenco-card-avatar" aria-hidden="true">' + ini + '</div>'
+          +   '<div class="elenco-card-body">'
+          +     '<h3 class="elenco-card-nombre">' + escapeHtml(p.nombre) + '</h3>'
+          +     '<p class="elenco-card-rol">' + escapeHtml(p.rol) + '</p>'
+          +   '</div>'
+          +   igBlock
+          + '</article>';
+      }).join('');
+    }
+
+    function adjustFlipperHeight(){
+      const flipper = document.getElementById('qs-section-flipper');
+      if (!flipper) return;
+      const front = flipper.querySelector('.qs-flip-front');
+      const back = flipper.querySelector('.qs-flip-back');
+      if (!front || !back) return;
+      const isFlipped = flipper.classList.contains('flipped');
+      // El back está position:absolute → no contribuye al alto natural del flipper.
+      // Medimos cada lado y aplicamos la altura del lado visible.
+      const visibleHeight = isFlipped ? back.offsetHeight : front.offsetHeight;
+      flipper.style.height = visibleHeight + 'px';
+    }
+
+    function wireFlip(){
+      const trigger = document.getElementById('elenco-flip-trigger');
+      const flipper = document.getElementById('qs-section-flipper');
+      if (!trigger || !flipper) return;
+      const back = flipper.querySelector('.qs-flip-back');
+      const backCta = document.getElementById('elenco-flip-back-cta');
+      const label = trigger.querySelector('.elenco-cta-label');
+
+      function setFlipped(state){
+        flipper.classList.toggle('flipped', state);
+        trigger.setAttribute('aria-pressed', String(state));
+        if (back) back.setAttribute('aria-hidden', String(!state));
+        if (label) label.textContent = state ? 'Volver a la foto' : 'Conocé al elenco';
+        adjustFlipperHeight();
+        if (state) {
+          flipper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+
+      trigger.addEventListener('click', () => setFlipped(!flipper.classList.contains('flipped')));
+      if (backCta) backCta.addEventListener('click', () => setFlipped(false));
+
+      // Re-medir al resize (el front tiene contenido fluido)
+      let resizeRaf;
+      window.addEventListener('resize', () => {
+        cancelAnimationFrame(resizeRaf);
+        resizeRaf = requestAnimationFrame(adjustFlipperHeight);
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderCardGrid('flip');
+      wireFlip();
+      // Medir después de que las imágenes/fonts terminen para no quedar con altura vieja
+      adjustFlipperHeight();
+      window.addEventListener('load', adjustFlipperHeight);
+    });
+  })();
+  </script>
 </body>
 </html>
