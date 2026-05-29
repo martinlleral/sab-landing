@@ -1041,6 +1041,16 @@ footer {
   color: #b0aaa2;
   font-size: 0.85rem;
 }
+/* El grid CUÁNDO/DÓNDE/VALOR ahora vive dentro del modal de compra (#3):
+   márgenes ajustados y ancho completo del modal en vez del centrado de sección. */
+.modal-body #evento-info-grid {
+  margin: 6px 0 20px;
+  max-width: none;
+  gap: 10px;
+}
+.modal-body .info-card {
+  padding: 14px 12px;
+}
 
 .evento-content {
   max-width: 700px;

@@ -343,42 +343,11 @@ function renderDestacado(evento) {
     schemaEl.textContent = JSON.stringify(schema);
   }
 
-  // Info cards en sección "El Evento"
-  // La card "Cuándo" usa 2 líneas — día de la semana (ej. "Miércoles") arriba
-  // y fecha corta sin año (ej. "29 de abril") debajo. La hora queda en su
-  // línea como detail.
-  // Precio público: usa la primera tanda (más barata histórica) con etiqueta
-  // "Desde " si hay 2+ tandas. Si el evento se quedó sin tandas vigentes pero
-  // existió alguna, igual mostramos el precio histórico — la disponibilidad
-  // se comunica por el botón ("AGOTADO"), no escondiendo el precio.
+  // Info cards "El Evento" (CUÁNDO/DÓNDE/VALOR) ahora viven dentro del modal de
+  // compra y se completan según el evento seleccionado en
+  // onEventoSeleccionadoChange() → fillEventoInfoCards() (pedido #3). Acá sólo
+  // calculamos el precio público para el bloque de precio del hero.
   const precioInfo = getPrecioPublico(evento);
-  const precioPublicoTxt = precioInfo.precio !== null
-    ? `${precioInfo.label}$${formatPrecio(precioInfo.precio)}`
-    : null;
-
-  // Box "El Evento": jerarquía override → derivado del evento → default Home.
-  // Cada línea evalúa primero el override del Evento; si está vacío, cae al
-  // valor calculado/default. Esto le da a Tebi (cliente) tres puntos de
-  // edición sin perder los automáticos cuando no hay nada que pisar.
-  const pick = (override, fallback) => (override && override.trim()) ? override.trim() : fallback;
-  const homeBoxLugar    = (homeData && homeData.boxLugar)           || 'Espacio Doble T';
-  const homeBoxCiudad   = (homeData && homeData.boxCiudad)          || 'La Plata';
-  const homeBoxEtiqueta = (homeData && homeData.boxEtiquetaEntrada) || 'Anticipada online';
-
-  const infoDia = document.getElementById('info-dia');
-  const infoFecha = document.getElementById('info-fecha');
-  const infoHora = document.getElementById('info-hora');
-  const infoLugar = document.getElementById('info-lugar');
-  const infoCiudad = document.getElementById('info-ciudad');
-  const infoPrecio = document.getElementById('info-precio');
-  const infoEtiqueta = document.getElementById('info-etiqueta-entrada');
-  if (infoDia)      infoDia.textContent      = pick(evento.boxDiaOverride,             formatDiaSemana(evento.fecha));
-  if (infoFecha)    infoFecha.textContent    = pick(evento.boxFechaOverride,           formatFechaCorta(evento.fecha));
-  if (infoHora)     infoHora.textContent     = pick(evento.boxHoraOverride,            evento.hora + ' hs');
-  if (infoLugar)    infoLugar.textContent    = pick(evento.boxLugarOverride,           homeBoxLugar);
-  if (infoCiudad)   infoCiudad.textContent   = pick(evento.boxCiudadOverride,          homeBoxCiudad);
-  if (infoPrecio)   infoPrecio.textContent   = pick(evento.boxPrecioOverride,          precioPublicoTxt || '—');
-  if (infoEtiqueta) infoEtiqueta.textContent = pick(evento.boxEtiquetaEntradaOverride, homeBoxEtiqueta);
 
   // Hero: el wrap completo se reescribe para condicionar el "Desde " sin que
   // quede pegado al $ cuando no corresponde (caso 1 sola tanda).
@@ -557,9 +526,9 @@ function populateModalEventoSelect(selectedId) {
     select.innerHTML = '<option value="">No hay eventos disponibles</option>';
     return;
   }
-  // Solo el nombre en el option — la fecha/hora queda en la "reflex box"
-  // debajo del select (#modal-evento-nombre + #modal-evento-fecha) para
-  // no duplicar la misma info en el mismo modal.
+  // Solo el nombre en el option — el nombre se refleja en #modal-evento-nombre
+  // y el CUÁNDO/DÓNDE/VALOR en las info-cards del modal (fillEventoInfoCards),
+  // para no duplicar la misma info en el mismo modal.
   select.innerHTML = eventosDisponibles.map((ev) => {
     return `<option value="${ev.id}">${esc(ev.nombre)}</option>`;
   }).join('');
@@ -575,6 +544,45 @@ function getEventoSeleccionado() {
   return eventosDisponibles.find((ev) => ev.id === id) || null;
 }
 
+// Completa las info-cards CUÁNDO/DÓNDE/VALOR del modal con el evento
+// seleccionado. Misma jerarquía que tenía la sección "El Evento":
+// override del Evento → valor derivado/calculado → default de Home.
+function fillEventoInfoCards(ev) {
+  const infoDia      = document.getElementById('info-dia');
+  const infoFecha    = document.getElementById('info-fecha');
+  const infoHora     = document.getElementById('info-hora');
+  const infoLugar    = document.getElementById('info-lugar');
+  const infoCiudad   = document.getElementById('info-ciudad');
+  const infoPrecio   = document.getElementById('info-precio');
+  const infoEtiqueta = document.getElementById('info-etiqueta-entrada');
+
+  if (!ev) {
+    if (infoDia)    infoDia.textContent    = '—';
+    if (infoFecha)  infoFecha.textContent  = '—';
+    if (infoHora)   infoHora.textContent   = '—';
+    if (infoPrecio) infoPrecio.textContent = '—';
+    return;
+  }
+
+  const pick = (override, fallback) => (override && override.trim()) ? override.trim() : fallback;
+  const homeBoxLugar    = (homeData && homeData.boxLugar)           || 'Espacio Doble T';
+  const homeBoxCiudad   = (homeData && homeData.boxCiudad)          || 'La Plata';
+  const homeBoxEtiqueta = (homeData && homeData.boxEtiquetaEntrada) || 'Anticipada online';
+
+  const precioInfo = getPrecioPublico(ev);
+  const precioPublicoTxt = precioInfo.precio !== null
+    ? `${precioInfo.label}$${formatPrecio(precioInfo.precio)}`
+    : null;
+
+  if (infoDia)      infoDia.textContent      = pick(ev.boxDiaOverride,             formatDiaSemana(ev.fecha));
+  if (infoFecha)    infoFecha.textContent    = pick(ev.boxFechaOverride,           formatFechaCorta(ev.fecha));
+  if (infoHora)     infoHora.textContent     = pick(ev.boxHoraOverride,            ev.hora + ' hs');
+  if (infoLugar)    infoLugar.textContent    = pick(ev.boxLugarOverride,           homeBoxLugar);
+  if (infoCiudad)   infoCiudad.textContent   = pick(ev.boxCiudadOverride,          homeBoxCiudad);
+  if (infoPrecio)   infoPrecio.textContent   = pick(ev.boxPrecioOverride,          precioPublicoTxt || '—');
+  if (infoEtiqueta) infoEtiqueta.textContent = pick(ev.boxEtiquetaEntradaOverride, homeBoxEtiqueta);
+}
+
 function onEventoSeleccionadoChange() {
   // Cambiar de evento invalida cualquier cupón aplicado: los cupones son por
   // evento. Si quedó uno del evento anterior, hay que quitarlo antes de mostrar
@@ -586,16 +594,15 @@ function onEventoSeleccionadoChange() {
 
   const ev = getEventoSeleccionado();
   const nombreEl = document.getElementById('modal-evento-nombre');
-  const fechaEl = document.getElementById('modal-evento-fecha');
   const precioEl = document.getElementById('modal-precio-unit');
   const flyerWrap = document.getElementById('modal-flyer-wrap');
   const flyerImg = document.getElementById('modal-flyer');
 
   if (!ev) {
     if (nombreEl) nombreEl.textContent = '—';
-    if (fechaEl) fechaEl.textContent = '—';
     if (precioEl) precioEl.value = 0;
     if (flyerWrap) flyerWrap.style.display = 'none';
+    fillEventoInfoCards(null);
     renderTandasInfo(null);
     updateTotal();
     updateBtnPagarState(null);
@@ -603,7 +610,6 @@ function onEventoSeleccionadoChange() {
   }
 
   if (nombreEl) nombreEl.textContent = ev.nombre;
-  if (fechaEl) fechaEl.textContent = `${formatFecha(ev.fecha)} — ${ev.hora}`;
   // El precio del modal es el de la tanda vigente (la que el backend va a cobrar).
   // Si no hay vigente, queda en 0 y el botón queda disabled por updateBtnPagarState.
   if (precioEl) precioEl.value = (ev.tandaVigente && ev.tandaVigente.precio) || 0;
@@ -615,6 +621,8 @@ function onEventoSeleccionadoChange() {
       flyerWrap.style.display = 'none';
     }
   }
+  // CUÁNDO/DÓNDE/VALOR del evento seleccionado (migrado desde "El Evento", #3)
+  fillEventoInfoCards(ev);
   renderTandasInfo(ev);
   renderTipoEntradaSection();
   updateTotal();
