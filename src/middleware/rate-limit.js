@@ -39,4 +39,17 @@ const cuponesValidarLimiter = rateLimit({
   message: { error: 'Demasiados intentos de validación. Esperá un momento.' },
 });
 
-module.exports = { loginLimiter, comprasLimiter, cuponesValidarLimiter };
+// Rate limiter para /api/reporte/:token/* (vista pública del Reporte por Evento).
+// La vista hace ~5 fetches por carga (meta + resumen + timeline + tandas +
+// cadencia). 60 req/min por IP ≈ 12 cargas/min, holgado para uso humano legítimo
+// (aun refrescando) pero corta scraping del espacio de tokens y abuso de las
+// queries agregadas. NO toca el endpoint admin de generación (va tras requireAdmin).
+const reportePublicoLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_REPORTE_MAX, 10) || 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Esperá un momento.' },
+});
+
+module.exports = { loginLimiter, comprasLimiter, cuponesValidarLimiter, reportePublicoLimiter };

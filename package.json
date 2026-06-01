@@ -23,7 +23,8 @@
     "test:integration:pagos-cancel": "node tests/integration/pagos-cancelacion.test.js",
     "test:integration:cupones-validar": "node tests/integration/cupones-validar.test.js",
     "test:integration:tandas-aporte": "node tests/integration/tandas-aporte.test.js",
-    "test:integration:compras-listar": "node tests/integration/compras-admin-listar.test.js"
+    "test:integration:compras-listar": "node tests/integration/compras-admin-listar.test.js",
+    "test:integration:reporte": "node tests/integration/reporte-token.test.js"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

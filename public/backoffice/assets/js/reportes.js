@@ -541,6 +541,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.eventoId = document.getElementById('filtro-evento').value || null;
     state.desde = document.getElementById('filtro-desde').value || '';
     state.hasta = document.getElementById('filtro-hasta').value || '';
+    actualizarBtnLinkReporte();
     recargarTodo();
   });
 
@@ -551,6 +552,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.eventoId = null;
     state.desde = '';
     state.hasta = '';
+    actualizarBtnLinkReporte();
     recargarTodo();
   });
 
@@ -568,6 +570,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // (es la interacción más natural: elegir evento y ver tandas/cadencia/QR).
   document.getElementById('filtro-evento').addEventListener('change', (e) => {
     state.eventoId = e.target.value || null;
+    actualizarBtnLinkReporte();
     cargarPorEvento();
   });
 
@@ -575,3 +578,111 @@ document.addEventListener('DOMContentLoaded', async () => {
   recargarTodo();
   cargarComunidad();
 });
+
+// ============================================
+// LINK DE REPORTE DE VENTAS (#9) — desde el filtro de evento
+// Mismo flujo que el botón del detalle de evento; acá el evento sale de
+// state.eventoId (el filtro). Solo habilitado cuando hay un evento elegido.
+// ============================================
+let _modalReporte = null;
+
+function actualizarBtnLinkReporte() {
+  const btn = document.getElementById('btn-link-reporte');
+  if (!btn) return;
+  btn.disabled = !state.eventoId;
+  btn.title = state.eventoId
+    ? 'Generar link de reporte de este evento'
+    : 'Elegí un evento en el filtro para generar su link';
+}
+
+function abrirModalReporte() {
+  if (!state.eventoId) { boAlert('Elegí un evento en el filtro para generar su link', 'error'); return; }
+  if (!_modalReporte) _modalReporte = new bootstrap.Modal(document.getElementById('modalReporte'));
+  const ev = state.eventos.find((e) => e.id === Number(state.eventoId));
+  document.getElementById('reporte-evento-nombre').textContent = ev ? ev.nombre : 'este evento';
+  document.getElementById('reporte-resultado').style.display = 'none';
+  cargarLinksReporte();
+  _modalReporte.show();
+}
+
+async function generarReporte() {
+  const btn = document.getElementById('btn-reporte-generar');
+  const dias = parseInt(document.getElementById('reporte-expira-dias').value, 10);
+  btn.disabled = true;
+  try {
+    const data = await boFetch('/api/admin/reportes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventoId: parseInt(state.eventoId, 10), expiraEnDias: dias }),
+    });
+    document.getElementById('reporte-link-input').value = window.location.origin + data.url;
+    document.getElementById('reporte-resultado').style.display = 'block';
+    await cargarLinksReporte();
+  } catch (err) {
+    boAlert('Error al generar el link: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function copiarReporteLink() {
+  const input = document.getElementById('reporte-link-input');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    boAlert('Link copiado al portapapeles', 'success');
+  } catch (e) {
+    input.select();
+    document.execCommand('copy');
+    boAlert('Link copiado', 'success');
+  }
+}
+
+// data-* + addEventListener (no onclick inline con URLs) — ver insight_stringify_function_onclick.
+async function cargarLinksReporte() {
+  const cont = document.getElementById('reporte-lista');
+  try {
+    const links = await boFetch(`/api/admin/reportes?eventoId=${parseInt(state.eventoId, 10)}`);
+    const activos = links.filter((l) => l.activo && !l.vencido);
+    if (!activos.length) {
+      cont.innerHTML = '<div style="color:#666; font-size:.85rem; padding:8px 0;">No hay links activos. Generá uno arriba.</div>';
+      return;
+    }
+    cont.innerHTML = activos.map((l) => {
+      const vence = new Date(l.expiraEn).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const url = window.location.origin + l.url;
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #2a2a2a;">
+          <div style="min-width:0;">
+            <div style="font-size:.8rem; color:#aaa; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${url}</div>
+            <div style="font-size:.72rem; color:#666;">Vence ${vence}</div>
+          </div>
+          <div style="display:flex; gap:6px; flex-shrink:0;">
+            <button type="button" class="btn-bo-secondary" title="Copiar" data-copy="${url}"><i class="bi bi-clipboard"></i></button>
+            <button type="button" class="btn-bo-danger" title="Revocar" data-revocar="${l.id}"><i class="bi bi-trash"></i></button>
+          </div>
+        </div>`;
+    }).join('');
+    cont.querySelectorAll('button[data-copy]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(b.dataset.copy); boAlert('Link copiado', 'success'); }
+        catch (e) { boAlert('No se pudo copiar el link'); }
+      });
+    });
+    cont.querySelectorAll('button[data-revocar]').forEach((b) => {
+      b.addEventListener('click', () => revocarReporte(parseInt(b.dataset.revocar, 10)));
+    });
+  } catch (err) {
+    cont.innerHTML = `<div style="color:#fc8181; font-size:.85rem;">Error al cargar: ${err.message}</div>`;
+  }
+}
+
+async function revocarReporte(id) {
+  if (!boConfirm('¿Revocar este link? Quien lo tenga dejará de poder ver el reporte.')) return;
+  try {
+    await boFetch(`/api/admin/reportes/${id}`, { method: 'DELETE' });
+    boAlert('Link revocado', 'success');
+    cargarLinksReporte();
+  } catch (err) {
+    boAlert('Error al revocar: ' + err.message);
+  }
+}

@@ -54,6 +54,7 @@ model Evento {
   compras       Compra[]
   tandas        Tanda[]
   cupones       CuponDescuento[]
+  reportTokens  ReportAccessToken[]
 }
 
 model Tanda {
@@ -149,4 +150,23 @@ model CuponUso {
   createdAt         DateTime       @default(now())
 
   @@unique([compraId])
+}
+
+// Token de acceso de solo-lectura a un Reporte de Ventas por Evento (#9).
+// Habilita un link público (sin sesión) acotado a UN evento, con expiración
+// obligatoria y revocable. Modela el mismo patrón que CuponDescuento (token
+// @unique + activo + ventana de validez). El endpoint público que valida este
+// token solo expone métricas AGREGADAS del evento — nunca PII de compradores.
+model ReportAccessToken {
+  id           Int       @id @default(autoincrement())
+  eventoId     Int
+  evento       Evento    @relation(fields: [eventoId], references: [id])
+  token        String    @unique
+  expiraEn     DateTime
+  creadoPor    String    @default("")
+  activo       Boolean   @default(true)
+  ultimoAcceso DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([eventoId])
 }

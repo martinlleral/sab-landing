@@ -1,3 +1,5 @@
+const reportTokenService = require('../services/reportToken.service');
+
 // Helper: chequea si la request entrante es una ruta de API.
 // Usar req.originalUrl en vez de req.path — cuando el middleware está montado
 // dentro de un subrouter (ej. adminRouter.use(requireAdmin) en /api/admin/...),
@@ -33,4 +35,29 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireAdmin };
+// Middleware del endpoint PÚBLICO de Reporte de Ventas por Evento (#9).
+// Valida el token de la URL (req.params.token); si es válido, inyecta el
+// eventoId en req.query/req.params para REUSAR los controllers del dashboard
+// sin modificarlos (resumen lee req.query.eventoId; distribucion/cadencia leen
+// req.params.id). La respuesta de fallo es UNIFORME (mismo 404 para token
+// inexistente / revocado / vencido) — el code real solo se loguea, no se filtra
+// al cliente. Ver insight_hardening_endpoint_publico.
+async function requireReportToken(req, res, next) {
+  try {
+    const { valido, eventoId, registro, code } = await reportTokenService.validarToken(req.params.token);
+    if (!valido) {
+      console.warn(`[reporte] token rechazado code=${code}`);
+      return res.status(404).json({ error: 'Reporte no disponible o expirado' });
+    }
+    req.query.eventoId = String(eventoId);
+    req.params.id = String(eventoId);
+    req.reportToken = registro;
+    res.set('Cache-Control', 'no-store');
+    next();
+  } catch (err) {
+    console.error('Error en requireReportToken:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+module.exports = { requireAuth, requireAdmin, requireReportToken };

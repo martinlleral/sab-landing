@@ -110,6 +110,11 @@
                   <i class="bi bi-x-circle me-1"></i> Limpiar
                 </button>
               </div>
+              <div>
+                <button class="btn-bo-secondary" id="btn-link-reporte" onclick="abrirModalReporte()" disabled title="Elegí un evento en el filtro para generar su link">
+                  <i class="bi bi-link-45deg me-1"></i> Link de reporte
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -362,6 +367,48 @@
 
       </div>
     </main>
+  </div>
+
+  <!-- Modal: Link de reporte de ventas (#9) — segundo punto de entrada desde el filtro -->
+  <div class="modal fade" id="modalReporte" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="background:#141414; border:1px solid #2a2a2a; color:#f1f1f1;">
+        <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+          <h5 class="modal-title" style="font-size:1rem; letter-spacing:.5px; text-transform:uppercase;">
+            <i class="bi bi-link-45deg me-1" style="color:#e63946;"></i> Link de reporte de ventas
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:.85rem; color:#888;">
+            Link de <strong>solo lectura</strong> para compartir las métricas de ventas de
+            <strong id="reporte-evento-nombre">este evento</strong> (sin datos personales de compradores). Vence solo y es revocable.
+          </p>
+          <div class="d-flex gap-2 align-items-end mb-3">
+            <div style="flex:1;">
+              <label class="bo-form-label" for="reporte-expira-dias">Vence en</label>
+              <select id="reporte-expira-dias" class="bo-form-select">
+                <option value="7">7 días</option>
+                <option value="30" selected>30 días</option>
+                <option value="90">90 días</option>
+              </select>
+            </div>
+            <button type="button" class="btn-bo-primary" id="btn-reporte-generar" onclick="generarReporte()">
+              <i class="bi bi-plus-lg me-1"></i> Generar link
+            </button>
+          </div>
+          <div id="reporte-resultado" style="display:none; margin-bottom:16px;">
+            <label class="bo-form-label">Link generado</label>
+            <div class="d-flex gap-2">
+              <input type="text" id="reporte-link-input" class="bo-form-control" readonly>
+              <button type="button" class="btn-bo-secondary" onclick="copiarReporteLink()" title="Copiar"><i class="bi bi-clipboard"></i></button>
+            </div>
+          </div>
+          <label class="bo-form-label">Links activos</label>
+          <div id="reporte-lista"><div style="color:#666; font-size:.85rem; padding:8px 0;">Cargando…</div></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

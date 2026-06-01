@@ -1,0 +1,187 @@
+/* ============================================================================
+   REPORTE PÚBLICO POR EVENTO (#9) — vista de solo lectura
+   ----------------------------------------------------------------------------
+   Subconjunto del look del backoffice (bo.css) + estilos propios de esta página
+   pública. Se duplica a propósito: el bo.css vive bajo /backoffice/ (guarded),
+   así que no se puede referenciar desde acá. Tema oscuro consistente con el SAB.
+   ============================================================================ */
+:root {
+  --bo-bg: #0d0d0d;
+  --bo-surface: #141414;
+  --bo-surface2: #1e1e1e;
+  --bo-border: #2a2a2a;
+  --bo-accent: #e63946;
+  --bo-text: #f1f1f1;
+  --bo-text-muted: #888;
+  --bo-amarillo: #f6c90e;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: var(--bo-bg);
+  color: var(--bo-text);
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---- Contenedor centrado (sin sidebar) ---- */
+.reporte-wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 20px 60px;
+}
+
+/* ---- Header / hero ---- */
+.reporte-brand {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--bo-text-muted);
+}
+.reporte-brand span { color: var(--bo-accent); }
+
+.reporte-titulo {
+  font-size: 1.9rem;
+  font-weight: 700;
+  margin: 10px 0 4px;
+  line-height: 1.15;
+}
+.reporte-evento {
+  font-size: 1.1rem;
+  color: var(--bo-amarillo);
+  font-weight: 600;
+}
+.reporte-meta-linea {
+  font-size: 0.85rem;
+  color: var(--bo-text-muted);
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.reporte-meta-linea i { color: var(--bo-accent); margin-right: 4px; }
+
+.reporte-divider {
+  height: 1px;
+  background: var(--bo-border);
+  margin: 22px 0 6px;
+}
+
+/* ---- Secciones (de reportes.html) ---- */
+.reportes-section-title {
+  font-size: 0.95rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--bo-amarillo); margin-top: 30px; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.reportes-section-title i { color: var(--bo-accent); }
+
+/* ---- Cards ---- */
+.bo-card {
+  background: var(--bo-surface);
+  border: 1px solid var(--bo-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.bo-card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--bo-border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.bo-card-title {
+  font-size: 0.95rem; font-weight: 600; letter-spacing: 0.5px;
+  text-transform: uppercase; margin: 0; color: var(--bo-text);
+}
+.bo-card-body { padding: 20px; }
+.h-100 { height: 100%; }
+
+/* ---- Stat cards (resumen) ---- */
+.bo-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.bo-stat {
+  background: var(--bo-surface2);
+  border: 1px solid var(--bo-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.bo-stat-value { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+.bo-stat-label {
+  font-size: 0.75rem; color: #aaa; letter-spacing: 1px;
+  text-transform: uppercase; margin-top: 6px;
+}
+.bo-stat-desc {
+  font-size: 0.72rem; color: #777; margin-top: 6px;
+  line-height: 1.3; min-height: 1.9em;
+}
+
+/* ---- KPIs mini ---- */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kpi-mini { background: var(--bo-surface2); border: 1px solid var(--bo-border); border-radius: 8px; padding: 12px; }
+.kpi-mini-label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+.kpi-mini-value { font-size: 1.4rem; font-weight: 700; color: #fff; line-height: 1.1; margin-top: 4px; }
+.kpi-mini-desc { font-size: 0.7rem; color: #666; margin-top: 4px; }
+
+/* ---- Charts ---- */
+.chart-box { position: relative; height: 300px; }
+.chart-box-sm { position: relative; height: 240px; }
+.empty-state { color: #666; font-size: 0.85rem; padding: 16px; text-align: center; }
+
+/* ---- Tabs día/hora ---- */
+.bo-tabs { display: flex; gap: 4px; }
+.bo-tab-btn {
+  background: transparent; border: 1px solid var(--bo-border); color: #aaa;
+  padding: 4px 12px; font-size: 0.8rem; border-radius: 4px; cursor: pointer;
+  letter-spacing: 0.5px; text-transform: uppercase;
+}
+.bo-tab-btn.active { background: var(--bo-accent); border-color: var(--bo-accent); color: #fff; }
+.bo-tab-btn:hover:not(.active) { border-color: #444; color: #fff; }
+
+/* ---- Cadencia (lista) ---- */
+.cadencia-item { padding: 10px 0; border-bottom: 1px solid var(--bo-border); }
+.cadencia-item:last-child { border-bottom: none; }
+
+/* ---- Estados (carga / error) ---- */
+.estado-pantalla {
+  min-height: 80vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 24px; gap: 14px;
+}
+.estado-pantalla i { font-size: 3rem; color: var(--bo-text-muted); }
+.estado-pantalla.error i { color: var(--bo-accent); }
+.estado-pantalla h2 { font-size: 1.3rem; font-weight: 700; margin: 0; }
+.estado-pantalla p { color: var(--bo-text-muted); max-width: 460px; margin: 0; }
+.spinner {
+  width: 42px; height: 42px; border: 3px solid var(--bo-border);
+  border-top-color: var(--bo-accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Footer ---- */
+.reporte-footer {
+  margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--bo-border);
+  font-size: 0.78rem; color: var(--bo-text-muted); text-align: center; line-height: 1.6;
+}
+
+/* ---- Bootstrap grid gaps usados ---- */
+.row.g-3 { margin: 0 -8px; }
+.row.g-3 > [class^="col"] { padding: 8px; }
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  .reporte-titulo { font-size: 1.5rem; }
+  .reporte-wrap { padding: 20px 14px 48px; }
+}
+
+/* ---- Print: que entre prolijo en PDF desde el navegador ---- */
+@media print {
+  body { background: #fff; color: #111; }
+  .reporte-footer { color: #555; }
+  .bo-card { break-inside: avoid; }
+  .reportes-section-title { break-after: avoid; }
+}

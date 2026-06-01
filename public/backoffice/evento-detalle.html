@@ -140,6 +140,32 @@
                 </div>
               </div>
 
+              <!-- ¿Dónde se hace? — visible SIEMPRE. La locación no se deriva del
+                   evento (a diferencia de fecha/hora/precio), por eso antes quedaba
+                   escondida en "Overrides avanzados" y los eventos fuera de la sede
+                   por defecto salían publicados en el lugar equivocado. -->
+              <div class="bo-card mb-4">
+                <div class="bo-card-header">
+                  <h5 class="bo-card-title"><i class="bi bi-geo-alt me-2"></i>¿Dónde se hace?</h5>
+                </div>
+                <div class="bo-card-body">
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label class="bo-form-label" for="boxLugarOverride">Lugar / Sede</label>
+                      <input type="text" class="bo-form-control" id="boxLugarOverride" name="boxLugarOverride" placeholder="Sede por defecto">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="bo-form-label" for="boxCiudadOverride">Ciudad</label>
+                      <input type="text" class="bo-form-control" id="boxCiudadOverride" name="boxCiudadOverride" placeholder="Ciudad por defecto">
+                    </div>
+                  </div>
+                  <p id="sede-default-hint" style="color:#888;font-size:.85rem;margin:12px 0 0;">
+                    <i class="bi bi-info-circle me-1" style="color:#667eea;"></i>
+                    Si los dejás vacíos, se publica la sede por defecto del sitio. Completalos solo si este evento es en otra locación.
+                  </p>
+                </div>
+              </div>
+
               <!-- Overrides de los box "El Evento" (avanzado, colapsado por default) -->
               <div class="bo-card mb-4">
                 <details>
@@ -151,7 +177,7 @@
                   </summary>
                   <div class="bo-card-body" style="border-top:1px solid #1e1e1e;">
                     <p style="color:#888;font-size:.875rem;margin-bottom:16px;">
-                      Pisan los textos que se muestran en los box <strong>Cuándo / Dónde / Entrada</strong> de la sección "El Evento" en la home pública,
+                      Pisan los textos que se muestran en los box <strong>Cuándo / Entrada</strong> de la sección "El Evento" en la home pública,
                       pero solo cuando este evento es el destacado.
                       <strong>Dejá vacío</strong> para usar el valor automático (fecha/hora del evento, precio de la tanda vigente, defaults del Home CMS).
                     </p>
@@ -169,18 +195,6 @@
                       <div class="col-md-4">
                         <label class="bo-form-label" for="boxHoraOverride">Hora</label>
                         <input type="text" class="bo-form-control" id="boxHoraOverride" name="boxHoraOverride" placeholder="Ej: 21:00 hs">
-                      </div>
-                    </div>
-
-                    <div style="font-size:0.78rem; color:#666; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Dónde</div>
-                    <div class="row g-3 mb-4">
-                      <div class="col-md-6">
-                        <label class="bo-form-label" for="boxLugarOverride">Lugar</label>
-                        <input type="text" class="bo-form-control" id="boxLugarOverride" name="boxLugarOverride" placeholder="Default Home CMS">
-                      </div>
-                      <div class="col-md-6">
-                        <label class="bo-form-label" for="boxCiudadOverride">Ciudad</label>
-                        <input type="text" class="bo-form-control" id="boxCiudadOverride" name="boxCiudadOverride" placeholder="Default Home CMS">
                       </div>
                     </div>
 
@@ -258,6 +272,9 @@
                   </a>
                   <button type="button" class="btn-bo-danger w-100" id="btn-eliminar" style="display:none;" onclick="eliminarEvento()">
                     <i class="bi bi-trash me-1"></i> Eliminar Evento
+                  </button>
+                  <button type="button" class="btn-bo-secondary w-100 mt-2" id="btn-generar-reporte" style="display:none;" onclick="abrirModalReporte()">
+                    <i class="bi bi-link-45deg me-1"></i> Link de reporte de ventas
                   </button>
                 </div>
               </div>
@@ -496,6 +513,53 @@
     </main>
   </div>
 
+  <!-- Modal: Link de reporte de ventas (#9) — link público de solo lectura -->
+  <div class="modal fade" id="modalReporte" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="background:#141414; border:1px solid #2a2a2a; color:#f1f1f1;">
+        <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+          <h5 class="modal-title" style="font-size:1rem; letter-spacing:.5px; text-transform:uppercase;">
+            <i class="bi bi-link-45deg me-1" style="color:#e63946;"></i> Link de reporte de ventas
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:.85rem; color:#888;">
+            Generá un link de <strong>solo lectura</strong> para compartir las métricas de ventas de
+            este evento (sin datos personales de compradores). El link vence solo y podés revocarlo
+            cuando quieras.
+          </p>
+          <div class="d-flex gap-2 align-items-end mb-3">
+            <div style="flex:1;">
+              <label class="bo-form-label" for="reporte-expira-dias">Vence en</label>
+              <select id="reporte-expira-dias" class="bo-form-select">
+                <option value="7">7 días</option>
+                <option value="30" selected>30 días</option>
+                <option value="90">90 días</option>
+              </select>
+            </div>
+            <button type="button" class="btn-bo-primary" id="btn-reporte-generar" onclick="generarReporte()">
+              <i class="bi bi-plus-lg me-1"></i> Generar link
+            </button>
+          </div>
+
+          <div id="reporte-resultado" style="display:none; margin-bottom:16px;">
+            <label class="bo-form-label">Link generado</label>
+            <div class="d-flex gap-2">
+              <input type="text" id="reporte-link-input" class="bo-form-control" readonly>
+              <button type="button" class="btn-bo-secondary" onclick="copiarReporteLink()" title="Copiar">
+                <i class="bi bi-clipboard"></i>
+              </button>
+            </div>
+          </div>
+
+          <label class="bo-form-label">Links activos</label>
+          <div id="reporte-lista"><div style="color:#666; font-size:.85rem; padding:8px 0;">Cargando…</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/backoffice/assets/js/bo.js"></script>
   <script src="/backoffice/assets/js/cupones.js"></script>
@@ -507,9 +571,11 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('page-title').textContent = isNuevo ? 'Nuevo Evento' : 'Editar Evento';
+      cargarSedeDefault();
 
       if (!isNuevo && eventoId) {
         document.getElementById('btn-eliminar').style.display = 'block';
+        document.getElementById('btn-generar-reporte').style.display = 'block';
         document.getElementById('tandas-section').style.display = 'block';
         document.getElementById('compras-section').style.display = 'block';
         document.getElementById('invitaciones-section').style.display = 'block';
@@ -542,6 +608,29 @@
         }
       } catch (err) {
         boAlert('Error al cargar evento: ' + err.message);
+      }
+    }
+
+    // Muestra la sede por defecto del sitio (Home CMS) como placeholder + ayuda
+    // en los campos Lugar/Ciudad. Así, al cargar un evento, queda claro dónde se
+    // publica si no se completa — y se completa solo si es en otra locación.
+    async function cargarSedeDefault() {
+      try {
+        const home = await boFetch('/api/home');
+        const lugar = home.boxLugar || 'Espacio Doble T';
+        const ciudad = home.boxCiudad || 'La Plata';
+        const inLugar = document.getElementById('boxLugarOverride');
+        const inCiudad = document.getElementById('boxCiudadOverride');
+        if (inLugar) inLugar.placeholder = lugar;
+        if (inCiudad) inCiudad.placeholder = ciudad;
+        const hint = document.getElementById('sede-default-hint');
+        if (hint) {
+          hint.innerHTML = '<i class="bi bi-info-circle me-1" style="color:#667eea;"></i> '
+            + `Si los dejás vacíos, se publica la sede por defecto del sitio: <strong>${lugar} — ${ciudad}</strong> `
+            + '(se configura en Home CMS). Completalos solo si este evento es en otra locación.';
+        }
+      } catch (e) {
+        /* si /api/home falla, queda el texto genérico del hint */
       }
     }
 
@@ -874,11 +963,15 @@
         img.style.display = 'block';
       }
 
-      // Overrides de los box. Si alguno está cargado, abrir el details para que
-      // sea visible al editar (sino queda colapsado por simpleza visual).
+      // Lugar/Ciudad son campos visibles (sección "¿Dónde se hace?"), se llenan
+      // siempre — no cuentan para abrir el bloque avanzado.
+      document.getElementById('boxLugarOverride').value = ev.boxLugarOverride || '';
+      document.getElementById('boxCiudadOverride').value = ev.boxCiudadOverride || '';
+
+      // Resto de overrides de los box. Si alguno está cargado, abrir el details
+      // para que sea visible al editar (sino queda colapsado por simpleza visual).
       const overrideFields = [
         'boxDiaOverride', 'boxFechaOverride', 'boxHoraOverride',
-        'boxLugarOverride', 'boxCiudadOverride',
         'boxPrecioOverride', 'boxEtiquetaEntradaOverride',
       ];
       let algunOverride = false;
@@ -976,6 +1069,102 @@
         window.location.href = '/backoffice/eventos-lista.html';
       } catch (err) {
         boAlert('Error al eliminar: ' + err.message);
+      }
+    }
+
+    // ============================================
+    // LINK DE REPORTE DE VENTAS (#9) — link público de solo lectura
+    // ============================================
+    let _modalReporte = null;
+
+    function abrirModalReporte() {
+      if (!_modalReporte) _modalReporte = new bootstrap.Modal(document.getElementById('modalReporte'));
+      document.getElementById('reporte-resultado').style.display = 'none';
+      cargarLinksReporte();
+      _modalReporte.show();
+    }
+
+    async function generarReporte() {
+      const btn = document.getElementById('btn-reporte-generar');
+      const dias = parseInt(document.getElementById('reporte-expira-dias').value, 10);
+      btn.disabled = true;
+      try {
+        const data = await boFetch('/api/admin/reportes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventoId: parseInt(eventoId, 10), expiraEnDias: dias }),
+        });
+        document.getElementById('reporte-link-input').value = window.location.origin + data.url;
+        document.getElementById('reporte-resultado').style.display = 'block';
+        await cargarLinksReporte();
+      } catch (err) {
+        boAlert('Error al generar el link: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function copiarReporteLink() {
+      const input = document.getElementById('reporte-link-input');
+      try {
+        await navigator.clipboard.writeText(input.value);
+        boAlert('Link copiado al portapapeles', 'success');
+      } catch (e) {
+        input.select();
+        document.execCommand('copy');
+        boAlert('Link copiado', 'success');
+      }
+    }
+
+    // Lista los links activos del evento. Usa data-* + addEventListener (no
+    // onclick inline) porque las URLs van como atributo — ver memoria
+    // insight_stringify_function_onclick.
+    async function cargarLinksReporte() {
+      const cont = document.getElementById('reporte-lista');
+      try {
+        const links = await boFetch(`/api/admin/reportes?eventoId=${parseInt(eventoId, 10)}`);
+        const activos = links.filter((l) => l.activo && !l.vencido);
+        if (!activos.length) {
+          cont.innerHTML = '<div style="color:#666; font-size:.85rem; padding:8px 0;">No hay links activos. Generá uno arriba.</div>';
+          return;
+        }
+        cont.innerHTML = activos.map((l) => {
+          const vence = new Date(l.expiraEn).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+          const url = window.location.origin + l.url;
+          return `
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #2a2a2a;">
+              <div style="min-width:0;">
+                <div style="font-size:.8rem; color:#aaa; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${url}</div>
+                <div style="font-size:.72rem; color:#666;">Vence ${vence}</div>
+              </div>
+              <div style="display:flex; gap:6px; flex-shrink:0;">
+                <button type="button" class="btn-bo-secondary" title="Copiar" data-copy="${url}"><i class="bi bi-clipboard"></i></button>
+                <button type="button" class="btn-bo-danger" title="Revocar" data-revocar="${l.id}"><i class="bi bi-trash"></i></button>
+              </div>
+            </div>`;
+        }).join('');
+        cont.querySelectorAll('button[data-copy]').forEach((b) => {
+          b.addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(b.dataset.copy); boAlert('Link copiado', 'success'); }
+            catch (e) { boAlert('No se pudo copiar el link'); }
+          });
+        });
+        cont.querySelectorAll('button[data-revocar]').forEach((b) => {
+          b.addEventListener('click', () => revocarReporte(parseInt(b.dataset.revocar, 10)));
+        });
+      } catch (err) {
+        cont.innerHTML = `<div style="color:#fc8181; font-size:.85rem;">Error al cargar: ${err.message}</div>`;
+      }
+    }
+
+    async function revocarReporte(id) {
+      if (!boConfirm('¿Revocar este link? Quien lo tenga dejará de poder ver el reporte.')) return;
+      try {
+        await boFetch(`/api/admin/reportes/${id}`, { method: 'DELETE' });
+        boAlert('Link revocado', 'success');
+        cargarLinksReporte();
+      } catch (err) {
+        boAlert('Error al revocar: ' + err.message);
       }
     }
   </script>
