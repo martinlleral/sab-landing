@@ -163,6 +163,10 @@
                       <input type="text" class="bo-form-control" id="boxLugar" name="boxLugar" placeholder="Espacio Doble T">
                     </div>
                     <div class="col-md-4">
+                      <label class="bo-form-label" for="boxDireccion">Dónde — Dirección</label>
+                      <input type="text" class="bo-form-control" id="boxDireccion" name="boxDireccion" placeholder="Calle 23 entre 43 y 44, Barrio La Loma">
+                    </div>
+                    <div class="col-md-4">
                       <label class="bo-form-label" for="boxCiudad">Dónde — Ciudad</label>
                       <input type="text" class="bo-form-control" id="boxCiudad" name="boxCiudad" placeholder="La Plata">
                     </div>
@@ -246,6 +250,7 @@
         document.getElementById('totalShows').value = data.totalShows ?? 0;
         document.getElementById('totalPersonas').value = data.totalPersonas ?? 0;
         document.getElementById('boxLugar').value = data.boxLugar ?? '';
+        document.getElementById('boxDireccion').value = data.boxDireccion ?? '';
         document.getElementById('boxCiudad').value = data.boxCiudad ?? '';
         document.getElementById('boxEtiquetaEntrada').value = data.boxEtiquetaEntrada ?? '';
 

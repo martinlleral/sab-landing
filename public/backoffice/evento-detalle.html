@@ -158,6 +158,10 @@
                       <label class="bo-form-label" for="boxCiudadOverride">Ciudad</label>
                       <input type="text" class="bo-form-control" id="boxCiudadOverride" name="boxCiudadOverride" placeholder="Ciudad por defecto">
                     </div>
+                    <div class="col-12">
+                      <label class="bo-form-label" for="boxDireccionOverride">Dirección (calle)</label>
+                      <input type="text" class="bo-form-control" id="boxDireccionOverride" name="boxDireccionOverride" placeholder="Dirección por defecto">
+                    </div>
                   </div>
                   <p id="sede-default-hint" style="color:#888;font-size:.85rem;margin:12px 0 0;">
                     <i class="bi bi-info-circle me-1" style="color:#667eea;"></i>
@@ -618,15 +622,19 @@
       try {
         const home = await boFetch('/api/home');
         const lugar = home.boxLugar || 'Espacio Doble T';
+        const direccion = home.boxDireccion || '';
         const ciudad = home.boxCiudad || 'La Plata';
         const inLugar = document.getElementById('boxLugarOverride');
+        const inDireccion = document.getElementById('boxDireccionOverride');
         const inCiudad = document.getElementById('boxCiudadOverride');
         if (inLugar) inLugar.placeholder = lugar;
+        if (inDireccion) inDireccion.placeholder = direccion;
         if (inCiudad) inCiudad.placeholder = ciudad;
         const hint = document.getElementById('sede-default-hint');
         if (hint) {
+          const sedeDefault = `${lugar}${direccion ? ` — ${direccion}` : ''}, ${ciudad}`;
           hint.innerHTML = '<i class="bi bi-info-circle me-1" style="color:#667eea;"></i> '
-            + `Si los dejás vacíos, se publica la sede por defecto del sitio: <strong>${lugar} — ${ciudad}</strong> `
+            + `Si los dejás vacíos, se publica la sede por defecto del sitio: <strong>${sedeDefault}</strong> `
             + '(se configura en Home CMS). Completalos solo si este evento es en otra locación.';
         }
       } catch (e) {
@@ -966,6 +974,7 @@
       // Lugar/Ciudad son campos visibles (sección "¿Dónde se hace?"), se llenan
       // siempre — no cuentan para abrir el bloque avanzado.
       document.getElementById('boxLugarOverride').value = ev.boxLugarOverride || '';
+      document.getElementById('boxDireccionOverride').value = ev.boxDireccionOverride || '';
       document.getElementById('boxCiudadOverride').value = ev.boxCiudadOverride || '';
 
       // Resto de overrides de los box. Si alguno está cargado, abrir el details

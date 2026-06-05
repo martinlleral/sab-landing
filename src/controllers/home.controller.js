@@ -18,13 +18,14 @@ async function updateHome(req, res) {
 
     const {
       textoEvento, youtubeUrl, totalEdiciones, totalShows, totalPersonas,
-      boxLugar, boxCiudad, boxEtiquetaEntrada,
+      boxLugar, boxDireccion, boxCiudad, boxEtiquetaEntrada,
     } = req.body;
     const data = {};
 
     if (textoEvento !== undefined) data.textoEvento = textoEvento;
     if (youtubeUrl !== undefined) data.youtubeUrl = youtubeUrl;
     if (boxLugar !== undefined) data.boxLugar = String(boxLugar).trim();
+    if (boxDireccion !== undefined) data.boxDireccion = String(boxDireccion).trim();
     if (boxCiudad !== undefined) data.boxCiudad = String(boxCiudad).trim();
     if (boxEtiquetaEntrada !== undefined) data.boxEtiquetaEntrada = String(boxEtiquetaEntrada).trim();
 

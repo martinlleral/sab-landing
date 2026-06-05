@@ -21,6 +21,7 @@ model Home {
   // Defaults globales para los box "El Evento" en home pública. Son la línea
   // de fallback cuando el evento destacado no trae overrides propios.
   boxLugar           String @default("Espacio Doble T")
+  boxDireccion       String @default("Calle 23 entre 43 y 44, Barrio La Loma")
   boxCiudad          String @default("La Plata")
   boxEtiquetaEntrada String @default("Anticipada online")
   updatedAt      DateTime @updatedAt
@@ -46,6 +47,7 @@ model Evento {
   boxFechaOverride           String @default("")
   boxHoraOverride            String @default("")
   boxLugarOverride           String @default("")
+  boxDireccionOverride       String @default("")
   boxCiudadOverride          String @default("")
   boxPrecioOverride          String @default("")
   boxEtiquetaEntradaOverride String @default("")

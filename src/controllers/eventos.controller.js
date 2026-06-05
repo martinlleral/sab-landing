@@ -152,7 +152,7 @@ function parsearFechaLocal(fechaStr) {
 // el frontend cae a lo derivado del evento o a los defaults de Home.
 const BOX_OVERRIDE_FIELDS = [
   'boxDiaOverride', 'boxFechaOverride', 'boxHoraOverride',
-  'boxLugarOverride', 'boxCiudadOverride',
+  'boxLugarOverride', 'boxDireccionOverride', 'boxCiudadOverride',
   'boxPrecioOverride', 'boxEtiquetaEntradaOverride',
 ];
 

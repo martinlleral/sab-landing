@@ -10,6 +10,7 @@
 // El selector es automático: si hay BREVO_API_KEY → HTTP. Si no → SMTP.
 const nodemailer = require('nodemailer');
 const config = require('../config');
+const prisma = require('../utils/prisma');
 
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
@@ -107,7 +108,36 @@ function buildAporteBlock(compra) {
       </div>`;
 }
 
-function buildHtml({ nombre, evento, entradas, compra }) {
+// Arma la línea de dirección del mail. Antes estaba hardcodeada ("Espacio Doble
+// T — Calle 23..."), por lo que al mover un evento de sede el mail seguía
+// mostrando la dirección vieja.
+//
+// Locación ACOPLADA: si el evento define cualquiera de sus campos de locación
+// (lugar / dirección / ciudad), se usa SOLO lo del evento y no se completa con
+// la sede default de Home. Así, al mover un evento a otra sede, no se mezcla la
+// nueva con la calle de la sede por defecto (ej: "Teatro Coliseo — Calle 23..."
+// de Doble T). Si el evento no pisa nada, se usa la sede default global de Home.
+async function resolverDireccion(evento) {
+  const t = (s) => (s && s.trim()) ? s.trim() : '';
+  const oLugar     = t(evento.boxLugarOverride);
+  const oDireccion = t(evento.boxDireccionOverride);
+  const oCiudad    = t(evento.boxCiudadOverride);
+
+  let lugar, direccion, ciudad;
+  if (oLugar || oDireccion || oCiudad) {
+    lugar = oLugar; direccion = oDireccion; ciudad = oCiudad;
+  } else {
+    const home = await prisma.home.findFirst();
+    lugar     = (home && home.boxLugar)     || 'Espacio Doble T';
+    direccion = (home && home.boxDireccion) || '';
+    ciudad    = (home && home.boxCiudad)    || 'La Plata';
+  }
+
+  const sede = [lugar, direccion].filter(Boolean).join(' — ');
+  return [sede, ciudad].filter(Boolean).join(', ');
+}
+
+function buildHtml({ nombre, evento, entradas, compra, direccionLinea }) {
   const esSingular = entradas.length === 1;
   const aporteBlock = buildAporteBlock(compra);
   // URL pública absoluta del QR. Usamos el PNG ya persistido en disk por
@@ -144,7 +174,7 @@ function buildHtml({ nombre, evento, entradas, compra }) {
         <p style="margin:4px 0;"><strong>Fecha:</strong> ${formatFecha(evento.fecha)}</p>
         <p style="margin:4px 0;"><strong>Hora:</strong> ${evento.hora}</p>
         ${evento.invitado ? `<p style="margin:4px 0;"><strong>Invitado especial:</strong> ${evento.invitado}</p>` : ''}
-        <p style="margin:4px 0;"><strong>Dirección:</strong> Espacio Doble T — Calle 23 entre 43 y 44, Barrio La Loma, La Plata</p>
+        <p style="margin:4px 0;"><strong>Dirección:</strong> ${direccionLinea}</p>
       </div>
 
       ${aporteBlock}
@@ -194,7 +224,8 @@ async function enviarConfirmacion({ email, nombre, evento, entradas, compra }) {
   const aporteTag = compra?.tipoEntrada === 'aporte' ? ' [aporte]' : '';
   console.log(`📧 Enviando confirmación a ${email} (${entradas.length} entrada(s)${aporteTag}, evento: ${evento.nombre}) — transport: ${http ? 'brevo-http' : 'smtp'}`);
 
-  const html = buildHtml({ nombre, evento, entradas, compra });
+  const direccionLinea = await resolverDireccion(evento);
+  const html = buildHtml({ nombre, evento, entradas, compra, direccionLinea });
   const attachments = buildQrAttachments(entradas);
   const subject = `🎟️ ${entradas.length === 1 ? 'Tu entrada' : 'Tus entradas'} para ${evento.nombre}`;
 
@@ -222,6 +253,7 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
   const http = useBrevoHttp();
   console.log(`📧 Enviando invitación a ${email} (evento: ${evento.nombre}) — transport: ${http ? 'brevo-http' : 'smtp'}`);
 
+  const direccionLinea = await resolverDireccion(evento);
   const html = `
 <!DOCTYPE html>
 <html lang="es">
@@ -245,7 +277,7 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
         <p style="margin:4px 0;"><strong>Fecha:</strong> ${formatFecha(evento.fecha)}</p>
         <p style="margin:4px 0;"><strong>Hora:</strong> ${evento.hora}</p>
         ${evento.invitado ? `<p style="margin:4px 0;"><strong>Invitado especial:</strong> ${evento.invitado}</p>` : ''}
-        <p style="margin:4px 0;"><strong>Dirección:</strong> Espacio Doble T — Calle 23 entre 43 y 44, Barrio La Loma, La Plata</p>
+        <p style="margin:4px 0;"><strong>Dirección:</strong> ${direccionLinea}</p>
       </div>
 
       <h3 style="color:#111;">🎟️ Tu Entrada</h3>
@@ -299,4 +331,9 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
   });
 }
 
-module.exports = { enviarConfirmacion, enviarInvitacion, _buildHtmlForTest: buildHtml };
+module.exports = {
+  enviarConfirmacion,
+  enviarInvitacion,
+  _buildHtmlForTest: buildHtml,
+  _resolverDireccionForTest: resolverDireccion,
+};
