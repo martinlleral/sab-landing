@@ -1020,14 +1020,21 @@ async function checkPaymentReturn() {
   if (mainContent) mainContent.style.display = 'none';
   if (statusSection) statusSection.style.display = 'flex';
 
-  renderPaymentStatus(status, preferenciaId);
+  // Render inicial. Si está aprobado, mostramos un estado "buscando tu entrada"
+  // hasta que el check del backend nos devuelva los códigos QR.
+  renderPaymentStatus(status, preferenciaId, status === 'approved' && preferenciaId ? 'loading' : null);
 
-  // Si el pago fue aprobado, llamar al backend para procesar y enviar email
+  // Si el pago fue aprobado, procesar en el backend y traer las entradas/QR para
+  // mostrarlas EN PANTALLA (el comprador no depende del mail, que a veces cae en
+  // Promociones/Spam).
   if (status === 'approved' && preferenciaId) {
     try {
-      await fetch(`/api/compras/check/${preferenciaId}`, { method: 'POST' });
+      const resp = await fetch(`/api/compras/check/${preferenciaId}`, { method: 'POST' });
+      const data = await resp.json().catch(() => ({}));
+      renderPaymentStatus(status, preferenciaId, (data && Array.isArray(data.entradas) && data.entradas.length) ? data : null);
     } catch (e) {
       console.warn('checkAndProcess error:', e.message);
+      renderPaymentStatus(status, preferenciaId, null);
     }
   }
 
@@ -1035,9 +1042,70 @@ async function checkPaymentReturn() {
   window.history.replaceState({}, document.title, '/');
 }
 
-function renderPaymentStatus(status, preferenciaId) {
+// data: 'loading' mientras se busca, un objeto {evento, entradas:[{codigoQR}]}
+// cuando ya tenemos los QR, o null para el fallback "te llega por mail".
+function renderPaymentStatus(status, preferenciaId, data) {
   const container = document.getElementById('pago-status-content');
   if (!container) return;
+
+  // Aviso de revisar Promociones/Spam — Gmail suele mandar los automáticos a la
+  // pestaña Promociones, no solo a Spam.
+  const avisoMail = `
+        <div style="background:#1e1a0a;border:1px solid #6b4c00;border-radius:8px;padding:12px 16px;margin:0 auto 20px;max-width:440px;font-size:.85rem;color:#f6c90e;">
+          ⚠️ <strong>¿No ves el email?</strong> Revisá la pestaña <strong>Promociones</strong> y la carpeta de <strong>Spam</strong> / Correo no deseado. El remitente es <strong>entradas@sindicatoargentinodeboleros.com.ar</strong>.
+        </div>`;
+
+  // Estado aprobado CON entradas: mostramos el/los QR en pantalla.
+  // Solo aceptamos codigoQR con forma de UUID (defensa en profundidad: nunca
+  // interpolamos en el DOM algo que no matchee, aunque hoy el backend solo
+  // devuelve uuids).
+  const QR_RE = /^[0-9a-f-]{36}$/i;
+  const entsOk = (data && data !== 'loading' && Array.isArray(data.entradas))
+    ? data.entradas.filter((e) => e && QR_RE.test(e.codigoQR || ''))
+    : [];
+  if (status === 'approved' && entsOk.length) {
+    const ents = entsOk;
+    const esSingular = ents.length === 1;
+    const qrItems = ents.map((e, i) => `
+        <div style="margin:14px auto;max-width:300px;background:#fff;border-radius:10px;padding:16px;text-align:center;">
+          <div style="font-weight:700;color:#111;font-size:.95rem;margin-bottom:8px;">${esSingular ? 'Tu entrada' : `Entrada #${i + 1}`}</div>
+          <img src="/assets/img/uploads/qr/${e.codigoQR}.png" alt="QR ${i + 1}" style="width:220px;height:220px;max-width:100%;" onerror="this.style.display='none'" />
+          <div style="color:#666;font-size:.72rem;margin-top:6px;word-break:break-all;">${e.codigoQR}</div>
+        </div>`).join('');
+    const evNombre = data.evento && data.evento.nombre ? escapeHtml(data.evento.nombre) : '';
+    container.innerHTML = `
+      <div class="pago-status-card">
+        <div class="pago-status-icon">🎟️</div>
+        <div class="pago-status-title" style="color:#48bb78">¡Tu compra fue confirmada!</div>
+        <p class="pago-status-msg">
+          ${esSingular ? 'Esta es tu entrada' : 'Estas son tus entradas'}${evNombre ? ` para <strong>${evNombre}</strong>` : ''}.
+          <strong>Guardá esta pantalla</strong> (captura o foto) — también te la enviamos por email.
+        </p>
+        ${qrItems}
+        <div style="background:#0d2b1a;border:1px solid #2d5a27;border-radius:10px;padding:16px 20px;margin:16px auto;max-width:440px;text-align:left;">
+          <ul style="color:#ccc;font-size:.9rem;line-height:1.7;padding-left:20px;margin:0;">
+            <li>Presentá el QR en la puerta desde el celular o impreso.</li>
+            <li>Cada código es personal y se valida una sola vez.</li>
+          </ul>
+        </div>
+        ${avisoMail}
+        <a href="/" class="btn-comprar" style="text-decoration:none; display:inline-block; margin-top:8px;">
+          VOLVER AL INICIO
+        </a>
+      </div>`;
+    return;
+  }
+
+  // Estado aprobado mientras buscamos las entradas.
+  if (status === 'approved' && data === 'loading') {
+    container.innerHTML = `
+      <div class="pago-status-card">
+        <div class="pago-status-icon">🎉</div>
+        <div class="pago-status-title" style="color:#48bb78">¡Pago aprobado!</div>
+        <p class="pago-status-msg">Estamos preparando tu entrada… <span style="opacity:.7">esto tarda unos segundos.</span></p>
+      </div>`;
+    return;
+  }
 
   const states = {
     approved: {
@@ -1056,9 +1124,7 @@ function renderPaymentStatus(status, preferenciaId) {
             <li>Presentá el QR en la puerta del evento desde tu celular o impreso.</li>
           </ul>
         </div>
-        <div style="background:#1e1a0a;border:1px solid #6b4c00;border-radius:8px;padding:12px 16px;margin:0 auto 20px;max-width:440px;font-size:.85rem;color:#f6c90e;">
-          ⚠️ <strong>¿No ves el email?</strong> Revisá tu carpeta de <strong>Correo no Deseado</strong> o <em>Spam</em>. A veces los correos automáticos caen ahí.
-        </div>`,
+        ${avisoMail}`,
     },
     pending: {
       icon: '⏳',
@@ -1103,6 +1169,14 @@ async function fetchJSON(url, options = {}) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
+}
+
+// Escapa texto antes de interpolarlo en innerHTML. Los nombres de evento los
+// carga el admin (trusted), pero escapamos por higiene/defensa en profundidad.
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }
 
 function formatFecha(fechaStr) {

@@ -73,17 +73,20 @@ async function procesarPagoAprobado(compraId, mpPaymentId) {
     entradasParaMail.push({ ...entrada, qrBase64: qrBase64.split(',')[1] });
   }
 
-  try {
-    await brevoService.enviarConfirmacion({
-      email: compra.email,
-      nombre: compra.nombre,
-      evento: compra.evento,
-      entradas: entradasParaMail,
-      compra,
-    });
-  } catch (mailErr) {
+  // Envío en SEGUNDO PLANO (no bloqueante): las entradas y el QR ya están
+  // persistidos y la página de éxito los muestra desde la BD, así que no hace
+  // falta esperar a Brevo (que con reintentos puede tardar varios segundos y
+  // colgaría la respuesta post-pago). El mail es "no crítico": si falla, queda
+  // logueado y se puede reenviar desde el backoffice.
+  brevoService.enviarConfirmacion({
+    email: compra.email,
+    nombre: compra.nombre,
+    evento: compra.evento,
+    entradas: entradasParaMail,
+    compra,
+  }).catch((mailErr) => {
     console.error('Error al enviar email (no crítico):', mailErr.message);
-  }
+  });
 
   return { procesada: true, entradas: entradasParaMail.length };
 }

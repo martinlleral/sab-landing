@@ -242,9 +242,29 @@ async function checkAndProcess(req, res) {
     });
     if (!compra) return res.status(404).json({ error: 'Compra no encontrada' });
 
+    // Arma la respuesta de éxito con los códigos QR, para que la página post-pago
+    // muestre la(s) entrada(s) en pantalla y el comprador NO dependa del mail (que
+    // a veces cae en Promociones/Spam). La búsqueda es por mpPreferenciaId —token
+    // largo no enumerable de MP—, así que devolver los codigoQR acá es seguro:
+    // solo lo obtiene quien completó ESE checkout. Se re-consultan las entradas
+    // (no se usa compra.entradas) por si se acaban de crear en procesarPagoAprobado.
+    const responderConEntradas = async () => {
+      const entradas = await prisma.entrada.findMany({
+        where: { compraId: compra.id },
+        select: { codigoQR: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      return {
+        status: 'approved',
+        compraId: compra.id,
+        evento: { nombre: compra.evento.nombre, fecha: compra.evento.fecha, hora: compra.evento.hora },
+        entradas: entradas.map((e) => ({ codigoQR: e.codigoQR })),
+      };
+    };
+
     // Si ya está aprobada, devolver directamente
     if (compra.mpEstado === 'approved') {
-      return res.json({ status: 'approved', compraId: compra.id, entradas: compra.entradas.length });
+      return res.json(await responderConEntradas());
     }
 
     // Buscar pagos en MP para esta compra
@@ -252,9 +272,9 @@ async function checkAndProcess(req, res) {
     const aprobado = pagos.find((p) => p.status === 'approved');
 
     if (aprobado) {
-      const resultado = await procesarPagoAprobado(compra.id, aprobado.id);
+      await procesarPagoAprobado(compra.id, aprobado.id);
       console.log(`✅ checkAndProcess: Compra #${compra.id} procesada desde confirmación`);
-      return res.json({ status: 'approved', compraId: compra.id, entradas: resultado.entradas || 0 });
+      return res.json(await responderConEntradas());
     }
 
     return res.json({ status: compra.mpEstado, compraId: compra.id });

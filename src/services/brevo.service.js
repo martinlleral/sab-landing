@@ -37,13 +37,16 @@ function fromAddress() {
 // Envío vía Brevo HTTP API. Convierte los attachments con CID (qr0, qr1, ...)
 // a base64 en el campo `attachment` — Brevo soporta referenciarlos desde el
 // HTML con `<img src="cid:qr0">` si el mimetype y el nombre son correctos.
-async function sendViaBrevoHttp({ to, toName, subject, html, attachments = [] }) {
+async function sendViaBrevoHttp({ to, toName, subject, html, text, attachments = [] }) {
   const body = {
     sender: { name: config.smtp.fromName, email: config.smtp.from },
     to: [{ email: to, name: toName }],
     subject,
     htmlContent: html,
   };
+  // Versión texto plano además del HTML: mejora la entregabilidad (los mails
+  // multipart text+html parecen menos "promo") y la accesibilidad.
+  if (text) body.textContent = text;
   if (attachments.length > 0) {
     body.attachment = attachments.map((a) => ({
       name: a.filename,
@@ -51,22 +54,59 @@ async function sendViaBrevoHttp({ to, toName, subject, html, attachments = [] })
     }));
   }
 
-  const res = await fetch(BREVO_API_URL, {
-    method: 'POST',
-    headers: {
-      'api-key': config.brevo.apiKey,
-      'content-type': 'application/json',
-      accept: 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  // Reintento con backoff. CLAVE anti-duplicados: el endpoint de Brevo NO es
+  // idempotente, así que SOLO se reintenta cuando es casi seguro que Brevo NO
+  // llegó a encolar el mail. Si reintentáramos un fallo "ambiguo" (donde el
+  // request pudo haberse encolado), el comprador recibiría 2 mails iguales.
+  //   - Reintentables (no encoló): 429 (rate limit), 500/503 (error/indisp. del
+  //     API), 522 (Cloudflare ni pudo conectar al origen — fue el caso real
+  //     #1342) y errores de RED PRE-conexión (DNS/connection refused).
+  //   - NO reintentables: 4xx permanentes y los gateway-timeout AMBIGUOS
+  //     (502/504/520/524) y timeouts/resets de red post-envío, donde el mail
+  //     pudo haber quedado encolado.
+  // El envío corre en segundo plano (ver pagos.service.js), así que el backoff
+  // no bloquea la respuesta al comprador.
+  const RETRYABLE_STATUS = new Set([429, 500, 503, 522]);
+  const RETRYABLE_NET = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN']);
+  const delays = [1000, 3000, 8000]; // hasta 4 intentos en total
+  let lastErr;
+  for (let intento = 0; intento <= delays.length; intento++) {
+    let res;
+    try {
+      res = await fetch(BREVO_API_URL, {
+        method: 'POST',
+        headers: {
+          'api-key': config.brevo.apiKey,
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (netErr) {
+      lastErr = netErr;
+      const code = (netErr && (netErr.code || (netErr.cause && netErr.cause.code))) || '';
+      // Solo reintentar errores de red claramente PRE-conexión (no encoló).
+      if (RETRYABLE_NET.has(code) && intento < delays.length) {
+        console.warn(`⚠️ Brevo red ${code} (intento ${intento + 1}), reintento en ${delays[intento]}ms`);
+        await new Promise((r) => setTimeout(r, delays[intento]));
+        continue;
+      }
+      throw lastErr;
+    }
 
-  if (!res.ok) {
+    if (res.ok) {
+      const json = await res.json().catch(() => ({}));
+      return { messageId: json.messageId || 'brevo-http' };
+    }
+
     const text = await res.text().catch(() => '');
-    throw new Error(`Brevo HTTP ${res.status}: ${text.slice(0, 300)}`);
+    const err = new Error(`Brevo HTTP ${res.status}: ${text.slice(0, 300)}`);
+    if (!RETRYABLE_STATUS.has(res.status) || intento >= delays.length) throw err;
+    lastErr = err;
+    console.warn(`⚠️ Brevo ${res.status} (intento ${intento + 1}), reintento en ${delays[intento]}ms`);
+    await new Promise((r) => setTimeout(r, delays[intento]));
   }
-  const json = await res.json().catch(() => ({}));
-  return { messageId: json.messageId || 'brevo-http' };
+  throw lastErr; // inalcanzable
 }
 
 function formatFecha(fecha) {
@@ -227,12 +267,32 @@ async function enviarConfirmacion({ email, nombre, evento, entradas, compra }) {
   const direccionLinea = await resolverDireccion(evento);
   const html = buildHtml({ nombre, evento, entradas, compra, direccionLinea });
   const attachments = buildQrAttachments(entradas);
-  const subject = `🎟️ ${entradas.length === 1 ? 'Tu entrada' : 'Tus entradas'} para ${evento.nombre}`;
+  // Asunto sin emoji al inicio: el 🎟️ delante empujaba el mail a la pestaña
+  // Promociones de Gmail. Texto plano de respaldo para multipart.
+  const subject = `${entradas.length === 1 ? 'Tu entrada' : 'Tus entradas'} para ${evento.nombre}`;
+  const text = [
+    `Hola ${nombre},`,
+    '',
+    `Tu compra fue confirmada para ${evento.nombre} (${formatFecha(evento.fecha)}, ${evento.hora} hs).`,
+    `Dirección: ${direccionLinea}`,
+    '',
+    `Adjuntamos tu${entradas.length === 1 ? '' : 's'} entrada${entradas.length === 1 ? '' : 's'} con código QR. Presentá el QR en la puerta del evento.`,
+    `Código${entradas.length === 1 ? '' : 's'}: ${entradas.map((e) => e.codigoQR).join(', ')}`,
+    '',
+    'Dudas: WhatsApp +54 9 221 591-7409',
+    '— Sindicato Argentino de Boleros',
+  ].join('\n');
 
   if (http) {
-    // Imágenes del HTML van por URL pública absoluta (ver buildHtml / enviarInvitacion).
-    // Los attachments se mantienen como archivos adjuntos descargables por el user.
-    const result = await sendViaBrevoHttp({ to: email, toName: nombre, subject, html });
+    // Doble vía para el QR, por robustez:
+    //   1. En el HTML va como <img> por URL pública absoluta. Es lo que renderiza
+    //      inline en la mayoría de clientes (Brevo proxy-cachea la imagen). Se usa
+    //      URL pública y NO data URL/CID porque Gmail mobile y WhatsApp Web los
+    //      bloquean (hallazgo de Tebi 24/4).
+    //   2. Además se adjunta el PNG (buildQrAttachments) como archivo descargable,
+    //      de respaldo para clientes que bloquean imágenes remotas: así el
+    //      comprador siempre tiene su QR aunque no se renderice inline.
+    const result = await sendViaBrevoHttp({ to: email, toName: nombre, subject, html, text, attachments });
     console.log(`📧 Email enviado OK — messageId: ${result.messageId}`);
     return result;
   }
@@ -243,6 +303,7 @@ async function enviarConfirmacion({ email, nombre, evento, entradas, compra }) {
     to: `"${nombre}" <${email}>`,
     subject,
     html,
+    text,
     attachments,
   });
   console.log(`📧 Email enviado OK — messageId: ${result.messageId}`);
