@@ -53,7 +53,10 @@ async function getProximos(req, res) {
         fecha: { gte: umbralVisibilidadART() },
       },
       orderBy: { fecha: 'asc' },
-      take: 3,
+      // La portada los muestra en un carrusel (cuántos se ven a la vez lo decide
+      // el front con Home.eventosVisiblesPortada). Acá devolvemos todos los
+      // publicados vigentes, con un tope de seguridad alto para no traer ilimitado.
+      take: 50,
       include: { tandas: { orderBy: { orden: 'asc' } } },
     });
     return res.json(eventos.map(adjuntarTandaVigente));

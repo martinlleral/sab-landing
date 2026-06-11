@@ -132,6 +132,26 @@
               </div>
             </div>
 
+            <!-- Próximos eventos (carrusel) -->
+            <div class="col-12">
+              <div class="bo-card">
+                <div class="bo-card-header">
+                  <h5 class="bo-card-title"><i class="bi bi-collection-play me-2"></i>Próximos eventos (carrusel)</h5>
+                </div>
+                <div class="bo-card-body">
+                  <p class="small mb-3" style="color:#666;">
+                    En la home se muestran <strong>todos los eventos publicados</strong>. Este número define cuántas tarjetas se ven <strong>a la vez</strong> en la pantalla; el resto se navega con las flechas del carrusel. En celulares siempre se muestra de a una y se desliza con el dedo.
+                  </p>
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="eventosVisiblesPortada">Eventos visibles a la vez</label>
+                      <input type="number" min="1" max="12" step="1" class="bo-form-control" id="eventosVisiblesPortada" name="eventosVisiblesPortada" placeholder="3">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Texto Evento -->
             <div class="col-md-6">
               <div class="bo-card h-100">
@@ -249,6 +269,7 @@
         document.getElementById('totalEdiciones').value = data.totalEdiciones ?? 0;
         document.getElementById('totalShows').value = data.totalShows ?? 0;
         document.getElementById('totalPersonas').value = data.totalPersonas ?? 0;
+        document.getElementById('eventosVisiblesPortada').value = data.eventosVisiblesPortada ?? 3;
         document.getElementById('boxLugar').value = data.boxLugar ?? '';
         document.getElementById('boxDireccion').value = data.boxDireccion ?? '';
         document.getElementById('boxCiudad').value = data.boxCiudad ?? '';

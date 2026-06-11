@@ -658,6 +658,70 @@ section {
   font-size: 0.9rem;
   text-align: center;
   padding: 40px;
+  flex: 1 0 100%; /* ocupa todo el ancho del viewport flex cuando no hay eventos */
+}
+
+/* ============================================
+   CARRUSEL DE PRÓXIMOS EVENTOS
+   ============================================ */
+/* Se muestran TODOS los eventos publicados. --cols (seteada por JS desde el CMS)
+   define cuántas tarjetas se ven a la vez; las flechas aparecen solo si hay más. */
+.eventos-carrusel {
+  position: relative;
+  --cols: 3;
+}
+
+.eventos-carrusel-viewport {
+  display: flex;
+  gap: 1.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 8px;
+  scrollbar-width: none; /* Firefox: scrollbar oculta (se navega con flechas/swipe) */
+}
+.eventos-carrusel-viewport::-webkit-scrollbar { display: none; } /* WebKit */
+
+.evento-carrusel-item {
+  flex: 0 0 calc((100% - (var(--cols) - 1) * 1.5rem) / var(--cols));
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.eventos-carrusel-flecha {
+  position: absolute;
+  top: 100px; /* centrada sobre el flyer de la card (img = 200px de alto) */
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 1.3rem;
+  display: none; /* se muestran solo cuando el carrusel es navegable */
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  transition: background 0.2s, opacity 0.2s, transform 0.15s;
+}
+.eventos-carrusel--navegable .eventos-carrusel-flecha { display: flex; }
+.eventos-carrusel-flecha:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  transform: translateY(-50%) scale(1.06);
+}
+.eventos-carrusel-flecha:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.eventos-carrusel-flecha:disabled { opacity: 0.3; cursor: default; }
+.eventos-carrusel-prev { left: -14px; }
+.eventos-carrusel-next { right: -14px; }
+
+@media (max-width: 767.98px) {
+  /* En mobile se muestran ~1,1 tarjetas (invita a deslizar) y se navega por swipe */
+  .evento-carrusel-item { flex-basis: 85%; }
+  .eventos-carrusel-flecha { display: none !important; }
 }
 
 /* ============================================

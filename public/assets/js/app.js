@@ -252,6 +252,8 @@ function renderDestacado(evento) {
     if (elFecha) elFecha.textContent = '';
     if (btnComprar) btnComprar.style.display = 'none';
     if (heroContent) heroContent.classList.add('loaded');
+    // Sin destacado, el bloque "Cómo llegar" cae a la sede default de Home.
+    renderUbicacion(null);
     return;
   }
 
@@ -302,17 +304,21 @@ function renderDestacado(evento) {
       'startDate': startDateTime,
       'eventStatus': 'https://schema.org/EventScheduled',
       'eventAttendanceMode': 'https://schema.org/OfflineEventAttendanceMode',
-      'location': {
-        '@type': 'Place',
-        'name': 'Espacio Doble T',
-        'address': {
-          '@type': 'PostalAddress',
-          'streetAddress': 'Calle 23 N°565',
-          'addressLocality': 'La Plata',
-          'addressRegion': 'Buenos Aires',
-          'addressCountry': 'AR'
-        }
-      },
+      'location': (() => {
+        // Misma sede que el bloque "Cómo llegar": override del evento o default de Home.
+        const sede = resolverSede(evento, homeData);
+        return {
+          '@type': 'Place',
+          'name': sede.lugar,
+          'address': {
+            '@type': 'PostalAddress',
+            'streetAddress': sede.direccion,
+            'addressLocality': sede.ciudad,
+            'addressRegion': 'Buenos Aires',
+            'addressCountry': 'AR'
+          }
+        };
+      })(),
       'performer': {
         '@type': 'MusicGroup',
         'name': 'Sindicato Argentino de Boleros'
@@ -390,6 +396,57 @@ function renderDestacado(evento) {
     // Esperar un tick para asegurar que el DOM terminó de actualizar
     requestAnimationFrame(() => heroContent.classList.add('loaded'));
   }
+
+  // Bloque "Cómo llegar": sigue la sede del evento destacado (o el default de Home).
+  renderUbicacion(evento);
+}
+
+// ============================================
+// UBICACIÓN ("Cómo llegar")
+// ============================================
+// Resuelve la sede de un evento con lógica ACOPLADA, igual que el mail
+// (src/services/brevo.service.js → resolverDireccion): si el evento define
+// CUALQUIER override de sede, se usan SOLO los del evento (no se mezcla con el
+// default global); si no define ninguno, cae a la sede default de Home.
+// Versión sync (sin DB): trabaja sobre el evento ya cargado y homeData.
+function resolverSede(evento, home) {
+  const t = (s) => (s && s.trim()) ? s.trim() : '';
+  const oLugar     = t(evento && evento.boxLugarOverride);
+  const oDireccion = t(evento && evento.boxDireccionOverride);
+  const oCiudad    = t(evento && evento.boxCiudadOverride);
+
+  if (oLugar || oDireccion || oCiudad) {
+    return { lugar: oLugar, direccion: oDireccion, ciudad: oCiudad, esOverride: true };
+  }
+  return {
+    lugar:     t(home && home.boxLugar)     || 'Espacio Doble T',
+    direccion: t(home && home.boxDireccion) || 'Calle 23 N°565 entre 43 y 44',
+    ciudad:    t(home && home.boxCiudad)    || 'La Plata',
+    esOverride: false,
+  };
+}
+
+// Aplica la sede resuelta al bloque #ubicacion: mapa embebido, nombre, dirección
+// y link de Instagram. evento puede ser null (cae al default de Home).
+function renderUbicacion(evento) {
+  const sede = resolverSede(evento, homeData);
+  const mapa     = document.getElementById('ubicacion-mapa');
+  const elNombre = document.getElementById('ubicacion-nombre');
+  const elDir    = document.getElementById('ubicacion-direccion');
+  const elIg     = document.getElementById('ubicacion-ig');
+
+  if (elNombre) elNombre.textContent = sede.lugar;
+  if (elDir)    elDir.textContent = [sede.direccion, sede.ciudad].filter(Boolean).join(', ');
+
+  if (mapa) {
+    const query = [sede.lugar, sede.direccion, sede.ciudad, 'Argentina'].filter(Boolean).join(', ');
+    mapa.src = `https://www.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
+    mapa.title = `Ubicación ${sede.lugar}`;
+  }
+
+  // El IG @espaciodoblet es propio de la sede default (Doble T). Si el evento
+  // tiene sede propia (override), no tenemos su IG → se oculta el link.
+  if (elIg) elIg.style.display = sede.esOverride ? 'none' : '';
 }
 
 // ============================================
@@ -411,10 +468,18 @@ function renderProximos(eventos) {
   const container = document.getElementById('proximos-container');
   if (!container) return;
 
+  const carrusel = document.getElementById('proximos-carrusel');
+
   if (!eventos.length) {
     container.innerHTML = `<div class="no-eventos">No hay próximos eventos programados</div>`;
+    if (carrusel) carrusel.classList.remove('eventos-carrusel--navegable');
     return;
   }
+
+  // Cuántas tarjetas se ven a la vez en el carrusel (configurable desde el CMS).
+  // No limita cuántos eventos hay: se renderizan todos y se navega con las flechas.
+  const cols = Math.max(1, parseInt(homeData && homeData.eventosVisiblesPortada, 10) || 3);
+  if (carrusel) carrusel.style.setProperty('--cols', cols);
 
   container.innerHTML = eventos.map((ev) => {
     const tv = ev.tandaVigente || null;
@@ -443,7 +508,7 @@ function renderProximos(eventos) {
       ? `<div class="evento-card-precio">${precioInfo.label}$ ${formatPrecio(precioInfo.precio)}</div>`
       : '';
     return `
-    <div class="col-md-4 mb-4">
+    <div class="evento-carrusel-item">
       <div class="evento-card${agotado ? ' evento-card--agotado' : ''}">
         <div class="evento-card-img-wrap">
           ${imgTag}
@@ -458,6 +523,56 @@ function renderProximos(eventos) {
       </div>
     </div>`;
   }).join('');
+
+  wireCarrusel(eventos.length, cols);
+}
+
+// Habilita la navegación del carrusel de eventos solo cuando hay más eventos que
+// los visibles. Flechas con scrollBy de un "paso" (ancho de card + gap) y estado
+// disabled según la posición de scroll. Lee todo del DOM para sobrevivir a resize.
+function actualizarFlechasCarrusel() {
+  const viewport = document.getElementById('proximos-container');
+  const carrusel = document.getElementById('proximos-carrusel');
+  if (!viewport || !carrusel || !carrusel.classList.contains('eventos-carrusel--navegable')) return;
+  const prev = document.getElementById('proximos-prev');
+  const next = document.getElementById('proximos-next');
+  const maxScroll = viewport.scrollWidth - viewport.clientWidth - 1;
+  if (prev) prev.disabled = viewport.scrollLeft <= 0;
+  if (next) next.disabled = viewport.scrollLeft >= maxScroll;
+}
+
+function wireCarrusel(total, cols) {
+  const viewport = document.getElementById('proximos-container');
+  const carrusel = document.getElementById('proximos-carrusel');
+  if (!viewport || !carrusel) return;
+
+  const navegable = total > cols;
+  carrusel.classList.toggle('eventos-carrusel--navegable', navegable);
+  if (!navegable) return;
+
+  const prev = document.getElementById('proximos-prev');
+  const next = document.getElementById('proximos-next');
+
+  // Un "paso" = ancho de una card + el gap entre cards (recalculado en cada click
+  // para que siga siendo correcto tras un resize o cambio de --cols).
+  const scrollPaso = () => {
+    const item = viewport.querySelector('.evento-carrusel-item');
+    if (!item) return viewport.clientWidth;
+    const gap = parseFloat(getComputedStyle(viewport).columnGap) || 0;
+    return item.getBoundingClientRect().width + gap;
+  };
+
+  if (prev) prev.onclick = () => viewport.scrollBy({ left: -scrollPaso(), behavior: 'smooth' });
+  if (next) next.onclick = () => viewport.scrollBy({ left: scrollPaso(), behavior: 'smooth' });
+  viewport.onscroll = actualizarFlechasCarrusel;
+
+  // El resize listener se registra una sola vez (flag) para no acumular handlers
+  // en sucesivos renders.
+  if (!carrusel.dataset.resizeWired) {
+    carrusel.dataset.resizeWired = '1';
+    window.addEventListener('resize', actualizarFlechasCarrusel);
+  }
+  actualizarFlechasCarrusel();
 }
 
 // ============================================

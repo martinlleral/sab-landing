@@ -291,6 +291,7 @@
           <div class="col-lg-8">
             <div class="ubicacion-card">
               <iframe
+                id="ubicacion-mapa"
                 src="https://www.google.com/maps?q=Calle+23+565,+La+Plata,+Buenos+Aires,+Argentina&output=embed"
                 allowfullscreen="" loading="lazy"
                 referrerpolicy="no-referrer-when-downgrade"
@@ -299,11 +300,11 @@
               <div class="ubicacion-info">
                 <div>
                   <div class="ubicacion-nombre">
-                    <i class="bi bi-geo-alt-fill"></i>Espacio Doble T
+                    <i class="bi bi-geo-alt-fill"></i><span id="ubicacion-nombre">Espacio Doble T</span>
                   </div>
-                  <div class="ubicacion-direccion">Calle 23 N°565 entre 43 y 44, La Plata</div>
+                  <div class="ubicacion-direccion" id="ubicacion-direccion">Calle 23 N°565 entre 43 y 44, La Plata</div>
                 </div>
-                <a href="https://www.instagram.com/espaciodoblet" target="_blank" rel="noopener" class="ubicacion-ig">
+                <a href="https://www.instagram.com/espaciodoblet" target="_blank" rel="noopener" class="ubicacion-ig" id="ubicacion-ig">
                   <i class="bi bi-instagram"></i> @espaciodoblet
                 </a>
               </div>
@@ -320,8 +321,19 @@
           <h2 class="section-title">Próximos Eventos</h2>
           <div class="section-divider"></div>
         </div>
-        <div class="row" id="proximos-container">
-          <!-- Cards generadas por JS -->
+        <!-- Carrusel: se muestran todos los eventos publicados; cuántos se ven a
+             la vez lo define Home.eventosVisiblesPortada (CMS). Las flechas solo
+             aparecen si hay más eventos que los visibles. -->
+        <div class="eventos-carrusel" id="proximos-carrusel">
+          <button type="button" class="eventos-carrusel-flecha eventos-carrusel-prev" id="proximos-prev" aria-label="Eventos anteriores">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+          <div class="eventos-carrusel-viewport" id="proximos-container">
+            <!-- Cards generadas por JS -->
+          </div>
+          <button type="button" class="eventos-carrusel-flecha eventos-carrusel-next" id="proximos-next" aria-label="Eventos siguientes">
+            <i class="bi bi-chevron-right"></i>
+          </button>
         </div>
       </div>
     </section>

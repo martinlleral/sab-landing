@@ -19,6 +19,7 @@ async function updateHome(req, res) {
     const {
       textoEvento, youtubeUrl, totalEdiciones, totalShows, totalPersonas,
       boxLugar, boxDireccion, boxCiudad, boxEtiquetaEntrada,
+      eventosVisiblesPortada,
     } = req.body;
     const data = {};
 
@@ -45,6 +46,11 @@ async function updateHome(req, res) {
     if (totalPersonas !== undefined) {
       const v = parseStat(totalPersonas);
       if (v !== null) data.totalPersonas = v;
+    }
+    // Eventos visibles en el carrusel: al menos 1 (0 no tiene sentido).
+    if (eventosVisiblesPortada !== undefined) {
+      const v = parseStat(eventosVisiblesPortada);
+      if (v !== null && v >= 1) data.eventosVisiblesPortada = v;
     }
 
     if (req.files) {

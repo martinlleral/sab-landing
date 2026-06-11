@@ -24,6 +24,10 @@ model Home {
   boxDireccion       String @default("Calle 23 entre 43 y 44, Barrio La Loma")
   boxCiudad          String @default("La Plata")
   boxEtiquetaEntrada String @default("Anticipada online")
+  // Cuántas tarjetas de "Próximos eventos" se ven a la vez en el carrusel de la
+  // portada. No limita cuántos eventos existen (se muestran todos los publicados),
+  // solo el ancho de la ventana visible. Editable desde el backoffice.
+  eventosVisiblesPortada Int @default(3)
   updatedAt      DateTime @updatedAt
 }
 
