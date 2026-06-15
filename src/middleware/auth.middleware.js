@@ -1,4 +1,5 @@
 const reportTokenService = require('../services/reportToken.service');
+const validationTokenService = require('../services/validationToken.service');
 
 // Helper: chequea si la request entrante es una ruta de API.
 // Usar req.originalUrl en vez de req.path — cuando el middleware está montado
@@ -60,4 +61,25 @@ async function requireReportToken(req, res, next) {
   }
 }
 
-module.exports = { requireAuth, requireAdmin, requireReportToken };
+// Middleware del endpoint PÚBLICO de validación de entradas por QR (ítem 2).
+// Valida el token de la URL (req.params.token); si es válido, lo deja en
+// req.validationToken y sigue. La respuesta de fallo es UNIFORME (mismo 404
+// para token inexistente o revocado) — el code real solo se loguea. No inyecta
+// eventoId: este token es global (valida QR de cualquier evento).
+async function requireValidationToken(req, res, next) {
+  try {
+    const { valido, registro, code } = await validationTokenService.validarToken(req.params.token);
+    if (!valido) {
+      console.warn(`[validacion] token rechazado code=${code}`);
+      return res.status(404).json({ error: 'Acceso de validación no disponible' });
+    }
+    req.validationToken = registro;
+    res.set('Cache-Control', 'no-store');
+    next();
+  } catch (err) {
+    console.error('Error en requireValidationToken:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+module.exports = { requireAuth, requireAdmin, requireReportToken, requireValidationToken };

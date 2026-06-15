@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Validar entradas — SAB</title>
+  <style>
+    :root {
+      --bg: #0a0a0a; --surface: #141414; --surface2: #1e1e1e; --border: #2a2a2a;
+      --accent: #e63946; --text: #f1f1f1; --muted: #999;
+      --ok: #2ea043; --warn: #d9a400; --err: #c1121f;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; line-height: 1.5; }
+    .wrap { max-width: 520px; margin: 0 auto; padding: 16px; }
+    header { text-align: center; padding: 14px 0 6px; }
+    header h1 { font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; }
+    header .sub { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-top: 14px; }
+    #reader { width: 100%; border-radius: 10px; overflow: hidden; }
+    .btn { display: block; width: 100%; border: none; border-radius: 10px; padding: 14px; font-size: 1rem; font-weight: 700;
+           letter-spacing: 1px; text-transform: uppercase; cursor: pointer; color: #fff; background: var(--accent); }
+    .btn:active { transform: translateY(1px); }
+    .btn--ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .manual { display: flex; gap: 8px; margin-top: 12px; }
+    .manual input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 12px; font-size: 0.95rem; }
+    .manual button { flex: 0 0 auto; padding: 0 16px; border-radius: 8px; border: none; background: var(--surface2); color: var(--text); border: 1px solid var(--border); font-weight: 700; cursor: pointer; }
+    /* Resultado */
+    #resultado { margin-top: 14px; border-radius: 12px; padding: 18px; text-align: center; display: none; border: 2px solid; }
+    #resultado.show { display: block; }
+    #resultado.ok   { background: rgba(46,160,67,.12);  border-color: var(--ok); }
+    #resultado.warn { background: rgba(217,164,0,.12);  border-color: var(--warn); }
+    #resultado.err  { background: rgba(193,18,31,.14);  border-color: var(--err); }
+    #resultado .estado { font-size: 1.4rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+    #resultado.ok .estado { color: #4ade80; }
+    #resultado.warn .estado { color: #fbbf24; }
+    #resultado.err .estado { color: #f87171; }
+    #resultado .nombre { font-size: 1.25rem; font-weight: 700; margin-top: 8px; }
+    #resultado .evento { color: var(--muted); margin-top: 2px; }
+    #resultado .detalle { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+    .contador { display: flex; justify-content: center; gap: 8px; align-items: baseline; margin-top: 14px; color: var(--muted); font-size: 0.85rem; }
+    .contador b { color: var(--text); font-size: 1.3rem; }
+    .hist { margin-top: 14px; }
+    .hist h2 { font-size: 0.75rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    .hist-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--surface2); margin-bottom: 6px; font-size: 0.9rem; }
+    .hist-item .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+    .hist-item.ok .dot { background: var(--ok); } .hist-item.warn .dot { background: var(--warn); } .hist-item.err .dot { background: var(--err); }
+    .hist-item .h-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hist-item .h-time { color: var(--muted); font-size: 0.78rem; }
+    /* Pantalla de acceso denegado / carga */
+    #gate { text-align: center; padding: 60px 20px; color: var(--muted); }
+    #gate .big { font-size: 2.4rem; margin-bottom: 10px; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Validar entradas</h1>
+      <div class="sub" id="sub">Sindicato Argentino de Boleros</div>
+    </header>
+
+    <!-- Estado de carga / acceso denegado -->
+    <div id="gate">
+      <div class="big">⏳</div>
+      <div id="gate-msg">Verificando acceso…</div>
+    </div>
+
+    <!-- App de validación (oculta hasta validar el token) -->
+    <div id="app" class="hidden">
+      <div class="card">
+        <div id="reader"></div>
+        <div id="cam-off" style="text-align:center;color:var(--muted);padding:18px 0;">
+          La cámara está apagada
+        </div>
+        <button class="btn" id="btn-cam" style="margin-top:12px;" onclick="toggleCamara()">Activar cámara</button>
+        <div class="manual">
+          <input id="input-qr" inputmode="text" placeholder="…o pegá el código del QR" autocomplete="off">
+          <button onclick="procesarManual()">OK</button>
+        </div>
+      </div>
+
+      <div id="resultado">
+        <div class="estado" id="r-estado"></div>
+        <div class="nombre" id="r-nombre"></div>
+        <div class="evento" id="r-evento"></div>
+        <div class="detalle" id="r-detalle"></div>
+      </div>
+
+      <div class="contador">Validadas en esta sesión: <b id="cnt">0</b></div>
+
+      <div class="hist">
+        <h2>Últimas</h2>
+        <div id="hist-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    // Token desde el path: /validar/<token>
+    const TOKEN = (location.pathname.match(/\/validar\/([^/]+)/) || [])[1] || '';
+    let scanner = null, procesando = false, validadas = 0;
+    let ultimo = { codigo: null, ts: 0 };
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    async function init() {
+      if (!TOKEN) return denegar('Enlace inválido');
+      try {
+        const res = await fetch(`/api/validacion/${encodeURIComponent(TOKEN)}/check`);
+        if (!res.ok) return denegar('Este acceso no está disponible o fue desactivado');
+        const data = await res.json();
+        document.getElementById('gate').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        if (data.descripcion) document.getElementById('sub').textContent = data.descripcion;
+        document.getElementById('input-qr').addEventListener('keydown', (e) => { if (e.key === 'Enter') procesarManual(); });
+      } catch (e) {
+        denegar('No se pudo verificar el acceso. Revisá la conexión.');
+      }
+    }
+
+    function denegar(msg) {
+      const g = document.getElementById('gate');
+      g.classList.remove('hidden');
+      g.querySelector('.big').textContent = '🔒';
+      document.getElementById('gate-msg').textContent = msg;
+      document.getElementById('app').classList.add('hidden');
+    }
+
+    // ─── Cámara ───
+    async function toggleCamara() {
+      if (scanner) return detenerCamara();
+      document.getElementById('cam-off').style.display = 'none';
+      document.getElementById('btn-cam').textContent = 'Apagar cámara';
+      document.getElementById('btn-cam').classList.add('btn--ghost');
+      scanner = new Html5Qrcode('reader');
+      const cfg = { fps: 10, qrbox: { width: 250, height: 250 } };
+      try {
+        await scanner.start({ facingMode: 'environment' }, cfg, onScan, () => {});
+      } catch (e) {
+        try { await scanner.start({ facingMode: 'user' }, cfg, onScan, () => {}); }
+        catch (e2) { alert('No se pudo acceder a la cámara: ' + e2.message); detenerCamara(); }
+      }
+    }
+    async function detenerCamara() {
+      if (scanner) { try { await scanner.stop(); } catch (_) {} try { scanner.clear(); } catch (_) {} scanner = null; }
+      document.getElementById('cam-off').style.display = '';
+      document.getElementById('btn-cam').textContent = 'Activar cámara';
+      document.getElementById('btn-cam').classList.remove('btn--ghost');
+    }
+
+    function onScan(codigo) {
+      // Evitar re-escanear el mismo QR dentro de 3s
+      if (ultimo.codigo === codigo && Date.now() - ultimo.ts < 3000) return;
+      procesarCodigo(codigo);
+    }
+    function procesarManual() {
+      const el = document.getElementById('input-qr');
+      const v = el.value.trim();
+      if (!v) return;
+      el.value = '';
+      procesarCodigo(v);
+    }
+
+    async function procesarCodigo(codigoQR) {
+      if (procesando) return;
+      procesando = true;
+      ultimo = { codigo: codigoQR, ts: Date.now() };
+      try {
+        const res = await fetch(`/api/validacion/${encodeURIComponent(TOKEN)}/qr`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ codigoQR }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data.valida) {
+          validadas++;
+          document.getElementById('cnt').textContent = validadas;
+          render('ok', 'Entrada válida', data.entrada, 'Ingreso habilitado');
+          vibrar([90]);
+        } else if (data.codigo === 'ALREADY_USED') {
+          render('warn', 'Ya utilizada', data.entrada, validadaHace(data.entrada));
+          vibrar([70, 40, 70]);
+        } else if (data.codigo === 'NOT_PAID') {
+          render('err', 'No pagada', data.entrada, 'La compra no está aprobada');
+          vibrar([200]);
+        } else if (res.status === 404 && (data.error || '').includes('no disponible')) {
+          denegar('El acceso fue desactivado');
+        } else if (res.status >= 500) {
+          // Error del servidor: NO es un QR inválido. En la puerta importa la
+          // distinción — "reintentá" en vez de rechazar una entrada buena.
+          render('err', 'Error', null, 'Error del servidor. Reintentá.');
+          vibrar([200]);
+        } else {
+          render('err', 'No reconocida', null, 'QR inválido o no encontrado');
+          vibrar([200]);
+        }
+      } catch (e) {
+        render('err', 'Error', null, 'No se pudo validar. Reintentá.');
+      } finally {
+        procesando = false;
+      }
+    }
+
+    function render(tipo, estado, entrada, detalle) {
+      const box = document.getElementById('resultado');
+      box.className = 'show ' + tipo;
+      document.getElementById('r-estado').textContent = estado;
+      const nombre = entrada ? `${entrada.nombre || ''} ${entrada.apellido || ''}`.trim() : '';
+      document.getElementById('r-nombre').textContent = nombre;
+      document.getElementById('r-evento').textContent = entrada && entrada.evento ? entrada.evento.nombre : '';
+      document.getElementById('r-detalle').textContent = detalle || '';
+      agregarHist(tipo, nombre || estado);
+    }
+
+    function validadaHace(entrada) {
+      if (!entrada || !entrada.validadaAt) return 'Ya fue validada';
+      const d = new Date(entrada.validadaAt);
+      const hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
+      return `Validada a las ${hh}:${mm}`;
+    }
+
+    function agregarHist(tipo, texto) {
+      const list = document.getElementById('hist-list');
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const item = document.createElement('div');
+      item.className = 'hist-item ' + tipo;
+      const dot = document.createElement('span'); dot.className = 'dot';
+      const name = document.createElement('span'); name.className = 'h-name'; name.textContent = texto;
+      const time = document.createElement('span'); time.className = 'h-time'; time.textContent = hhmm;
+      item.append(dot, name, time);
+      list.prepend(item);
+      while (list.children.length > 12) list.removeChild(list.lastChild);
+    }
+
+    function vibrar(p) { if (navigator.vibrate) try { navigator.vibrate(p); } catch (_) {} }
+  </script>
+</body>
+</html>

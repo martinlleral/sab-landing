@@ -176,3 +176,19 @@ model ReportAccessToken {
 
   @@index([eventoId])
 }
+
+// Token de acceso para VALIDAR ENTRADAS por QR en la puerta, pensado para
+// compartir con una sede o colaborador externo (ej. personal de Casa Metro) sin
+// darle el backoffice completo. A diferencia de ReportAccessToken: es GLOBAL (no
+// atado a un evento — sirve para todos los ciclos), NO expira (se desactiva a
+// voluntad con `activo`), y el endpoint que valida sí muestra el nombre del
+// comprador (no datos de contacto). Un solo link compartido entre validadores.
+model ValidationAccessToken {
+  id           Int       @id @default(autoincrement())
+  token        String    @unique
+  descripcion  String    @default("")
+  activo       Boolean   @default(true)
+  creadoPor    String    @default("")
+  ultimoAcceso DateTime?
+  createdAt    DateTime  @default(now())
+}

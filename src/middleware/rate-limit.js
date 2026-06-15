@@ -52,4 +52,17 @@ const reportePublicoLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes. Esperá un momento.' },
 });
 
-module.exports = { loginLimiter, comprasLimiter, cuponesValidarLimiter, reportePublicoLimiter };
+// Rate limiter para /api/validacion/:token/* (validación de entradas por QR en
+// la puerta). Es más holgado que el de reporte: en el ingreso se escanean muchas
+// entradas seguidas, a veces en ráfaga (cola de gente). 120 req/min por IP ≈ 2/s
+// sostenido, suficiente para un validador rápido, y corta abuso del espacio de
+// tokens. El token (64 hex) ya es la barrera principal.
+const validacionQRLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_VALIDACION_MAX, 10) || 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Esperá un momento.' },
+});
+
+module.exports = { loginLimiter, comprasLimiter, cuponesValidarLimiter, reportePublicoLimiter, validacionQRLimiter };
