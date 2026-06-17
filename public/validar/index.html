@@ -52,6 +52,14 @@
     #gate { text-align: center; padding: 60px 20px; color: var(--muted); }
     #gate .big { font-size: 2.4rem; margin-bottom: 10px; }
     .hidden { display: none !important; }
+    /* Banner del evento de la noche (referencia para cotejar el QR escaneado) */
+    .ref-banner { display: none; background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 10px 14px; margin-top: 14px; }
+    .ref-banner.show { display: block; }
+    .ref-banner .label { font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+    .ref-banner .ev { font-size: 1.05rem; font-weight: 700; margin-top: 2px; }
+    .ref-banner .fecha { color: var(--muted); font-size: 0.85rem; }
+    /* Aviso cuando el QR pertenece a OTRO evento distinto al de la noche */
+    #resultado .evento.otro { color: #fbbf24; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -69,6 +77,14 @@
 
     <!-- App de validación (oculta hasta validar el token) -->
     <div id="app" class="hidden">
+      <!-- Referencia: evento que el SAB tiene destacado (el de esta noche).
+           Sirve para cotejar contra el evento que aparece al escanear cada QR. -->
+      <div class="ref-banner" id="ref-banner">
+        <div class="label">Evento de esta noche</div>
+        <div class="ev" id="ref-ev"></div>
+        <div class="fecha" id="ref-fecha"></div>
+      </div>
+
       <div class="card">
         <div id="reader"></div>
         <div id="cam-off" style="text-align:center;color:var(--muted);padding:18px 0;">
@@ -103,6 +119,7 @@
     const TOKEN = (location.pathname.match(/\/validar\/([^/]+)/) || [])[1] || '';
     let scanner = null, procesando = false, validadas = 0;
     let ultimo = { codigo: null, ts: 0 };
+    let eventoRef = null; // nombre del evento de la noche (el destacado), para cotejar
 
     document.addEventListener('DOMContentLoaded', init);
 
@@ -116,9 +133,30 @@
         document.getElementById('app').classList.remove('hidden');
         if (data.descripcion) document.getElementById('sub').textContent = data.descripcion;
         document.getElementById('input-qr').addEventListener('keydown', (e) => { if (e.key === 'Enter') procesarManual(); });
+        cargarEventoRef();
       } catch (e) {
         denegar('No se pudo verificar el acceso. Revisá la conexión.');
       }
+    }
+
+    // Carga el evento DESTACADO (el que el SAB resalta en la portada) como
+    // referencia de "el evento de esta noche". Es informativo: si no hay
+    // destacado, el banner simplemente no aparece y la validación sigue igual.
+    async function cargarEventoRef() {
+      try {
+        const res = await fetch('/api/eventos/destacado');
+        if (!res.ok) return;
+        const ev = await res.json();
+        if (!ev || !ev.nombre) return;
+        eventoRef = ev.nombre;
+        document.getElementById('ref-ev').textContent = ev.nombre;
+        if (ev.fecha) {
+          // timeZone UTC para no correr el día (mismo criterio que formatFecha del sitio)
+          const f = new Date(ev.fecha).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+          document.getElementById('ref-fecha').textContent = f.charAt(0).toUpperCase() + f.slice(1);
+        }
+        document.getElementById('ref-banner').classList.add('show');
+      } catch (_) { /* silencioso: el banner no es crítico */ }
     }
 
     function denegar(msg) {
@@ -210,7 +248,13 @@
       document.getElementById('r-estado').textContent = estado;
       const nombre = entrada ? `${entrada.nombre || ''} ${entrada.apellido || ''}`.trim() : '';
       document.getElementById('r-nombre').textContent = nombre;
-      document.getElementById('r-evento').textContent = entrada && entrada.evento ? entrada.evento.nombre : '';
+      // Evento del QR. Si hay un evento de referencia (el de la noche) y NO coincide,
+      // se avisa: la entrada es válida pero pertenece a otro evento.
+      const evEl = document.getElementById('r-evento');
+      const evNombre = entrada && entrada.evento ? entrada.evento.nombre : '';
+      const esOtro = !!(evNombre && eventoRef && evNombre !== eventoRef);
+      evEl.textContent = esOtro ? `⚠️ Otro evento: ${evNombre}` : evNombre;
+      evEl.classList.toggle('otro', esOtro);
       document.getElementById('r-detalle').textContent = detalle || '';
       agregarHist(tipo, nombre || estado);
     }
