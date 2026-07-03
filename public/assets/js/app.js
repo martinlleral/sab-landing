@@ -81,9 +81,15 @@ async function loadHome() {
       desc.textContent = data.textoEvento || '';
       desc.style.display = data.textoEvento ? '' : 'none';
     }
-    // La sección "El Evento" (#descripcion) siempre se muestra — contiene ciclo,
-    // viñetas, info cards, callouts y CTA. Solo el <p id="evento-descripcion">
-    // se oculta si el campo "texto del evento" del backoffice está vacío.
+    // La sección "El Evento" (#descripcion) es el pitch del ciclo Amor de
+    // Miércoles. Se oculta entera cuando el backoffice apaga el toggle
+    // mostrarCicloMiercoles (agenda solo con eventos especiales, sin ciclo).
+    // Default true → se muestra; solo la ocultamos si viene explícitamente false.
+    // Aparte, el <p id="evento-descripcion"> ya se oculta si su texto está vacío.
+    const cicloSection = document.getElementById('descripcion');
+    if (cicloSection) {
+      cicloSection.style.display = data.mostrarCicloMiercoles === false ? 'none' : '';
+    }
 
     buildVideo(data.youtubeUrl);
     renderStats(data);

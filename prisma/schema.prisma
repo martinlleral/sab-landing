@@ -28,6 +28,11 @@ model Home {
   // portada. No limita cuántos eventos existen (se muestran todos los publicados),
   // solo el ancho de la ventana visible. Editable desde el backoffice.
   eventosVisiblesPortada Int @default(3)
+  // Toggle de la sección "El Evento" (#descripcion) = el pitch del ciclo semanal
+  // Amor de Miércoles. Se apaga desde el backoffice cuando la agenda está armada
+  // solo con eventos especiales (no hay ciclo del miércoles) para no confundir.
+  // Default true = comportamiento histórico (siempre visible).
+  mostrarCicloMiercoles Boolean @default(true)
   updatedAt      DateTime @updatedAt
 }
 

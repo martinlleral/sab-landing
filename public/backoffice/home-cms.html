@@ -153,6 +153,24 @@
               </div>
             </div>
 
+            <!-- Sección "El Evento" (ciclo Amor de Miércoles): mostrar / ocultar -->
+            <div class="col-12">
+              <div class="bo-card">
+                <div class="bo-card-header">
+                  <h5 class="bo-card-title"><i class="bi bi-calendar-week me-2"></i>Sección "El Evento" (ciclo Amor de Miércoles)</h5>
+                </div>
+                <div class="bo-card-body">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="mostrarCicloMiercoles" name="mostrarCicloMiercoles">
+                    <label class="form-check-label bo-switch-label" for="mostrarCicloMiercoles">Mostrar la sección del ciclo Amor de Miércoles en la home</label>
+                  </div>
+                  <p class="small mb-0 mt-2" style="color:#666;">
+                    Apagá este toggle cuando la agenda esté armada solo con <strong>eventos especiales</strong> y no haya ciclo semanal del miércoles: la sección "El Evento" (orquesta en vivo, vinilos, clase de baile, DJ) deja de aparecer en la portada. Los <strong>próximos eventos</strong> y el resto de la home siguen visibles.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <!-- Texto Evento -->
             <div class="col-md-6">
               <div class="bo-card h-100">
@@ -271,6 +289,8 @@
         document.getElementById('totalShows').value = data.totalShows ?? 0;
         document.getElementById('totalPersonas').value = data.totalPersonas ?? 0;
         document.getElementById('eventosVisiblesPortada').value = data.eventosVisiblesPortada ?? 3;
+        // Default true: si el campo no viniera (bases viejas), lo tratamos como visible.
+        document.getElementById('mostrarCicloMiercoles').checked = data.mostrarCicloMiercoles !== false;
         document.getElementById('boxLugar').value = data.boxLugar ?? '';
         document.getElementById('boxDireccion').value = data.boxDireccion ?? '';
         document.getElementById('boxCiudad').value = data.boxCiudad ?? '';
@@ -358,6 +378,10 @@
 
       try {
         const formData = new FormData(document.getElementById('homeForm'));
+        // Un checkbox no se incluye en el FormData cuando está desmarcado, así que
+        // el "false" nunca llegaría al backend. Lo seteamos explícito para que el
+        // toggle apague de verdad la sección (no solo la encienda).
+        formData.set('mostrarCicloMiercoles', document.getElementById('mostrarCicloMiercoles').checked ? 'true' : 'false');
 
         const res = await fetch('/api/admin/home', {
           method: 'PUT',

@@ -19,7 +19,7 @@ async function updateHome(req, res) {
     const {
       textoEvento, youtubeUrl, totalEdiciones, totalShows, totalPersonas,
       boxLugar, boxDireccion, boxCiudad, boxEtiquetaEntrada,
-      eventosVisiblesPortada,
+      eventosVisiblesPortada, mostrarCicloMiercoles,
     } = req.body;
     const data = {};
 
@@ -51,6 +51,11 @@ async function updateHome(req, res) {
     if (eventosVisiblesPortada !== undefined) {
       const v = parseStat(eventosVisiblesPortada);
       if (v !== null && v >= 1) data.eventosVisiblesPortada = v;
+    }
+    // Toggle de la sección del ciclo Amor de Miércoles. Llega como string desde
+    // el FormData del backoffice ('true'/'false'); aceptamos también booleano.
+    if (mostrarCicloMiercoles !== undefined) {
+      data.mostrarCicloMiercoles = mostrarCicloMiercoles === 'true' || mostrarCicloMiercoles === true;
     }
 
     if (req.files) {
