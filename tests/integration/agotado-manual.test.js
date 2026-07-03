@@ -11,6 +11,10 @@
  * Uso:
  *   docker exec sab-app node tests/integration/agotado-manual.test.js
  *
+ * @requires-server  → pega contra http://localhost:3000; el runner (npm test)
+ *                     lo saltea salvo que haya un server vivo (TEST_BASE_URL
+ *                     seteado o `npm test -- --all`).
+ *
  * Exit codes:
  *   0 = PASS, 1 = FAIL
  */

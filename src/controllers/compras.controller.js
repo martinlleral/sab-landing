@@ -329,8 +329,12 @@ async function adminListar(req, res) {
 
     // orderBy: 'nombre' (default A-Z para uso en la puerta del evento) o 'fecha'
     // (más recientes primero, comportamiento previo al sprint 4).
+    // Desempate por `id desc`: varias compras pueden compartir el mismo
+    // createdAt al milisegundo (importaciones, tests, ráfagas), y SQLite
+    // resuelve los empates por rowid ascendente → dejaría la más nueva
+    // ABAJO. El id autoincremental garantiza "más reciente primero" estable.
     const orderBy = req.query.orderBy === 'fecha'
-      ? { createdAt: 'desc' }
+      ? [{ createdAt: 'desc' }, { id: 'desc' }]
       : [{ apellido: 'asc' }, { nombre: 'asc' }];
 
     // Cuando hay búsqueda activa, ignorar paginación y devolver hasta 200
