@@ -13,6 +13,9 @@ const API = {
 let eventoActual = null;
 let eventosProximos = [];
 let eventosDisponibles = [];
+// Id del evento pedido por un link de venta (?evento=<id>). Se consume una sola
+// vez al abrir el modal (ver wireModalCompra / abrirCompraDesdeURL). null = no hay.
+let deepLinkEventoId = null;
 // Datos de Home cargados al init. Usados para resolver los defaults de los box
 // "El Evento" cuando el evento destacado no trae overrides propios.
 let homeData = null;
@@ -50,6 +53,7 @@ async function loadAll() {
   await Promise.all([loadDestacado(), loadProximos()]);
   buildEventosDisponibles();
   wireModalCompra();
+  abrirCompraDesdeURL();
 }
 
 function buildEventosDisponibles() {
@@ -593,7 +597,12 @@ function wireModalCompra() {
   modalEl.addEventListener('show.bs.modal', (event) => {
     const trigger = event.relatedTarget;
     const rawId = trigger?.dataset?.eventoId;
-    const idRequested = rawId ? Number(rawId) : (eventoActual ? eventoActual.id : null);
+    // Prioridad de preselección: botón que disparó el modal (data-evento-id) →
+    // link de venta ?evento= (consumido una sola vez) → evento destacado.
+    const idRequested = rawId
+      ? Number(rawId)
+      : (deepLinkEventoId != null ? deepLinkEventoId : (eventoActual ? eventoActual.id : null));
+    deepLinkEventoId = null;
     populateModalEventoSelect(idRequested);
     onEventoSeleccionadoChange();
     // Reset del segundo campo de email — sino mantiene valor de compra anterior.
@@ -605,6 +614,27 @@ function wireModalCompra() {
     const cuponPanel = document.getElementById('cupon-panel');
     if (cuponPanel) cuponPanel.style.display = 'none';
   });
+}
+
+// Link de venta por evento (US-2): si la URL trae ?evento=<id>, abre el modal de
+// compra con esa fecha ya preseleccionada — para compartir con terceros el link
+// directo a la compra de una fecha, sin mandarlos a elegir en la home. Si el id
+// no existe entre los eventos disponibles (borrado/despublicado/ inválido) no
+// hace nada: queda la home normal, sin romper.
+function abrirCompraDesdeURL() {
+  const raw = new URLSearchParams(window.location.search).get('evento');
+  if (!raw) return;
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) return;
+  if (!eventosDisponibles.some((e) => e.id === id)) return;
+
+  const modalEl = document.getElementById('modalCompra');
+  if (!modalEl || typeof bootstrap === 'undefined') return;
+
+  deepLinkEventoId = id;
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  // Limpiar la query para que un refresh o "compartir de nuevo" no reabra solo el modal.
+  window.history.replaceState({}, document.title, window.location.pathname);
 }
 
 // Feedback visual del match de emails. No bloquea inputs, solo informa al

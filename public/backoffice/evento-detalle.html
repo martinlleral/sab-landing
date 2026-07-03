@@ -266,6 +266,25 @@
                 </div>
               </div>
 
+              <!-- Link de venta (US-2): compartir la compra directa de esta fecha -->
+              <div class="bo-card mb-4" id="card-link-venta" style="display:none;">
+                <div class="bo-card-header">
+                  <h5 class="bo-card-title"><i class="bi bi-cart-check me-2"></i>Link de venta</h5>
+                </div>
+                <div class="bo-card-body">
+                  <p class="small mb-2" style="color:#666;">
+                    Compartí este enlace para que compren entradas <strong>de esta fecha</strong> directo (abre la compra ya seleccionada). No es el de la home, ni el de reporte, ni el de validación.
+                  </p>
+                  <div class="d-flex gap-2">
+                    <input type="text" class="bo-form-control" id="link-venta-input" readonly style="font-size:.82rem;">
+                    <button type="button" class="btn-bo-secondary" id="btn-copiar-link-venta" title="Copiar enlace" style="white-space:nowrap;">
+                      <i class="bi bi-clipboard"></i>
+                    </button>
+                  </div>
+                  <div class="small mt-2" id="link-venta-hint" style="color:#e0a800;"></div>
+                </div>
+              </div>
+
               <!-- Acciones -->
               <div class="bo-card">
                 <div class="bo-card-body">
@@ -608,12 +627,36 @@
       try {
         const data = await boFetch(`/api/admin/eventos/${id}`);
         fillForm(data);
+        setupLinkVenta(data);
         if (data.compras && data.compras.length) {
           renderCompras(data.compras.filter(c => c.totalPagado > 0));
         }
       } catch (err) {
         boAlert('Error al cargar evento: ' + err.message);
       }
+    }
+
+    // Link de venta por evento (US-2): muestra el enlace directo a la compra de
+    // esta fecha (dominio/?evento=<id>) para compartir con terceros. Solo tiene
+    // sentido en un evento ya guardado; si no está publicado, avisa que el link
+    // recién funcionará al publicarlo.
+    function setupLinkVenta(data) {
+      const card = document.getElementById('card-link-venta');
+      const input = document.getElementById('link-venta-input');
+      const hint = document.getElementById('link-venta-hint');
+      const btn = document.getElementById('btn-copiar-link-venta');
+      if (!card || !input || !data || !data.id) return;
+      input.value = `${location.origin}/?evento=${data.id}`;
+      card.style.display = '';
+      if (hint) hint.textContent = data.estaPublicado ? '' : '⚠️ Publicá el evento para que el link funcione.';
+      if (btn) btn.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(input.value);
+          const prev = btn.innerHTML;
+          btn.innerHTML = '<i class="bi bi-check2"></i>';
+          setTimeout(() => { btn.innerHTML = prev; }, 1500);
+        } catch (e) { input.select(); }
+      };
     }
 
     // Muestra la sede por defecto del sitio (Home CMS) como placeholder + ayuda
