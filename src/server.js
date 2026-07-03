@@ -111,10 +111,17 @@ app.use('/api/compras/preferencia', comprasLimiter);
 // atacante). Este middleware deja pasar solo login.html; todo el resto
 // redirige a login si no hay sesión admin activa.
 app.use('/backoffice', (req, res, next) => {
-  if (req.path === '/login.html' || req.path === '/login' || req.path === '/') {
+  const esLogin = req.path === '/login.html' || req.path === '/login' || req.path === '/';
+  const sesionAdmin = req.session?.usuario && req.session.usuario.rol === 1;
+  if (esLogin) {
+    // US-1: si el admin ya tiene sesión activa y vuelve a /login.html (o al root
+    // del backoffice), no mostrarle el formulario de nuevo — mandarlo directo al
+    // dashboard. Sin este redirect, un admin logueado que abre el bookmark del
+    // login veía el form y tenía que re-loguearse aunque ya estaba adentro.
+    if (sesionAdmin) return res.redirect('/backoffice/dashboard.html');
     return next();
   }
-  if (!req.session?.usuario || req.session.usuario.rol !== 1) {
+  if (!sesionAdmin) {
     return res.redirect('/backoffice/login.html');
   }
   next();
