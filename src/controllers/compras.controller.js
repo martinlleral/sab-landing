@@ -4,7 +4,7 @@ const config = require('../config');
 const mpService = require('../services/mercadopago.service');
 const brevoService = require('../services/brevo.service');
 const qrService = require('../services/qr.service');
-const { procesarPagoAprobado } = require('../services/pagos.service');
+const { procesarPagoAprobado, revertirCompraAprobada } = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
 const { calcularPrecioFinal, reservarCupon, validarCupon } = require('../services/precios.service');
 
@@ -472,7 +472,7 @@ async function adminReenviarMail(req, res) {
       entradasParaMail.push({ ...entrada, qrBase64: qrBase64.split(',')[1] });
     }
 
-    const adminEmail = req.session?.user?.email || 'admin';
+    const adminEmail = req.session?.usuario?.email || 'admin';
     console.log(`📧 [REENVIO] Admin=${adminEmail} compra=#${id} → ${emailDestino}${emailCambio ? ` (cambió de ${compra.email})` : ''}`);
 
     await brevoService.enviarConfirmacion({
@@ -495,4 +495,37 @@ async function adminReenviarMail(req, res) {
   }
 }
 
-module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminGetById, adminEliminar, adminEliminarPendientes, adminReenviarMail };
+// US-A: marca una compra aprobada como devuelta (refund manual desde el
+// backoffice). Delega en revertirCompraAprobada, que hace la reversión atómica
+// de estado + stock + cupón. Solo aplica a compras approved (400 si no).
+async function adminDevolver(req, res) {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido', code: 'INVALID_ID' });
+
+    const motivo = (req.body && typeof req.body.motivo === 'string') ? req.body.motivo.trim().slice(0, 500) : null;
+    const revertidaPor = req.session?.usuario?.email || 'admin';
+
+    const result = await revertirCompraAprobada(id, { revertidaPor, motivo });
+
+    if (!result.ok) {
+      if (result.code === 'NOT_FOUND') {
+        return res.status(404).json({ error: 'Compra no encontrada', code: 'NOT_FOUND' });
+      }
+      return res.status(400).json({
+        error: `Solo se puede devolver una compra aprobada (estado actual: ${result.estado})`,
+        code: 'NOT_APPROVED',
+        estado: result.estado,
+      });
+    }
+
+    console.log(`↩️  [DEVOLUCION] Admin=${revertidaPor} compra=#${id} stock_devuelto=${result.stock_devuelto} cupon_liberado=${result.libero_cupon} entradas_ya_validadas=${result.entradas_ya_validadas}${motivo ? ` motivo="${motivo}"` : ''}`);
+
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('Error en adminDevolver:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminGetById, adminEliminar, adminEliminarPendientes, adminReenviarMail, adminDevolver };

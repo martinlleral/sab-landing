@@ -452,6 +452,9 @@
             ${c.mpEstado === 'approved'
               ? `<button class="btn-bo-secondary" style="padding:4px 8px; font-size:0.8rem;" onclick="reenviarMail(${c.id}, ${JSON.stringify(c.email).replace(/"/g, '&quot;')})" title="Reenviar mail con QR">
                    <i class="bi bi-envelope-arrow-up"></i> Reenviar
+                 </button>
+                 <button class="btn-bo-secondary" style="color:#f6ad55; border-color:#f6ad55; padding:4px 8px; font-size:0.8rem; margin-left:4px;" onclick="devolverCompra(${c.id})" title="Marcar como devuelta (tras un refund en Mercado Pago)">
+                   <i class="bi bi-arrow-counterclockwise"></i> Devolver
                  </button>`
               : `<button class="btn-bo-secondary" style="color:#fc8181; border-color:#fc8181; padding:4px 8px; font-size:0.8rem;" onclick="eliminarCompra(${c.id})" title="Eliminar compra">
                    <i class="bi bi-trash"></i>
@@ -553,6 +556,40 @@
         if (data.emailActualizado) loadCompras(currentPage);
       } catch (err) {
         boAlert('Error al reenviar: ' + err.message, 'error');
+      }
+    }
+
+    // US-A: marca una compra aprobada como devuelta tras un refund en MP. El
+    // prompt del motivo hace de confirmación (Cancelar aborta). Avisa si alguna
+    // entrada ya había sido usada en la puerta (la devolución igual procede).
+    async function devolverCompra(id) {
+      const motivo = prompt(
+        `Marcar la compra #${id} como DEVUELTA.\n\n` +
+        `Usalo cuando Euge YA hizo el reintegro en Mercado Pago. Esto:\n` +
+        `  • invalida las entradas (dejan de servir en la puerta),\n` +
+        `  • libera el lugar (vuelve al stock) y el cupón si usó,\n` +
+        `  • saca la venta de la recaudación y los reportes.\n\n` +
+        `Motivo (opcional):`,
+        ''
+      );
+      if (motivo === null) return; // cancelado
+      try {
+        const data = await boFetch(`/api/admin/compras/${id}/devolver`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ motivo: String(motivo).trim() }),
+        });
+        let msg = `Compra #${id} marcada como devuelta.`;
+        if (data.stock_devuelto > 0) msg += ` Se liberaron ${data.stock_devuelto} lugar(es).`;
+        if (data.libero_cupon) msg += ' Cupón liberado.';
+        if (data.entradas_ya_validadas > 0) {
+          msg += ` ⚠️ ${data.entradas_ya_validadas} entrada(s) ya habían sido usadas en la puerta.`;
+        }
+        boAlert(msg, 'success');
+        loadCompras(currentPage);
+        refreshStats();
+      } catch (err) {
+        boAlert('Error al devolver: ' + err.message, 'error');
       }
     }
 

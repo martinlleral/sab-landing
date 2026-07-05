@@ -105,6 +105,12 @@ model Compra {
   mpPreferenciaId    String      @default("")
   mpPagoId           String      @default("")
   mpEstado           String      @default("pending")
+  // Devolución manual desde el backoffice (US-A): cuando Euge hace un refund en
+  // Mercado Pago, el admin marca la compra como devuelta. mpEstado pasa a
+  // 'refunded' y se registra quién/cuándo/por qué para trazabilidad contable.
+  devueltaAt         DateTime?
+  devueltaPor        String?
+  devueltaMotivo     String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
   entradas           Entrada[]

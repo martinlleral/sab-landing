@@ -2,7 +2,10 @@ const { v4: uuidv4 } = require('uuid');
 const prisma = require('../utils/prisma');
 const qrService = require('./qr.service');
 const brevoService = require('./brevo.service');
-const { liberarCupon } = require('./precios.service');
+// Se referencia como `precios.liberarCupon` (no destructurado) a propósito: así
+// el módulo queda monkey-patcheable desde los tests para forzar un fallo dentro
+// de la transacción y verificar el rollback (patrón sin jest del proyecto).
+const precios = require('./precios.service');
 
 /**
  * Procesa una compra aprobada: actualiza estado, genera entradas con QR y envía email.
@@ -126,11 +129,92 @@ async function procesarPagoCancelado(compraId, nuevoEstado, mpPagoId = null) {
     // CuponUso tiene @@unique([compraId]) — a lo sumo 1 por compra.
     const uso = await tx.cuponUso.findUnique({ where: { compraId } });
     if (uso) {
-      await liberarCupon(tx, uso.cuponId);
+      await precios.liberarCupon(tx, uso.cuponId);
     }
 
     return { procesada: true, libero_cupon: !!uso };
   });
 }
 
-module.exports = { procesarPagoAprobado, procesarPagoCancelado };
+/**
+ * Marca una compra APROBADA como devuelta (US-A). Es la operación inversa de
+ * procesarPagoAprobado: decrementa el stock que aprobar había incrementado y
+ * libera el cupón. Se invoca desde el backoffice cuando Euge hace un refund en
+ * Mercado Pago; el servicio es genérico (recibe compraId) para que un eventual
+ * webhook lo reuse tal cual sin retrabajo.
+ *
+ * Atómico e idempotente con lock optimista: `updateMany` con
+ * WHERE mpEstado='approved' es atómico en SQLite — un doble click / doble
+ * request solo deja avanzar a uno; el otro obtiene count=0 y NO vuelve a
+ * decrementar stock. Si cualquier paso posterior falla (ej. liberarCupon), toda
+ * la transacción hace rollback y la compra queda approved intacta.
+ *
+ * NO reusa procesarPagoCancelado: esa asume `pending` (que nunca incrementó
+ * stock) y por eso no lo decrementa. Acá el decremento es el corazón.
+ *
+ * @param {number} compraId
+ * @param {{ revertidaPor?: string|null, motivo?: string|null }} [opts]
+ * @returns {Promise<
+ *   { ok: true, procesada: true, libero_cupon: boolean, stock_devuelto: number, entradas_ya_validadas: number }
+ *   | { ok: false, code: 'NOT_FOUND' }
+ *   | { ok: false, code: 'NOT_APPROVED', estado: string }
+ * >}
+ */
+async function revertirCompraAprobada(compraId, { revertidaPor = null, motivo = null } = {}) {
+  return prisma.$transaction(async (tx) => {
+    const lock = await tx.compra.updateMany({
+      where: { id: compraId, mpEstado: 'approved' },
+      data: {
+        mpEstado: 'refunded',
+        devueltaAt: new Date(),
+        devueltaPor: revertidaPor ? String(revertidaPor) : null,
+        devueltaMotivo: motivo ? String(motivo).trim() || null : null,
+      },
+    });
+
+    if (lock.count === 0) {
+      const existe = await tx.compra.findUnique({
+        where: { id: compraId }, select: { mpEstado: true },
+      });
+      if (!existe) return { ok: false, code: 'NOT_FOUND' };
+      return { ok: false, code: 'NOT_APPROVED', estado: existe.mpEstado };
+    }
+
+    const compra = await tx.compra.findUnique({
+      where: { id: compraId },
+      include: { entradas: { select: { validada: true } } },
+    });
+
+    // Devolver stock: opuesto exacto al increment de procesarPagoAprobado. Si la
+    // compra es legacy sin tanda (tandaId null), se saltea — nunca contó stock.
+    let stockDevuelto = 0;
+    if (compra.tandaId) {
+      await tx.tanda.update({
+        where: { id: compra.tandaId },
+        data: { cantidadVendida: { decrement: compra.cantidadEntradas } },
+      });
+      stockDevuelto = compra.cantidadEntradas;
+    }
+
+    // Liberar el cupón si lo usó (CuponUso tiene @@unique([compraId])).
+    const uso = await tx.cuponUso.findUnique({ where: { compraId } });
+    if (uso) {
+      await precios.liberarCupon(tx, uso.cuponId);
+    }
+
+    // Las entradas ya validadas no bloquean la devolución (recomendación
+    // acordada: la corrección contable vale aunque la persona haya entrado); se
+    // reporta el conteo para que la UI muestre el aviso "esta entrada ya fue usada".
+    const entradasYaValidadas = compra.entradas.filter((e) => e.validada).length;
+
+    return {
+      ok: true,
+      procesada: true,
+      libero_cupon: !!uso,
+      stock_devuelto: stockDevuelto,
+      entradas_ya_validadas: entradasYaValidadas,
+    };
+  });
+}
+
+module.exports = { procesarPagoAprobado, procesarPagoCancelado, revertirCompraAprobada };
