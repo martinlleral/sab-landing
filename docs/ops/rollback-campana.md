@@ -28,7 +28,7 @@ git push origin v-pre-campaign
 ### 3. Anotar también el SHA del contenedor docker actual en producción
 
 ```bash
-ssh sab@162.243.172.177 'docker inspect sab-app --format "{{.Image}}"'
+ssh sab-droplet 'docker inspect sab-app --format "{{.Image}}"'
 # Output esperado: sha256:abcdef...
 ```
 
@@ -68,7 +68,7 @@ curl -s https://sindicatoargentinodeboleros.com.ar/healthz | head -1
 Si `/healthz` devuelve `{"status":"ok","db":"up"}`, el sitio está vivo — probablemente es un bug puntual, no hace falta rollback total. Investigar logs primero:
 
 ```bash
-ssh sab@162.243.172.177 'docker logs --tail 100 sab-app'
+ssh sab-droplet 'docker logs --tail 100 sab-app'
 ```
 
 Si el sitio está caído o el bug es en checkout (venta bloqueada) → rollback completo.
@@ -77,7 +77,7 @@ Si el sitio está caído o el bug es en checkout (venta bloqueada) → rollback 
 
 ```bash
 # 1. SSH al droplet
-ssh sab@162.243.172.177
+ssh sab-droplet
 
 # 2. Ir al directorio de deploy
 cd /opt/sab/app
@@ -114,7 +114,7 @@ curl -s https://sindicatoargentinodeboleros.com.ar/api/eventos/proximos | head -
 Si por alguna razón el rebuild tarda o falla, se puede bajar la imagen anterior del contenedor sin git:
 
 ```bash
-ssh sab@162.243.172.177
+ssh sab-droplet
 cd /opt/sab/app
 
 # Listar imágenes anteriores
@@ -133,7 +133,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d app
 Si el deploy aplicó una migración de Prisma que rompió datos:
 
 ```bash
-ssh sab@162.243.172.177
+ssh sab-droplet
 
 # Último backup del día (ver docs/backups.md para hora exacta)
 ls -lth /opt/sab/backups/*.db | head -5

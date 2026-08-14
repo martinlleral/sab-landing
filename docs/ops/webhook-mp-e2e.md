@@ -16,7 +16,7 @@ Si los 3 están vivos, perder 1 o 2 no pierde ventas (las compras legítimas se 
 ### P1. Verificar que el cron está vivo
 
 ```bash
-ssh sab@162.243.172.177 'docker logs sab-app --since 3m 2>&1 | grep -c "Sync pagos MP"'
+ssh sab-droplet 'docker logs sab-app --since 3m 2>&1 | grep -c "Sync pagos MP"'
 ```
 
 Debe devolver un número ≥ 1 (el cron corre cada 60s). Si devuelve `0` → el cron está muerto, **detener runbook e investigar**.
@@ -24,7 +24,7 @@ Debe devolver un número ≥ 1 (el cron corre cada 60s). Si devuelve `0` → el 
 ### P2. Verificar que la app está corriendo con las vars MP
 
 ```bash
-ssh sab@162.243.172.177 'docker exec sab-app printenv | grep -iE "MP_|NODE_ENV" | sed "s/=.*/=***/"'
+ssh sab-droplet 'docker exec sab-app printenv | grep -iE "MP_|NODE_ENV" | sed "s/=.*/=***/"'
 ```
 
 Debe mostrar al menos: `MP_ACCESS_TOKEN=***`, `MP_PUBLIC_KEY=***`, `MP_WEBHOOK_SECRET=***`, `MP_USER_ID=***`.
@@ -47,7 +47,7 @@ curl -sI -X POST https://sindicatoargentinodeboleros.com.ar/api/compras/webhook 
 En una terminal dedicada:
 
 ```bash
-ssh sab@162.243.172.177 'docker logs -f sab-app --since 1m 2>&1 | grep -iE "webhook|Sync|procesarPagoAprobado|✅|WARN|ERROR"'
+ssh sab-droplet 'docker logs -f sab-app --since 1m 2>&1 | grep -iE "webhook|Sync|procesarPagoAprobado|✅|WARN|ERROR"'
 ```
 
 Dejarla abierta durante todo el test.
@@ -126,7 +126,7 @@ Si no llega en 2-3 min → el SMTP o Brevo HTTP falló. Revisar `docs/audit/audi
 ### T2. Simular cron caído, verificar que el webhook procesa
 
 ```bash
-ssh sab@162.243.172.177 'docker exec sab-app kill -STOP 1' # NO HACER — mata la app
+ssh sab-droplet 'docker exec sab-app kill -STOP 1' # NO HACER — mata la app
 # Alternativa segura: modificar syncPagos.js para early-return temporalmente,
 # hacer deploy, hacer compra, ver que el webhook la procesó, revertir deploy.
 ```
@@ -158,7 +158,7 @@ Según qué falló:
 Si el test dejó compras "aprobadas" en la DB de prod (porque usaste tarjeta APRO), marcarlas manualmente como test o eliminarlas:
 
 ```bash
-ssh sab@162.243.172.177 'docker exec sab-app sh -c "cd /app && npx prisma studio"'
+ssh sab-droplet 'docker exec sab-app sh -c "cd /app && npx prisma studio"'
 # Abrir en browser via SSH tunnel, buscar la compra por email de prueba, eliminar.
 ```
 
