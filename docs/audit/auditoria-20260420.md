@@ -10,6 +10,24 @@
 
 **GO condicional.** No hay hallazgos P0 (bloqueantes). Hay 3 P1 no negociables (~4-5 h totales) que deben entrar antes del 28/4. Todo lo demás es P2 (post-campaña).
 
+> **Actualización 14/8/2026 — estado verificado contra el código.** Los tres P1
+> están cerrados: P1.2 (`Cache-Control: no-store` para `/backoffice/*` en
+> `src/server.js`), P1.3 (la cookie tiene `httpOnly`, `sameSite: 'lax'` y
+> `secure` según entorno) y P1.4 (`isApiRequest()` usa `originalUrl`, que cubre
+> los subrouters montados en `/api/admin/*`). También el bloque "Auth hardening"
+> del TODO, que seguía sin tildar con tres de sus cuatro puntos ya resueltos.
+>
+> **Queda abierto un solo hallazgo de este documento: P2.1 (CSP).** No es un
+> olvido: activar CSP acá toca el SDK de MercadoPago, YouTube embebido, Supabase
+> y Bootstrap por CDN, y necesita una semana en `report-only` para relevar
+> violations reales antes de enforcing. Se hace con la ventana, no a las
+> apuradas — y mientras tanto está declarado, no escondido.
+>
+> **Por qué importa esta actualización.** Este repo es público. Un documento de
+> auditoría desactualizado describe un sistema más vulnerable que el real y
+> orienta a quien busque por dónde entrar. Mantener el estado al día no es
+> prolijidad: es parte del control de seguridad.
+
 > **Actualización 22/4/2026:** P0.3 cerrado como falsa alarma tras verificación en prod. El archivo QR `737f9df9-440e-44f4-bb57-792fc934a583.png` existe en `/app/public/assets/img/uploads/qr/` (timestamp 21/4 00:33, coincidente con compra #20). El código de `qr.service.js` ya escribe a disk correctamente; el hallazgo original asumió lo contrario sin confirmar empíricamente. Se promueve un nuevo hallazgo P2.6 menor (cleanup de archivos QR huérfanos al cancelar entradas).
 
 ---
@@ -52,9 +70,9 @@ Artefactos generados:
 | # | Hallazgo | Acción | Esf | Razón |
 |---|---|---|---|---|
 | P1.1 | Mobile LCP 6 s / CLS 0.81 | `<link rel="preload" as="image">` para `slider1.jpg` + `width`/`height` o `aspect-ratio` en cards de eventos + reservar alto del slider con CSS | 3-4 h | 4G argentino + canal IG/WhatsApp: 6s LCP ≈ 25-35% bounce extra en cold visit. Afecta conversión de campaña. |
-| P1.2 | `/backoffice/login.html` responde `cache-control: public, max-age=0` | Setear `Cache-Control: no-store` en handler de login y en respuestas autenticadas | 0.5 h | `max-age=0` permite que un proxy intermedio o el botón "atrás" del browser sirva el HTML cacheado tras logout. |
-| P1.3 | Verificar cookie de sesión: `SameSite` + `Secure` + `HttpOnly` | Leer `src/config/session.js` (o equivalente) y confirmar. Si falta algo es P0 encubierto. | 0.5 h | Sin CSRF explícito, la defensa es SameSite+CORS. Si la cookie no tiene esos flags, hay ventana real de explotación. |
-| P1.4 | Verificar que el fix de `isApiRequest()` cubre todos los endpoints admin | Agregar tests Playwright que chequeen `401 JSON` (no `302 HTML`) en al menos 3 endpoints `/api/admin/*` distintos sin sesión | 0.5 h | Bugs así suelen tener hermanos. Actualmente solo se cubre `/api/admin/compras`. |
+| ~~P1.2~~ ✅ | `/backoffice/login.html` responde `cache-control: public, max-age=0` | Setear `Cache-Control: no-store` en handler de login y en respuestas autenticadas | 0.5 h | `max-age=0` permite que un proxy intermedio o el botón "atrás" del browser sirva el HTML cacheado tras logout. |
+| ~~P1.3~~ ✅ | Verificar cookie de sesión: `SameSite` + `Secure` + `HttpOnly` | Leer `src/config/session.js` (o equivalente) y confirmar. Si falta algo es P0 encubierto. | 0.5 h | Sin CSRF explícito, la defensa es SameSite+CORS. Si la cookie no tiene esos flags, hay ventana real de explotación. |
+| ~~P1.4~~ ✅ | Verificar que el fix de `isApiRequest()` cubre todos los endpoints admin | Agregar tests Playwright que chequeen `401 JSON` (no `302 HTML`) en al menos 3 endpoints `/api/admin/*` distintos sin sesión | 0.5 h | Bugs así suelen tener hermanos. Actualmente solo se cubre `/api/admin/compras`. |
 
 ### P2 — post-campaña (no bloquean, anotar en PLAN)
 

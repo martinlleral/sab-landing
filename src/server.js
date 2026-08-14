@@ -72,7 +72,12 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // Cloudflare maneja HTTPS, conexión interna es HTTP
+    // En producción la cookie viaja solo por HTTPS. Funciona aunque nginx
+    // hable HTTP con Node: `trust proxy` (arriba) hace que Express lea el
+    // X-Forwarded-Proto que nginx setea, así que ve "https" y manda la cookie.
+    // En desarrollo queda en false, si no el login por localhost no guarda
+    // sesión y parece que la contraseña está mal.
+    secure: config.nodeEnv === 'production',
     httpOnly: true,
     maxAge: config.sessionDuration,
     sameSite: 'lax',

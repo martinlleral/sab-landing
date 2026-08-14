@@ -236,11 +236,15 @@ Los bloques 1 y 2 son **prioridad deploy**. El bloque 3 es **prioridad portafoli
 
 ---
 
-### 2. Rotación de secrets viejos en MP / Brevo / Perfit
+### ~~2. Rotación de secrets viejos en MP / Brevo / Perfit~~ ✅ Rotados
 
 **Severidad:** CRÍTICA · **Experto:** Security · **Esfuerzo:** 30 min (depende de acceso)
 
-Los tokens viejos que estuvieron en `.env.example` siguen activos en sus paneles hasta que alguien los rote. Impactos:
+> **Estado (14/8):** las credenciales fueron rotadas. Lo que sigue queda como
+> registro de qué habilitaba cada una y por qué la rotación era urgente — no
+> como pendiente. Los tokens que se nombran acá ya no sirven para nada.
+
+Los tokens viejos que estuvieron en `.env.example` seguían activos en sus paneles hasta que alguien los rotara. Impactos:
 
 - **MP Access Token viejo:** permite crear preferencias a nombre del SAB, consultar PII de compradores, refundar pagos aprobados, ver balance, retirar a cuenta bancaria vinculada.
 - **Brevo API key + SMTP viejos:** enviar mails desde `sindicatoargentinodeboleros@gmail.com` (phishing masivo, quema de reputación del sender).
@@ -248,11 +252,12 @@ Los tokens viejos que estuvieron en `.env.example` siguen activos en sus paneles
 
 **Acciones:**
 
-- [ ] MercadoPago → panel → Tus integraciones → Credenciales → Regenerar Access Token y Public Key
-- [ ] Brevo → SMTP & API → Borrar la key vieja, crear una nueva
-- [ ] Brevo → API keys → Borrar la vieja (si no se usa en código, solo borrar, no regenerar)
-- [ ] Perfit → API → Borrar la vieja si no se usa (verificar con `grep -r PERFIT src/`)
-- [ ] Verificar en logs de MP/Brevo que no haya actividad anómala en los últimos 7 días
+- [x] MercadoPago → panel → Tus integraciones → Credenciales → Regenerar Access Token y Public Key
+- [x] Brevo → SMTP & API → Borrar la key vieja, crear una nueva
+- [x] Brevo → API keys → Borrar la vieja (si no se usa en código, solo borrar, no regenerar)
+- [x] Perfit → API → Borrar la vieja si no se usa (verificar con `grep -r PERFIT src/`)
+- [ ] Revisión de logs de MP/Brevo por actividad anómala en la ventana en que
+      estuvieron expuestos (queda pendiente; ya no es urgente con las claves rotadas)
 
 ---
 
@@ -304,16 +309,27 @@ Los tokens viejos que estuvieron en `.env.example` siguen activos en sus paneles
 
 ---
 
-### 6. Auth hardening
+### ~~6. Auth hardening~~ ✅ Hecho (verificado 14/8)
 
 **Severidad:** ALTA · **Experto:** Security · **Esfuerzo:** 1h total
 
-Múltiples gaps pequeños que juntos son importantes:
+Múltiples gaps pequeños que juntos eran importantes. Los cuatro están cerrados:
 
-- [ ] `req.session.regenerate()` tras login exitoso (previene session fixation)
-- [ ] `cookie.secure` — cambiar de `false` hardcodeado a `process.env.NODE_ENV === 'production'`
-- [ ] `bcrypt` cost de 10 → 12 (aceptable ~250ms para un login admin)
-- [ ] Lockout temporal después de 5 intentos fallidos (si se usa `express-rate-limit` con `max: 5` cubre esto)
+- [x] `req.session.regenerate()` tras login exitoso (previene session fixation)
+      — `src/controllers/auth.controller.js:29`
+- [x] `cookie.secure` según entorno — `src/server.js`. Funciona con nginx
+      hablando HTTP hacia Node porque `trust proxy` está en 1 y nginx setea
+      `X-Forwarded-Proto` (verificado: el origen termina TLS, el `:80` redirige)
+- [x] `bcrypt` cost 12 — `src/controllers/usuarios.controller.js:37,72` y
+      `prisma/seed.js:18`
+- [x] Lockout por intentos fallidos — `loginLimiter` montado en
+      `src/server.js` sobre `/api/auth/login`
+
+> **Lección de proceso, más útil que el fix.** Tres de estos cuatro ya estaban
+> resueltos en el código cuando se auditó el repo el 14/8, pero esta lista
+> seguía sin tildar. Un TODO desactualizado en un repo público no es neutro:
+> describe un sistema más vulnerable que el real y funciona como señalización
+> para quien busque por dónde entrar. **Tildar es parte del fix.**
 
 ```js
 // auth.controller.js — post bcrypt.compare OK:
