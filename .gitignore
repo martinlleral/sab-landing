@@ -53,6 +53,12 @@ logs/
 docs/pendientes-externos.md
 docs/**/stakeholders*.md
 
+# Runbooks de ops: llevan credenciales, IDs de aplicación y datos de
+# infraestructura literales. Su lugar es docs-privados/, fuera del repo.
+docs/ops/
+# Scripts que hardcodean el Application ID de la cuenta de MP de la cooperativa.
+scripts/cargar-env-mp.sh
+
 # Playwright — artefactos de tests (el config y los specs SÍ van al repo)
 playwright-report/
 test-results/
