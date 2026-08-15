@@ -158,9 +158,13 @@
             </div>
             <div style="display:flex; gap:8px; align-items:center;">
               <span style="font-size:0.8rem; color:#888;">Ordenar:</span>
-              <select id="filtro-orden" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;" onchange="loadCompras(1)">
+              <select id="filtro-orden" class="bo-form-select" style="width:auto; padding:4px 10px; font-size:0.85rem;">
                 <option value="nombre">Nombre A-Z</option>
                 <option value="fecha">Más recientes</option>
+                <!-- Se selecciona sola cuando el orden activo viene de clickear un
+                     header que el select no contempla (ID, Cant., Total). Evita que
+                     el select afirme un orden que ya no está aplicado. -->
+                <option value="" hidden>Personalizado</option>
               </select>
             </div>
           </div>
@@ -213,12 +217,19 @@
     const eventoId = parseInt(params.get('id'));
     let currentPage = 1;
     let todasLasCompras = [];
+    // Estado del orden. ÚNICA fuente de verdad: lo escriben el <select> y el
+    // click en los headers, y viaja al backend en cada loadCompras(). No se
+    // ordena nada client-side — sobre una página de 20 eso ordenaría solo lo
+    // visible, no el evento entero.
     // Default: alfabético por apellido (uso en la puerta del evento — staff
-    // busca compradores que llegan sin QR). El backend también ordena así
-    // por default; el sort client-side se aplica encima del set ya cargado.
+    // busca compradores que llegan sin QR). Coincide con el default del backend.
     let sortBy = 'nombre';
     let sortDir = 'asc';
     let busquedaTimer = null;
+
+    // Direcciones iniciales al elegir una columna por primera vez: alfabético
+    // A-Z, el resto de mayor a menor (lo que se espera al clickear "Total").
+    const dirInicial = (col) => (col === 'nombre' ? 'asc' : 'desc');
 
     document.addEventListener('DOMContentLoaded', async () => {
       if (!eventoId) {
@@ -229,14 +240,24 @@
       // Antes corrían en paralelo y la race condition dejaba "Restante" en 0.
       await loadEvento();
       await loadCompras(1);
-      // Click en headers ordenables. Toggle asc/desc al volver a clickear la misma columna.
+      // Click en headers ordenables. Toggle asc/desc al volver a clickear la misma
+      // columna. Recarga desde el backend: el orden lo resuelve la BD sobre el
+      // conjunto completo, no el navegador sobre la página visible.
       document.querySelectorAll('.bo-th-sort').forEach((th) => {
         th.addEventListener('click', () => {
           const col = th.dataset.sort;
           if (sortBy === col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-          else { sortBy = col; sortDir = sortBy === 'fecha' ? 'desc' : 'asc'; }
-          aplicarFiltro();
+          else { sortBy = col; sortDir = dirInicial(col); }
+          loadCompras(1);
         });
+      });
+      // El <select> es un atajo a 2 de las 5 columnas ordenables. Escribe el mismo
+      // estado que los headers. (Listener y no onchange inline: el HTML no debe
+      // llamar JS a mano — mismo motivo por el que buildPagination usa data-page.)
+      document.getElementById('filtro-orden').addEventListener('change', (e) => {
+        sortBy = e.target.value;
+        sortDir = dirInicial(sortBy);
+        loadCompras(1);
       });
       // Debounce en el input de búsqueda. 350ms balancea responsividad vs.
       // requests innecesarios al backend mientras el usuario tipea.
@@ -336,7 +357,6 @@
       try {
         const filtro = document.getElementById('filtro-estado').value;
         const validacion = document.getElementById('filtro-validacion').value;
-        const orden = document.getElementById('filtro-orden').value;
         const q = document.getElementById('input-busqueda').value.trim();
         // Filtro mpEstado se aplica en server (antes era client-side sobre la página
         // visible, daba conteos engañosos). El total devuelto refleja el filtro,
@@ -344,7 +364,9 @@
         const params = new URLSearchParams({ eventoId, page, limit: 20 });
         if (filtro) params.set('mpEstado', filtro);
         if (validacion) params.set('validacion', validacion);
-        if (orden) params.set('orderBy', orden);
+        // El orden sale del estado, no del <select>: los headers también lo escriben.
+        params.set('orderBy', sortBy);
+        params.set('orderDir', sortDir);
         if (q) params.set('q', q);
         const data = await boFetch(`/api/admin/compras?${params}`);
         todasLasCompras = data.compras || [];
@@ -356,7 +378,7 @@
         const sufijoBusqueda = q ? ` · "${q}"` : '';
         document.getElementById('card-total-compras').textContent = `${etiqueta}${sufijoBusqueda} (${data.total})`;
 
-        aplicarFiltro();
+        renderConEstadoOrden();
         // Cuando hay búsqueda activa el backend devuelve todo sin paginar; ocultamos
         // el paginador para no confundir al operador.
         if (q) {
@@ -370,36 +392,25 @@
       }
     }
 
-    // Aplica orden actual al set de compras ya filtrado por server. Se llama
-    // tras loadCompras y al clickear un header ordenable. (El filtro de estado
-    // se aplica ahora en server, no acá.)
-    function aplicarFiltro() {
-      let compras = todasLasCompras.slice();
-
-      compras.sort((a, b) => {
-        if (sortBy === 'nombre') {
-          const va = `${a.apellido || ''} ${a.nombre || ''}`.toLocaleLowerCase('es');
-          const vb = `${b.apellido || ''} ${b.nombre || ''}`.toLocaleLowerCase('es');
-          const cmp = va.localeCompare(vb, 'es', { sensitivity: 'base' });
-          return sortDir === 'asc' ? cmp : -cmp;
-        }
-        let va, vb;
-        if (sortBy === 'id') { va = a.id; vb = b.id; }
-        else if (sortBy === 'fecha') { va = new Date(a.createdAt).getTime(); vb = new Date(b.createdAt).getTime(); }
-        else if (sortBy === 'cantidad') { va = a.cantidadEntradas; vb = b.cantidadEntradas; }
-        else if (sortBy === 'total') { va = a.totalPagado; vb = b.totalPagado; }
-        else { va = 0; vb = 0; }
-        return sortDir === 'asc' ? va - vb : vb - va;
-      });
-
-      // Reflejar el orden activo en los headers.
+    // Pinta la tabla tal como vino del backend y refleja el orden activo en los
+    // controles. NO ordena: el orden ya lo resolvió la BD sobre el conjunto
+    // completo del evento. Ordenar acá volvería a ordenar solo la página de 20.
+    function renderConEstadoOrden() {
+      // Flecha ▲▼ en el header de la columna activa.
       document.querySelectorAll('.bo-th-sort').forEach((th) => {
         const arrow = th.querySelector('.bo-sort-arrow');
         if (th.dataset.sort === sortBy) arrow.textContent = sortDir === 'asc' ? '▲' : '▼';
         else arrow.textContent = '';
       });
 
-      renderTabla(compras);
+      // El <select> solo cubre 'nombre' y 'fecha'. Si el orden activo salió de
+      // clickear ID/Cant./Total, cae en la opción oculta "Personalizado" para no
+      // seguir mostrando un orden que no está aplicado.
+      const select = document.getElementById('filtro-orden');
+      const enElSelect = ['nombre', 'fecha'].includes(sortBy) && sortDir === dirInicial(sortBy);
+      select.value = enElSelect ? sortBy : '';
+
+      renderTabla(todasLasCompras);
     }
 
     // Pildora de validación: cuenta entradas validadas vs total. Solo aplica

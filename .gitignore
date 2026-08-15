@@ -25,6 +25,10 @@ prisma/sessions.db-journal
 prisma/sessions.db-wal
 prisma/sessions.db-shm
 
+# Dumps de la base de producción (datos personales de compradores — Ley 25.326).
+# Los genera scripts/backup.sh antes de cada deploy con migración.
+backups/
+
 # Uploads del backoffice (datos del cliente, no del repo)
 public/assets/img/uploads/home/
 public/assets/img/uploads/eventos/

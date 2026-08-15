@@ -1,10 +1,12 @@
 /**
  * Tests de integración — adminListar (compras.controller).
  *
- * Cubre los 3 query params nuevos del Sprint 4:
+ * Cubre los query params de filtrado y orden:
  *   - q (búsqueda por nombre/apellido/email)
  *   - validacion (pendiente / validada / vacío)
- *   - orderBy (nombre default / fecha)
+ *   - orderBy (nombre default / fecha / id / cantidad / total) + orderDir (asc / desc),
+ *     incluida la whitelist: un campo o dirección inválidos caen al default en vez
+ *     de llegar crudos al orderBy de Prisma.
  *
  * Uso local (con dev.db):
  *   node tests/integration/compras-admin-listar.test.js
@@ -83,14 +85,28 @@ async function setupFixture() {
 
   // 3 compras approved con apellidos en orden inverso (Zorrilla, Martinez, Acosta)
   // para verificar que el sort A-Z reordena.
+  //
+  // `cantidadEntradas` y `totalPagado` son DISTINTOS en las 4 compras a propósito:
+  // sin eso no se puede afirmar nada sobre orderBy=cantidad|total. El orden por
+  // cantidad (1 < 2 < 3 < 5) es además distinto del alfabético y del de creación,
+  // así que un check que pase no puede estar pasando por casualidad.
   const compraZ = await prisma.compra.create({
-    data: baseCompra({ nombre: 'Zoe', apellido: 'Zorrilla', email: 'zoe@test.com' }),
+    data: baseCompra({
+      nombre: 'Zoe', apellido: 'Zorrilla', email: 'zoe@test.com',
+      cantidadEntradas: 2, totalPagado: 20000,
+    }),
   });
   const compraM = await prisma.compra.create({
-    data: baseCompra({ nombre: 'Mariano', apellido: 'Martinez', email: 'mariano@test.com' }),
+    data: baseCompra({
+      nombre: 'Mariano', apellido: 'Martinez', email: 'mariano@test.com',
+      cantidadEntradas: 5, totalPagado: 50000,
+    }),
   });
   const compraA = await prisma.compra.create({
-    data: baseCompra({ nombre: 'Ana', apellido: 'Acosta', email: 'ana@test.com' }),
+    data: baseCompra({
+      nombre: 'Ana', apellido: 'Acosta', email: 'ana@test.com',
+      cantidadEntradas: 1, totalPagado: 10000,
+    }),
   });
 
   // 1 compra rejected — debe excluirse del filtro validacion=pendiente/validada.
@@ -98,21 +114,25 @@ async function setupFixture() {
     data: baseCompra({
       nombre: 'Roberto', apellido: 'Rechazado', email: 'rechazado@test.com',
       mpEstado: 'rejected',
+      cantidadEntradas: 3, totalPagado: 30000,
     }),
   });
 
-  // Entradas:
+  // Entradas — la cantidad de cada compra coincide con su `cantidadEntradas`,
+  // como en producción:
   //   compraZ: 2 entradas, ambas validadas → completamente validada
-  //   compraM: 2 entradas, 1 validada y 1 sin validar → parcial = pendiente
-  //   compraA: 2 entradas, ninguna validada → pendiente
+  //   compraM: 5 entradas, 1 validada y 4 sin validar → parcial = pendiente
+  //   compraA: 1 entrada, sin validar → pendiente
   await prisma.entrada.createMany({
     data: [
       { compraId: compraZ.id, codigoQR: `qr-z-1-${Date.now()}`, qrImageUrl: '', validada: true,  validadaAt: new Date() },
       { compraId: compraZ.id, codigoQR: `qr-z-2-${Date.now()}`, qrImageUrl: '', validada: true,  validadaAt: new Date() },
       { compraId: compraM.id, codigoQR: `qr-m-1-${Date.now()}`, qrImageUrl: '', validada: true,  validadaAt: new Date() },
       { compraId: compraM.id, codigoQR: `qr-m-2-${Date.now()}`, qrImageUrl: '', validada: false },
+      { compraId: compraM.id, codigoQR: `qr-m-3-${Date.now()}`, qrImageUrl: '', validada: false },
+      { compraId: compraM.id, codigoQR: `qr-m-4-${Date.now()}`, qrImageUrl: '', validada: false },
+      { compraId: compraM.id, codigoQR: `qr-m-5-${Date.now()}`, qrImageUrl: '', validada: false },
       { compraId: compraA.id, codigoQR: `qr-a-1-${Date.now()}`, qrImageUrl: '', validada: false },
-      { compraId: compraA.id, codigoQR: `qr-a-2-${Date.now()}`, qrImageUrl: '', validada: false },
     ],
   });
 
@@ -178,7 +198,7 @@ async function main() {
     const r6 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, validacion: 'pendiente' } }));
     const r6Apellidos = (r6.body?.compras || []).map((c) => c.apellido).sort();
     checks.push({
-      name: 'validacion=pendiente → incluye Acosta (0/2) y Martinez (1/2), excluye Zorrilla (2/2) y Rechazado',
+      name: 'validacion=pendiente → incluye Acosta (0/1) y Martinez (1/5), excluye Zorrilla (2/2) y Rechazado',
       pass: r6Apellidos.length === 2 && r6Apellidos[0] === 'Acosta' && r6Apellidos[1] === 'Martinez',
       detail: `apellidos=${JSON.stringify(r6Apellidos)}`,
     });
@@ -205,7 +225,7 @@ async function main() {
     const r9 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id } }));
     const compraConEntradas = (r9.body?.compras || []).find((c) => c.id === compraM.id);
     const entradas = compraConEntradas?.entradas || [];
-    const tieneCamposCorrectos = entradas.length === 2 &&
+    const tieneCamposCorrectos = entradas.length === 5 &&
       entradas.every((e) => typeof e.id === 'number' && typeof e.validada === 'boolean');
     checks.push({
       name: 'Response include entradas {id, validada} para la pildora UI',
@@ -219,6 +239,80 @@ async function main() {
       name: 'q activo → ignora paginación (page=1, totalPages=1)',
       pass: r10.body?.page === 1 && r10.body?.totalPages === 1,
       detail: `page=${r10.body?.page} totalPages=${r10.body?.totalPages}`,
+    });
+
+    // ============================================
+    // Orden server-side de las 5 columnas ordenables (ítem 40).
+    // Antes el backend solo sabía 'nombre' y 'fecha', y el frontend re-ordenaba
+    // id/cantidad/total client-side sobre la página visible.
+    // ============================================
+
+    // 11) orderBy=total&orderDir=desc → mayor totalPagado primero (Martinez, 50000)
+    const r11 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, orderBy: 'total', orderDir: 'desc' } }));
+    const r11Totales = (r11.body?.compras || []).map((c) => c.totalPagado);
+    checks.push({
+      name: 'orderBy=total&orderDir=desc → de mayor a menor',
+      pass: JSON.stringify(r11Totales) === JSON.stringify([50000, 30000, 20000, 10000]),
+      detail: `totales=${JSON.stringify(r11Totales)}`,
+    });
+
+    // 12) La dirección se respeta: el mismo campo al revés
+    const r12 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, orderBy: 'total', orderDir: 'asc' } }));
+    const r12Totales = (r12.body?.compras || []).map((c) => c.totalPagado);
+    checks.push({
+      name: 'orderBy=total&orderDir=asc → de menor a mayor (la dirección se respeta)',
+      pass: JSON.stringify(r12Totales) === JSON.stringify([10000, 20000, 30000, 50000]),
+      detail: `totales=${JSON.stringify(r12Totales)}`,
+    });
+
+    // 13) orderBy=cantidad → orden distinto del alfabético y del de creación,
+    //     así que un pass acá no puede ser casualidad.
+    const r13 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, orderBy: 'cantidad', orderDir: 'asc' } }));
+    const r13Cantidades = (r13.body?.compras || []).map((c) => c.cantidadEntradas);
+    checks.push({
+      name: 'orderBy=cantidad&orderDir=asc → 1,2,3,5',
+      pass: JSON.stringify(r13Cantidades) === JSON.stringify([1, 2, 3, 5]),
+      detail: `cantidades=${JSON.stringify(r13Cantidades)}`,
+    });
+
+    // 14) orderBy=id&orderDir=desc → el id más alto primero (compraR, la última creada)
+    const r14 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, orderBy: 'id', orderDir: 'desc' } }));
+    const r14Ids = (r14.body?.compras || []).map((c) => c.id);
+    const r14Descendente = r14Ids.every((id, i) => i === 0 || r14Ids[i - 1] > id);
+    checks.push({
+      name: 'orderBy=id&orderDir=desc → ids descendentes',
+      pass: r14Ids[0] === compraR.id && r14Descendente,
+      detail: `ids=${JSON.stringify(r14Ids)} esperaba_primero=${compraR.id}`,
+    });
+
+    // 15) Whitelist: un campo que no está en el mapa cae al default (nombre A-Z),
+    //     no rompe ni llega crudo al orderBy de Prisma.
+    const r15 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, orderBy: 'telefono; DROP TABLE' } }));
+    const r15Apellidos = (r15.body?.compras || []).map((c) => c.apellido);
+    checks.push({
+      name: 'orderBy inválido → cae al default alfabético (whitelist)',
+      pass: r15.statusCode === 200 &&
+        JSON.stringify(r15Apellidos) === JSON.stringify(['Acosta', 'Martinez', 'Rechazado', 'Zorrilla']),
+      detail: `status=${r15.statusCode} apellidos=${JSON.stringify(r15Apellidos)}`,
+    });
+
+    // 16) orderDir inválido → default del campo (desc para fecha), sin romper
+    const r16 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, orderBy: 'fecha', orderDir: 'ASC; --' } }));
+    const r16Ids = (r16.body?.compras || []).map((c) => c.id);
+    checks.push({
+      name: 'orderDir inválido → default del campo (fecha desc)',
+      pass: r16.statusCode === 200 && r16Ids[0] === compraR.id,
+      detail: `status=${r16.statusCode} ids=${JSON.stringify(r16Ids)}`,
+    });
+
+    // 17) Sin orderBy el comportamiento es el de siempre — los consumidores que no
+    //     mandan el param (lector-qr con limit=500) no se enteraron del cambio.
+    const r17 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id } }));
+    const r17Apellidos = (r17.body?.compras || []).map((c) => c.apellido);
+    checks.push({
+      name: 'Sin orderBy → sigue siendo alfabético A-Z (compatibilidad hacia atrás)',
+      pass: JSON.stringify(r17Apellidos) === JSON.stringify(['Acosta', 'Martinez', 'Rechazado', 'Zorrilla']),
+      detail: `apellidos=${JSON.stringify(r17Apellidos)}`,
     });
 
     // ============================================

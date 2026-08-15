@@ -327,15 +327,33 @@ async function adminListar(req, res) {
       where.entradas = { some: {}, every: { validada: true } };
     }
 
-    // orderBy: 'nombre' (default A-Z para uso en la puerta del evento) o 'fecha'
-    // (más recientes primero, comportamiento previo al sprint 4).
-    // Desempate por `id desc`: varias compras pueden compartir el mismo
-    // createdAt al milisegundo (importaciones, tests, ráfagas), y SQLite
-    // resuelve los empates por rowid ascendente → dejaría la más nueva
-    // ABAJO. El id autoincremental garantiza "más reciente primero" estable.
-    const orderBy = req.query.orderBy === 'fecha'
-      ? [{ createdAt: 'desc' }, { id: 'desc' }]
-      : [{ apellido: 'asc' }, { nombre: 'asc' }];
+    // Orden server-side de las 5 columnas ordenables de la tabla del backoffice.
+    // Whitelist explícita: el nombre de columna viene del cliente y no puede
+    // llegar crudo al orderBy de Prisma.
+    //
+    // Antes esto ordenaba solo por 'nombre' | 'fecha' y el frontend re-ordenaba
+    // las otras 3 columnas client-side, sobre la página de 20 ya recibida: el
+    // operador clickeaba "Total" y veía el mayor DE ESA PÁGINA, creyendo que era
+    // el del evento. Ordenar es responsabilidad de la BD, que ve el conjunto.
+    //
+    // Desempate por `id`: varias compras pueden compartir el mismo createdAt al
+    // milisegundo (importaciones, tests, ráfagas), y SQLite resuelve los empates
+    // por rowid ascendente → dejaría la más nueva ABAJO. El id autoincremental
+    // da un orden estable entre recargas.
+    const ORDEN_CAMPOS = {
+      nombre: (dir) => [{ apellido: dir }, { nombre: dir }],
+      fecha: (dir) => [{ createdAt: dir }, { id: dir }],
+      id: (dir) => [{ id: dir }],
+      cantidad: (dir) => [{ cantidadEntradas: dir }, { id: 'desc' }],
+      total: (dir) => [{ totalPagado: dir }, { id: 'desc' }],
+    };
+    // Default 'nombre' A-Z: es el uso en la puerta del evento (staff buscando a
+    // alguien que llegó sin QR). Las columnas numéricas y la fecha arrancan desc,
+    // que es lo que se espera al clickearlas por primera vez.
+    const campoOrden = ORDEN_CAMPOS[req.query.orderBy] ? req.query.orderBy : 'nombre';
+    const dirDefault = campoOrden === 'nombre' ? 'asc' : 'desc';
+    const dirOrden = ['asc', 'desc'].includes(req.query.orderDir) ? req.query.orderDir : dirDefault;
+    const orderBy = ORDEN_CAMPOS[campoOrden](dirOrden);
 
     // Cuando hay búsqueda activa, ignorar paginación y devolver hasta 200
     // resultados — el operador busca un nombre puntual en la puerta y la

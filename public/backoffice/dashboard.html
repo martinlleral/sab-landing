@@ -120,9 +120,13 @@
       try {
         // /api/admin/stats agrega en BD (vendidas + invitaciones + recaudado).
         // /api/admin/compras pagina, lo usamos sólo para "Últimas compras".
+        // orderBy=fecha es obligatorio acá: el default del endpoint es alfabético
+        // por apellido (pensado para buscar gente en la puerta del evento), así que
+        // sin esto la tabla lista "Acosta, Álvarez, Benítez…" bajo el título
+        // "Últimas compras" — que no son las últimas de nada.
         const [stats, comprasRes] = await Promise.all([
           boFetch('/api/admin/stats'),
-          boFetch('/api/admin/compras?limit=10'),
+          boFetch('/api/admin/compras?limit=10&orderBy=fecha'),
         ]);
 
         document.getElementById('stat-eventos').textContent = stats.totalEventos;
