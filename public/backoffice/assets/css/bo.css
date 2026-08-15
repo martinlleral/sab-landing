@@ -10,7 +10,12 @@
   --bo-accent-hover: #c1121f;
   --bo-text: #f1f1f1;
   --bo-text-muted: #888;
-  --bo-sidebar-w: 240px;
+  /* Ancho del sidebar. Lo leen .bo-sidebar (width) y .bo-main (margin-left),
+     así que alcanza con redefinir la variable para mover las dos cosas: eso es
+     lo que hace .bo-layout.sidebar-collapsed más abajo. Una sola fuente de
+     verdad del ancho, sin selectores paralelos que se desincronicen. */
+  --bo-sidebar-w: 200px;
+  --bo-sidebar-w-collapsed: 64px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -45,8 +50,9 @@ body {
   left: 0;
   height: 100vh;
   z-index: 100;
-  transition: transform 0.3s;
+  transition: transform 0.3s, width 0.3s;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .bo-sidebar.hidden {
@@ -100,11 +106,47 @@ body {
   margin: 12px 16px;
 }
 
+/* Botón de colapsar — lo inyecta bo.js en el <aside>, así que no hay que
+   tocarlo en los 8 HTML. Oculto por default: solo existe en desktop (ver el
+   @media min-width más abajo). `margin-top:auto` lo manda al pie del sidebar,
+   que es flex column. */
+.bo-sidebar-collapse-btn {
+  display: none;
+  margin-top: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--bo-border);
+  color: var(--bo-text-muted);
+  cursor: pointer;
+  padding: 14px 20px;
+  text-align: right;
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: color 0.2s, background 0.2s;
+}
+
+.bo-sidebar-collapse-btn:hover {
+  color: var(--bo-text);
+  background: rgba(255,255,255,0.04);
+}
+
+/* La flecha apunta hacia donde va a moverse el sidebar. */
+.bo-sidebar-collapse-btn i { transition: transform 0.3s; }
+.bo-layout.sidebar-collapsed .bo-sidebar-collapse-btn { text-align: center; padding-inline: 0; }
+.bo-layout.sidebar-collapsed .bo-sidebar-collapse-btn i { transform: rotate(180deg); }
+
 /* ============================================
    MAIN
    ============================================ */
 .bo-main {
   flex: 1;
+  /* min-width:0 es lo que hace que .table-responsive funcione. Sin esto, un
+     ítem flex no se encoge por debajo del ancho de su contenido: la tabla de
+     compras (11 columnas, ~1330px) estiraba el main más allá del layout y
+     terminaba scrolleando la PÁGINA entera — con la topbar y los filtros
+     yéndose de vista — en vez de scrollear solo la tabla. */
+  min-width: 0;
   margin-left: var(--bo-sidebar-w);
   display: flex;
   flex-direction: column;
@@ -595,6 +637,61 @@ body {
   .bo-content {
     padding: 16px;
   }
+}
+
+/* ============================================
+   SIDEBAR COLAPSABLE — solo desktop
+   ============================================
+   Todo el colapso vive acá adentro a propósito. En mobile el sidebar ya tiene
+   su propio comportamiento (se esconde entero con .visible / translateX, arriba),
+   y las dos cosas se pisarían: un sidebar de 64px con solo íconos, abierto con
+   la hamburguesa, no le sirve a nadie. Al encerrar las reglas en min-width no
+   hay que escribir ni una excepción — abajo de 769px simplemente no existen. */
+@media (min-width: 769px) {
+  /* La única regla del ancho: .bo-sidebar y .bo-main ya leen la variable. */
+  .bo-layout.sidebar-collapsed { --bo-sidebar-w: var(--bo-sidebar-w-collapsed); }
+
+  /* Estado inicial de una página que carga ya colapsada: sin animación, para
+     que el sidebar no se vea achicándose solo. bo.js la quita en el primer
+     frame pintado, así el click del usuario sí anima. */
+  .bo-layout.sin-transicion .bo-sidebar,
+  .bo-layout.sin-transicion .bo-main,
+  .bo-layout.sin-transicion .bo-sidebar-collapse-btn i { transition: none; }
+
+  .bo-sidebar-collapse-btn { display: block; }
+
+  /* Los labels del nav son text nodes sueltos al lado del <i> (no hay span que
+     ocultar), así que se apaga el texto con font-size:0 en el link y se le
+     devuelve el tamaño al ícono. El `title` lo pone bo.js con el texto del
+     propio link: sin tooltip no se sabe qué es cada ícono. */
+  .bo-layout.sidebar-collapsed .bo-nav-link {
+    font-size: 0;
+    gap: 0;
+    justify-content: center;
+    padding-inline: 0;
+    border-left-width: 0;
+    white-space: nowrap;
+  }
+
+  .bo-layout.sidebar-collapsed .bo-nav-link i { font-size: 1.15rem; }
+
+  /* Mismo truco para el brand: "S.A. BOLEROS" → "SAB". */
+  .bo-layout.sidebar-collapsed .bo-sidebar-brand {
+    font-size: 0;
+    padding-inline: 8px;
+    text-align: center;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  .bo-layout.sidebar-collapsed .bo-sidebar-brand::after {
+    content: "SAB";
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+    color: var(--bo-accent);
+  }
+
+  .bo-layout.sidebar-collapsed .bo-nav-divider { margin-inline: 12px; }
 }
 
 /* ============================================

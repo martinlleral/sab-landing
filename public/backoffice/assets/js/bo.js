@@ -40,12 +40,69 @@ async function loadCurrentUser() {
 }
 
 // ============================================
-// SIDEBAR TOGGLE
+// SIDEBAR — mostrar/ocultar (mobile)
 // ============================================
+// Lo dispara el botón hamburguesa de la topbar, que solo se ve abajo de 769px.
+// Nada que ver con el colapso de acá abajo, que es de escritorio.
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
   sidebar.classList.toggle('visible');
+}
+
+// ============================================
+// SIDEBAR — colapsar a íconos (desktop)
+// ============================================
+const BO_SIDEBAR_KEY = 'bo-sidebar-collapsed';
+
+// Se aplica en top-level y NO dentro de DOMContentLoaded, a propósito: bo.js se
+// carga al final del <body>, con el layout ya parseado, así que la clase entra
+// antes del primer paint. Adentro del DOMContentLoaded el sidebar se vería
+// abierto y se cerraría a la vista del usuario en cada carga de página.
+(function restaurarEstadoSidebar() {
+  const layout = document.querySelector('.bo-layout');
+  if (!layout) return;   // login.html no tiene sidebar
+  if (localStorage.getItem(BO_SIDEBAR_KEY) !== '1') return;
+
+  // `sin-transicion` es la mitad que falta del fix del parpadeo. Poner la clase
+  // antes del paint no alcanza: el <aside> ya resolvió su estilo con el ancho
+  // expandido cuando el parser lo leyó, así que al cambiar la variable se
+  // dispara la transición de 0.3s y el sidebar se ve ACHICÁNDOSE en cada carga
+  // de página. Con la transición apagada arranca directamente angosto.
+  layout.classList.add('sidebar-collapsed', 'sin-transicion');
+
+  // Doble rAF: el primer callback corre antes del paint, el segundo después.
+  // Recién ahí se devuelve la transición, para que el click del usuario sí anime.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => layout.classList.remove('sin-transicion'));
+  });
+})();
+
+function toggleSidebarColapso() {
+  const layout = document.querySelector('.bo-layout');
+  if (!layout) return;
+  const colapsado = layout.classList.toggle('sidebar-collapsed');
+  localStorage.setItem(BO_SIDEBAR_KEY, colapsado ? '1' : '0');
+}
+
+// El botón y los tooltips se inyectan desde acá en vez de escribirlos a mano en
+// los 8 HTML del backoffice, que tienen el <aside> duplicado tal cual.
+function initSidebarColapso() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+
+  // Tooltip = el texto del propio link. Colapsado solo se ven los íconos.
+  sidebar.querySelectorAll('.bo-nav-link').forEach((link) => {
+    if (!link.title) link.title = link.textContent.trim();
+  });
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'bo-sidebar-collapse-btn';
+  btn.setAttribute('aria-label', 'Colapsar o expandir el menú lateral');
+  btn.innerHTML = '<i class="bi bi-chevron-double-left"></i>';
+  btn.addEventListener('click', toggleSidebarColapso);
+  sidebar.appendChild(btn);
 }
 
 // ============================================
@@ -149,4 +206,5 @@ function buildPagination(container, currentPage, totalPages, onPageChange) {
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
   loadCurrentUser();
+  initSidebarColapso();
 });
