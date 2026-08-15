@@ -361,19 +361,61 @@ async function adminListar(req, res) {
     const skipFinal = q ? 0 : skip;
     const takeFinal = q ? 200 : limit;
 
-    const [compras, total] = await Promise.all([
-      prisma.compra.findMany({
+    const INCLUDE = {
+      evento: { select: { nombre: true, fecha: true } },
+      entradas: { select: { id: true, validada: true } },
+    };
+
+    let compras, total;
+
+    if (campoOrden === 'nombre') {
+      // SQLite ordena los textos con colación binaria: compara bytes, así que
+      // "SANTORO" (S=83) cae antes que "Abad" (b=98) y "diaz" se va al final de
+      // todo. Sobre la base real eso descoloca ~9% de los apellidos y desordena
+      // la lista entera para un ojo humano — justo en la puerta del evento, que
+      // es para lo que existe este orden.
+      //
+      // Prisma no expone COLLATE NOCASE ni lower() en orderBy para SQLite, así
+      // que el alfabético se resuelve en Node sobre el CONJUNTO COMPLETO ya
+      // filtrado (no sobre la página: eso era el bug del ítem 40) y después se
+      // pagina. Se traen solo las 3 claves, no las filas enteras.
+      const claves = await prisma.compra.findMany({
         where,
-        orderBy,
-        skip: skipFinal,
-        take: takeFinal,
-        include: {
-          evento: { select: { nombre: true, fecha: true } },
-          entradas: { select: { id: true, validada: true } },
-        },
-      }),
-      prisma.compra.count({ where }),
-    ]);
+        select: { id: true, apellido: true, nombre: true },
+      });
+
+      claves.sort((a, b) => {
+        const va = `${a.apellido || ''} ${a.nombre || ''}`;
+        const vb = `${b.apellido || ''} ${b.nombre || ''}`;
+        // sensitivity 'base' → ignora mayúsculas y acentos, que es como busca
+        // una persona. Desempate por id para que el orden sea estable.
+        const cmp = va.localeCompare(vb, 'es', { sensitivity: 'base' }) || (a.id - b.id);
+        return dirOrden === 'asc' ? cmp : -cmp;
+      });
+
+      total = claves.length;
+      const idsPagina = claves.slice(skipFinal, skipFinal + takeFinal).map((c) => c.id);
+      const filas = await prisma.compra.findMany({
+        where: { id: { in: idsPagina } },
+        include: INCLUDE,
+      });
+      // findMany con `in` no respeta el orden de la lista: reordenar a mano.
+      const porId = new Map(filas.map((f) => [f.id, f]));
+      compras = idsPagina.map((id) => porId.get(id)).filter(Boolean);
+    } else {
+      // fecha, id, cantidad y total son numéricos o de fecha: ahí la colación no
+      // interviene y SQLite ordena bien. Se paginan en la BD, como corresponde.
+      [compras, total] = await Promise.all([
+        prisma.compra.findMany({
+          where,
+          orderBy,
+          skip: skipFinal,
+          take: takeFinal,
+          include: INCLUDE,
+        }),
+        prisma.compra.count({ where }),
+      ]);
+    }
 
     return res.json({
       compras,

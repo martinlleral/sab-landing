@@ -118,6 +118,24 @@ async function setupFixture() {
     }),
   });
 
+  // Dos apellidos que rompen el orden si se confía en la colación de SQLite:
+  // en bytes "BENITEZ" (B=66) va antes que "Acosta" (c=99...) y "duarte" (d=100)
+  // se va detrás de "Zorrilla" (Z=90). Con criterio humano van 2º y 4º.
+  // En la base real esto afecta a ~9% de los apellidos (58 en mayúsculas, 123
+  // en minúscula sobre 1995 compras).
+  const compraMayus = await prisma.compra.create({
+    data: baseCompra({
+      nombre: 'Bruno', apellido: 'BENITEZ', email: 'benitez@test.com',
+      cantidadEntradas: 4, totalPagado: 40000,
+    }),
+  });
+  const compraMinus = await prisma.compra.create({
+    data: baseCompra({
+      nombre: 'delia', apellido: 'duarte', email: 'duarte@test.com',
+      cantidadEntradas: 6, totalPagado: 60000,
+    }),
+  });
+
   // Entradas — la cantidad de cada compra coincide con su `cantidadEntradas`,
   // como en producción:
   //   compraZ: 2 entradas, ambas validadas → completamente validada
@@ -136,7 +154,7 @@ async function setupFixture() {
     ],
   });
 
-  return { evento, compraA, compraM, compraZ, compraR };
+  return { evento, compraA, compraM, compraZ, compraR, compraMayus, compraMinus };
 }
 
 async function main() {
@@ -145,15 +163,15 @@ async function main() {
   const checks = [];
 
   try {
-    const { evento, compraA, compraM, compraZ, compraR } = await setupFixture();
+    const { evento, compraA, compraM, compraZ, compraR, compraMayus, compraMinus } = await setupFixture();
 
     // 1) Default (sin query): orderBy=nombre A-Z. Se incluyen las 4 compras del
     //    fixture ordenadas Acosta < Martinez < Rechazado < Zorrilla.
     const r1 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id } }));
     const apellidos = (r1.body?.compras || []).map((c) => c.apellido);
     checks.push({
-      name: 'Default → orden alfabético por apellido (A-Z)',
-      pass: JSON.stringify(apellidos) === JSON.stringify(['Acosta', 'Martinez', 'Rechazado', 'Zorrilla']),
+      name: '🎯 Default → alfabético con criterio HUMANO: "BENITEZ" 2º y "duarte" 3º.\n        Con la colación binaria de SQLite irían 1º y último (compara bytes: B=66 < c=99, d=100 > Z=90)',
+      pass: JSON.stringify(apellidos) === JSON.stringify(['Acosta', 'BENITEZ', 'duarte', 'Martinez', 'Rechazado', 'Zorrilla']),
       detail: `apellidos=${JSON.stringify(apellidos)}`,
     });
 
@@ -163,8 +181,8 @@ async function main() {
     const idsPorFecha = (r2.body?.compras || []).map((c) => c.id);
     checks.push({
       name: 'orderBy=fecha → más recientes primero',
-      pass: idsPorFecha[0] === compraR.id,
-      detail: `ids=${JSON.stringify(idsPorFecha)} esperaba_primero=${compraR.id}`,
+      pass: idsPorFecha[0] === compraMinus.id,
+      detail: `ids=${JSON.stringify(idsPorFecha)} esperaba_primero=${compraMinus.id}`,
     });
 
     // 3) q matchea por apellido (case-insensitive ASCII)
@@ -252,7 +270,7 @@ async function main() {
     const r11Totales = (r11.body?.compras || []).map((c) => c.totalPagado);
     checks.push({
       name: 'orderBy=total&orderDir=desc → de mayor a menor',
-      pass: JSON.stringify(r11Totales) === JSON.stringify([50000, 30000, 20000, 10000]),
+      pass: JSON.stringify(r11Totales) === JSON.stringify([60000, 50000, 40000, 30000, 20000, 10000]),
       detail: `totales=${JSON.stringify(r11Totales)}`,
     });
 
@@ -261,7 +279,7 @@ async function main() {
     const r12Totales = (r12.body?.compras || []).map((c) => c.totalPagado);
     checks.push({
       name: 'orderBy=total&orderDir=asc → de menor a mayor (la dirección se respeta)',
-      pass: JSON.stringify(r12Totales) === JSON.stringify([10000, 20000, 30000, 50000]),
+      pass: JSON.stringify(r12Totales) === JSON.stringify([10000, 20000, 30000, 40000, 50000, 60000]),
       detail: `totales=${JSON.stringify(r12Totales)}`,
     });
 
@@ -270,8 +288,8 @@ async function main() {
     const r13 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, orderBy: 'cantidad', orderDir: 'asc' } }));
     const r13Cantidades = (r13.body?.compras || []).map((c) => c.cantidadEntradas);
     checks.push({
-      name: 'orderBy=cantidad&orderDir=asc → 1,2,3,5',
-      pass: JSON.stringify(r13Cantidades) === JSON.stringify([1, 2, 3, 5]),
+      name: 'orderBy=cantidad&orderDir=asc → 1,2,3,4,5,6',
+      pass: JSON.stringify(r13Cantidades) === JSON.stringify([1, 2, 3, 4, 5, 6]),
       detail: `cantidades=${JSON.stringify(r13Cantidades)}`,
     });
 
@@ -281,8 +299,8 @@ async function main() {
     const r14Descendente = r14Ids.every((id, i) => i === 0 || r14Ids[i - 1] > id);
     checks.push({
       name: 'orderBy=id&orderDir=desc → ids descendentes',
-      pass: r14Ids[0] === compraR.id && r14Descendente,
-      detail: `ids=${JSON.stringify(r14Ids)} esperaba_primero=${compraR.id}`,
+      pass: r14Ids[0] === compraMinus.id && r14Descendente,
+      detail: `ids=${JSON.stringify(r14Ids)} esperaba_primero=${compraMinus.id}`,
     });
 
     // 15) Whitelist: un campo que no está en el mapa cae al default (nombre A-Z),
@@ -292,7 +310,7 @@ async function main() {
     checks.push({
       name: 'orderBy inválido → cae al default alfabético (whitelist)',
       pass: r15.statusCode === 200 &&
-        JSON.stringify(r15Apellidos) === JSON.stringify(['Acosta', 'Martinez', 'Rechazado', 'Zorrilla']),
+        JSON.stringify(r15Apellidos) === JSON.stringify(['Acosta', 'BENITEZ', 'duarte', 'Martinez', 'Rechazado', 'Zorrilla']),
       detail: `status=${r15.statusCode} apellidos=${JSON.stringify(r15Apellidos)}`,
     });
 
@@ -301,7 +319,7 @@ async function main() {
     const r16Ids = (r16.body?.compras || []).map((c) => c.id);
     checks.push({
       name: 'orderDir inválido → default del campo (fecha desc)',
-      pass: r16.statusCode === 200 && r16Ids[0] === compraR.id,
+      pass: r16.statusCode === 200 && r16Ids[0] === compraMinus.id,
       detail: `status=${r16.statusCode} ids=${JSON.stringify(r16Ids)}`,
     });
 
@@ -311,8 +329,34 @@ async function main() {
     const r17Apellidos = (r17.body?.compras || []).map((c) => c.apellido);
     checks.push({
       name: 'Sin orderBy → sigue siendo alfabético A-Z (compatibilidad hacia atrás)',
-      pass: JSON.stringify(r17Apellidos) === JSON.stringify(['Acosta', 'Martinez', 'Rechazado', 'Zorrilla']),
+      pass: JSON.stringify(r17Apellidos) === JSON.stringify(['Acosta', 'BENITEZ', 'duarte', 'Martinez', 'Rechazado', 'Zorrilla']),
       detail: `apellidos=${JSON.stringify(r17Apellidos)}`,
+    });
+
+    // 18) El alfabético pagina en Node (no en la BD, porque el orden se calcula
+    //     en JS). Verificar que las páginas no se pisan ni se saltean filas, y
+    //     que total/totalPages siguen contando el conjunto entero.
+    const paginas = [];
+    for (let pg = 1; pg <= 3; pg++) {
+      const r = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, limit: 2, page: pg } }));
+      paginas.push(r.body);
+    }
+    const concatenado = paginas.flatMap((p) => (p?.compras || []).map((c) => c.apellido));
+    const sinRepetir = new Set(concatenado).size === concatenado.length;
+    checks.push({
+      name: '🎯 Alfabético paginado en Node: 3 páginas de 2 reconstruyen la lista sin huecos ni repetidos',
+      pass: JSON.stringify(concatenado) === JSON.stringify(['Acosta', 'BENITEZ', 'duarte', 'Martinez', 'Rechazado', 'Zorrilla']) &&
+        sinRepetir && paginas[0]?.total === 6 && paginas[0]?.totalPages === 3,
+      detail: `concatenado=${JSON.stringify(concatenado)} total=${paginas[0]?.total} totalPages=${paginas[0]?.totalPages}`,
+    });
+
+    // 19) Desc del alfabético: la lista exactamente al revés.
+    const r19 = await call(controller.adminListar, mockReq({ query: { eventoId: evento.id, orderBy: 'nombre', orderDir: 'desc' } }));
+    const r19Apellidos = (r19.body?.compras || []).map((c) => c.apellido);
+    checks.push({
+      name: 'orderBy=nombre&orderDir=desc → Z-A con el mismo criterio humano',
+      pass: JSON.stringify(r19Apellidos) === JSON.stringify(['Zorrilla', 'Rechazado', 'Martinez', 'duarte', 'BENITEZ', 'Acosta']),
+      detail: `apellidos=${JSON.stringify(r19Apellidos)}`,
     });
 
     // ============================================
