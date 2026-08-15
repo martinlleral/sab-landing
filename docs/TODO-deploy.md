@@ -764,14 +764,36 @@ El test de ayer salió así porque: compra #20 pasó brevemente por `approved` �
 - [x] Confirmación de que `qr.service.js:generarQR()` ya usa `QRCode.toFile()` (no solo base64)
 - [ ] (Sprint 2) Agregar test E2E que valide post-`checkAndProcess` la existencia del PNG — previene regresiones silenciosas
 
-#### 32. Verificar URL del webhook en panel MP
+#### ~~32. Verificar URL del webhook en panel MP~~ ✅ Cerrado 15/8 — verificado por evidencia, no por login
 
-**Esfuerzo:** 5 min · **Requiere login MP**
+**Resuelto sin entrar al panel.** Durante el cambio de cuenta de cobro (US-B), la compra de prueba #2118 dejó la prueba en los logs de nginx: la notificación del pago `173961957462` llegó a la URL completa, con formato Webhooks v2 y firma válida.
 
-Martín debe entrar al panel MP → Tus integraciones → [app SAB] → Webhooks y verificar que la URL configurada allí sea exactamente `https://sindicatoargentinodeboleros.com.ar/api/compras/webhook` (no IP, no HTTP). Esa config tiene prioridad sobre la `notification_url` que mandamos en cada preferencia.
+```
+POST /api/compras/webhook?data.id=173961957462&type=payment → 200  "MercadoPago WebHook v1.0 payment"
+```
 
-- [ ] Martín confirma URL en panel MP
-- [ ] Re-test con botón "Simular" del panel MP (no hace falta otra compra real) — observar log de `[webhook MP]` matcheando firma
+Un `200` en ese endpoint solo es posible si la URL configurada es exacta **y** la firma valida contra `MP_WEBHOOK_SECRET`. Queda verificado para la aplicación de la cuenta de la cooperativa; la config de la cuenta anterior ya no importa.
+
+**Aprendizaje de método:** este ítem estuvo abierto ~4 meses esperando que alguien con acceso al panel lo mirara. Se podría haber cerrado en cualquier momento con `docker logs sab-nginx | grep 'POST /api/compras/webhook'`. **Cuando un pendiente depende del acceso de un tercero, conviene buscar primero si el sistema ya tiene la respuesta.**
+
+---
+
+#### 32b. Limpiar la configuración de IPN legacy en el panel MP 🆕 15/8
+
+**Esfuerzo:** 5 min · **Requiere login MP** · **Severidad:** baja (ruido, no falla)
+
+Las notificaciones están configuradas **dos veces** en las cuentas de MP: como Webhooks (la sana) y como **IPN legacy**, que manda el formato viejo `?id=…&topic=…`. El handler no encuentra `data.id`, no puede validar firma y responde 401. En 7 días eso son **2629 rechazos**, contra 144 hits legítimos.
+
+Se ve nítido en el mismo pago: le llegan las dos notificaciones con segundos de diferencia.
+
+```
+POST …?data.id=173961957462&type=payment  → 200   "MercadoPago WebHook v1.0"   ← la sana
+POST …?id=173961957462&topic=payment      → 401   "MercadoPago Feed v2.0"      ← IPN legacy
+```
+
+No rompe nada (las ventas entran igual, y además por polling y cron), pero ensucia los logs al punto de poder tapar un error real.
+
+- [ ] Panel MP → Tus integraciones → la aplicación de la cooperativa (el Application ID está en el runbook privado, no en este repo) → borrar la config de **IPN**, dejando solo la de **Webhooks**
 
 ---
 
@@ -803,6 +825,61 @@ La sección `#descripcion` tiene H2 + info-grid + callouts pero no cierra en acc
 
 - [ ] Al final de `.evento-content`, agregar CTA grande: `<button>Comprar entradas para este evento</button>` que abra el modal del evento destacado
 - [ ] Diseño: consistente con hero btn-comprar, un poco más grande
+
+---
+
+---
+
+## ~~🆕 Hallazgos del 15/8 — backoffice (detectados usando el sistema, no auditando)~~ ✅ Cerrados 15/8
+
+Surgieron mientras se verificaba la compra de prueba de US-B en `evento-compras.html`. Los tres se cerraron el mismo día, en dos commits separados: el 40 y el 40 bis son **defectos** de algo ya entregado, el 41 era **scope nuevo**.
+
+### ~~40. 🐛 El selector "Ordenar: Más recientes" no tiene efecto~~ ✅ Hecho 15/8 — **defecto, no mejora**
+
+**Archivos:** `src/controllers/compras.controller.js` · `public/backoffice/evento-compras.html` · **Severidad:** media (el operador cree que ordenó y está mirando otra cosa)
+
+**Causa raíz.** El orden se aplicaba **dos veces** y la segunda pisaba a la primera: `loadCompras()` mandaba `orderBy` al backend, que devolvía bien ordenado, y después llamaba a `aplicarFiltro()`, que re-ordenaba client-side con `sortBy`/`sortDir` — variables que **solo escribía el click en los headers**. El `<select>` nunca las tocaba. Por eso el filtro de Validación sí funcionaba (server-side puro) y el de orden no.
+
+**Se arregló el fondo, no el síntoma.** Ordenar client-side una página de 20 sobre un total mayor ordena **solo la página visible**: al clickear "Total" el operador creía ver la compra más grande del evento y veía la más grande de esas 20. Afectaba a las 3 columnas que el backend no sabía ordenar (`id`, `cantidad`, `total`).
+
+- [x] Backend: whitelist `ORDEN_CAMPOS` con las 5 columnas ordenables + `orderDir` asc/desc. Campo o dirección inválidos caen al default; nada del cliente llega crudo al `orderBy` de Prisma. Sin params el resultado es idéntico al anterior, así que `lector-qr` y los demás consumidores no se enteran
+- [x] Frontend: eliminado el sort client-side. `sortBy`/`sortDir` son la única fuente de verdad y viajan en cada request; el `<select>` y los headers escriben el mismo estado
+- [x] Quitado el `onchange` inline del `<select>` (antipatrón ya documentado en el proyecto)
+- [x] El `<select>` cae en una opción oculta "Personalizado" cuando el orden activo salió de una columna que él no contempla, para no afirmar un orden que no está aplicado
+- [x] 7 checks nuevos en `tests/integration/compras-admin-listar.test.js` (las 5 columnas, ambas direcciones, la whitelist y la compatibilidad hacia atrás). El fixture tenía `cantidadEntradas` y `totalPagado` idénticos en las 4 compras, así que no podía afirmar nada sobre esas columnas: ahora varía. **17/17 · 13/13 suites**
+- [x] Verificado en navegador con 45 compras en 3 páginas: "Más recientes" trae la más nueva del evento (alfabéticamente en la página 3) y "Total" el mayor del evento (en la página 2), con la página 2 continuando la serie
+
+> Salda para compras la deuda de **filtros/orden paginados client-side** que venía anotada en el proyecto.
+
+### ~~40 bis. 🐛 "Últimas compras" del dashboard no son las últimas~~ ✅ Hecho 15/8 — **defecto**
+
+Encontrado de paso al arreglar el 40, mismo origen. `dashboard.html` pedía `/api/admin/compras?limit=10` **sin `orderBy`**, y el default del endpoint es alfabético por apellido (pensado para buscar gente en la puerta del evento). La tabla titulada "Últimas compras" listaba "Acosta, Álvarez, Benítez…", que no son las últimas de nada.
+
+- [x] `&orderBy=fecha` en la llamada del dashboard
+
+### ~~41. 💅 Sidebar del backoffice: comprimible y más angosto~~ ✅ Hecho 15/8
+
+**Archivos:** `public/backoffice/assets/css/bo.css` + `assets/js/bo.js` · **Severidad:** baja (UX de trabajo)
+
+- [x] Botón para colapsar a **solo íconos**, con el estado en `localStorage`
+- [x] Ancho del sidebar desplegado de 240px a 200px
+- [x] Logo compacto **"S.A. BOLEROS" → "SAB"** en colapsado
+- [x] Tooltips en los links (colapsado, sin ellos no se sabe qué es cada ícono)
+
+**El scroll horizontal no lo causaba el sidebar.** Buscándolo apareció la causa real: `.bo-main` es un ítem flex **sin `min-width: 0`**, así que no se encogía por debajo de su contenido. La tabla (~1330px) lo estiraba más allá del layout y terminaba scrolleando la **página entera** — llevándose la topbar y los filtros — mientras `.table-responsive` nunca llegaba a hacer su trabajo. Una línea lo arregla, y ahora el scroll, cuando hace falta, queda dentro de la tabla.
+
+Notas de implementación, por si hay que volver:
+
+- El colapso **solo redefine `--bo-sidebar-w`** en `.bo-layout.sidebar-collapsed`. `.bo-sidebar` (width) y `.bo-main` (margin-left) ya la leen, así que no hay dos fuentes de verdad del ancho.
+- Todas las reglas del colapso viven dentro de `@media (min-width: 769px)`. En mobile el sidebar ya se esconde entero con `.visible`/`translateX` y las dos lógicas se pisarían; encerrándolas no hace falta ninguna excepción.
+- El botón y los tooltips **los inyecta `bo.js`**, así que no hubo que tocar el `<aside>` duplicado de los 8 HTML.
+- **El parpadeo son dos cosas, no una.** Aplicar la clase en top-level (antes del primer paint) no alcanza: el `<aside>` ya resolvió su estilo con el ancho expandido, y al cambiar la variable se dispara la transición — el sidebar se veía achicándose solo en cada carga de página. Hay además una clase `sin-transicion` que `bo.js` quita en el segundo `requestAnimationFrame`.
+
+> Pedido de Martín como operador del backoffice. Era scope nuevo (mejora, no defecto), a diferencia del 40.
+
+**Verificación:** 25/25 checks de Playwright sobre las 8 páginas — colapso y persistencia, sin parpadeo, sin scroll de página, "Acciones" visible sin scrollear a 1440px, scroll contenido en la tabla a 1280px, y mobile igual que antes aun con el colapso guardado.
+
+**Pendiente menor (no bloquea):** abajo de ~1366px la tabla no entra ni con el sidebar colapsado. Hoy scrollea sola, que es aceptable. Si molesta, las palancas son comprimir el padding de `.bo-table th/td` o dejar "Reenviar"/"Devolver" solo con ícono (ya hay precedente en el CSS para el botón de borrar).
 
 ---
 
