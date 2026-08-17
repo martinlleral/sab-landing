@@ -50,6 +50,11 @@ async function procesarPagoAprobado(compraId, mpPaymentId) {
   }
 
   const entradasCreadas = await prisma.$transaction(async (tx) => {
+    // MENÚ DE CASA METRO: acá NO se genera nada por menú. Los menús no son
+    // entradas — no tienen QR ni fila en `Entrada`, y no cuentan contra el aforo
+    // de la tanda. Viven como cantidad en la compra (`Compra.cantidadMenus`), y el
+    // control de entrega es la lista impresa que tilda la cocina, no el validador.
+    //
     // Source of truth: tanda de la compra. Todas las compras post-backfill
     // tienen tandaId asignado; si por algún edge case llegara null, el increment
     // se saltea — preferimos no tocar contadores a tocar el equivocado.
@@ -132,6 +137,13 @@ async function procesarPagoCancelado(compraId, nuevoEstado, mpPagoId = null) {
       await precios.liberarCupon(tx, uso.cuponId);
     }
 
+    // MENÚ DE CASA METRO: los menús de esta compra quedan liberados sin código
+    // propio. `Compra.cantidadMenus` no se toca (es historia contable) y la compra
+    // sale del estado 'pending', así que cualquier conteo de menús vendidos que
+    // filtre por estado deja de contarla. Esto vale MIENTRAS el tope se derive de
+    // los estados de las compras; si se agregara un contador desnormalizado en
+    // `Evento`, ESTE es uno de los tres lugares donde hay que decrementarlo (los
+    // otros dos: procesarPagoAprobado y revertirCompraAprobada).
     return { procesada: true, libero_cupon: !!uso };
   });
 }
@@ -155,7 +167,7 @@ async function procesarPagoCancelado(compraId, nuevoEstado, mpPagoId = null) {
  * @param {number} compraId
  * @param {{ revertidaPor?: string|null, motivo?: string|null }} [opts]
  * @returns {Promise<
- *   { ok: true, procesada: true, libero_cupon: boolean, stock_devuelto: number, entradas_ya_validadas: number }
+ *   { ok: true, procesada: true, libero_cupon: boolean, stock_devuelto: number, menus_devueltos: number, entradas_ya_validadas: number }
  *   | { ok: false, code: 'NOT_FOUND' }
  *   | { ok: false, code: 'NOT_APPROVED', estado: string }
  * >}
@@ -202,6 +214,16 @@ async function revertirCompraAprobada(compraId, { revertidaPor = null, motivo = 
       await precios.liberarCupon(tx, uso.cuponId);
     }
 
+    // MENÚ DE CASA METRO: los menús se devuelven junto con la compra. No hay nada
+    // que decrementar — `Compra.cantidadMenus` se conserva (es historia contable:
+    // hubo una compra de N menús que después se devolvió) y el cambio a 'refunded'
+    // los saca de cualquier conteo que filtre por 'approved'. Se reporta la
+    // cantidad para que el backoffice pueda avisar "esta devolución libera N menús"
+    // — la cocina puede haberlos contado ya.
+    // ⚠️ Si alguna vez se agrega un contador desnormalizado de menús en `Evento`,
+    // acá va su decremento (y en procesarPagoCancelado, y en procesarPagoAprobado).
+    const menusDevueltos = compra.cantidadMenus;
+
     // Las entradas ya validadas no bloquean la devolución (recomendación
     // acordada: la corrección contable vale aunque la persona haya entrado); se
     // reporta el conteo para que la UI muestre el aviso "esta entrada ya fue usada".
@@ -212,6 +234,7 @@ async function revertirCompraAprobada(compraId, { revertidaPor = null, motivo = 
       procesada: true,
       libero_cupon: !!uso,
       stock_devuelto: stockDevuelto,
+      menus_devueltos: menusDevueltos,
       entradas_ya_validadas: entradasYaValidadas,
     };
   });

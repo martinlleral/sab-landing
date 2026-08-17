@@ -6,7 +6,7 @@ const brevoService = require('../services/brevo.service');
 const qrService = require('../services/qr.service');
 const { procesarPagoAprobado, revertirCompraAprobada } = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
-const { calcularPrecioFinal, reservarCupon, validarCupon } = require('../services/precios.service');
+const { calcularTotalCompra, reservarCupon, validarCupon } = require('../services/precios.service');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -50,7 +50,10 @@ function verifyMpSignature(req, secret) {
 
 async function crearPreferencia(req, res) {
   try {
-    const { eventoId, email, nombre, apellido, telefono, cantidad, tipoEntrada, cuponCodigo } = req.body;
+    const {
+      eventoId, email, nombre, apellido, telefono, cantidad, tipoEntrada, cuponCodigo,
+      cantidadMenus,
+    } = req.body;
 
     if (!eventoId || !email || !nombre || !apellido || !cantidad) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
@@ -78,17 +81,37 @@ async function crearPreferencia(req, res) {
       }
     }
 
-    // Cálculo del precio (aplica tipoEntrada y, si vino, valida cupón). Errores
-    // del helper traen .code para mapear a 400 con mensaje específico.
+    // Menú de Casa Metro: cantidad propia, ortogonal a tipoEntrada. El precio es
+    // global (Home.precioMenu) y la compra lo congela. El body puede no traer el
+    // campo (checkout de un evento sin menú, o cliente viejo) → 0.
+    const menusPedidos = cantidadMenus === undefined || cantidadMenus === null || cantidadMenus === ''
+      ? 0
+      : parseInt(cantidadMenus);
+    let precioMenu = 0;
+    if (Number.isInteger(menusPedidos) && menusPedidos > 0) {
+      const home = await prisma.home.findFirst({ select: { precioMenu: true } });
+      precioMenu = home?.precioMenu ?? 0;
+    }
+
+    // Cálculo del total (aplica tipoEntrada, valida cupón si vino, valida las
+    // reglas duras del menú y lo suma DESPUÉS del descuento). Errores del helper
+    // traen .code para mapear a 400 con mensaje específico.
     let precioCalc;
     try {
-      precioCalc = await calcularPrecioFinal(tandaVigente, { tipoEntrada, cuponCodigo });
+      precioCalc = await calcularTotalCompra(tandaVigente, {
+        tipoEntrada,
+        cuponCodigo,
+        cantidad: cant,
+        cantidadMenus: menusPedidos,
+        menuHabilitado: evento.menuHabilitado,
+        precioMenu,
+      });
     } catch (err) {
       if (err.code) return res.status(400).json({ error: err.message, code: err.code });
       throw err;
     }
 
-    const totalPagado = precioCalc.precioUnitarioFinal * cant;
+    const totalPagado = precioCalc.totalPagado;
 
     // Tx atómica: si hay cupón, re-validamos dentro de la tx (defensa contra
     // cambios del admin entre cálculo y reserva), reservamos el uso, creamos
@@ -114,6 +137,8 @@ async function crearPreferencia(req, res) {
             precioUnitario: tandaVigente.precio,
             tipoEntrada: precioCalc.tipoEntrada,
             excedenteUnitario: precioCalc.excedenteUnitario,
+            cantidadMenus: precioCalc.cantidadMenus,
+            menuUnitario: precioCalc.menuUnitario,
             totalPagado,
             mpEstado: 'pending',
           },
@@ -142,6 +167,19 @@ async function crearPreferencia(req, res) {
       cantidad: cant,
       email,
       preferenciaId: String(compra.id),
+      // El menú va como ítem APARTE de la preferencia, no sumado al precio de la
+      // entrada: así el comprador ve las dos líneas en el checkout de MP y el
+      // reporte de MP muestra la plata de Casa Metro diferenciada de la del SAB
+      // (que es justo lo que pidió el operador). La suma de los ítems da
+      // compra.totalPagado, que es lo que el webhook cruza contra
+      // transaction_amount — si esto se desalinea, el webhook rechaza el pago.
+      itemsExtra: precioCalc.cantidadMenus > 0
+        ? [{
+          title: `Menú Casa Metro — ${precioCalc.cantidadMenus} menú(s)`,
+          unit_price: precioCalc.menuUnitario,
+          quantity: precioCalc.cantidadMenus,
+        }]
+        : undefined,
     });
 
     await prisma.compra.update({

@@ -5,7 +5,17 @@ const client = new MercadoPagoConfig({
   accessToken: config.mercadopago.accessToken,
 });
 
-async function crearPreferencia({ titulo, precio, cantidad, email, preferenciaId, backUrls }) {
+/**
+ * Crea una preferencia de Checkout Pro.
+ *
+ * `itemsExtra` (opcional) suma líneas después de la de las entradas — hoy la usa
+ * el menú de Casa Metro, para que su plata viaje identificada hasta el reporte de
+ * MP en vez de venir escondida dentro del precio de la entrada. Cada ítem extra
+ * es `{ title, unit_price, quantity }`; el currency_id lo pone esta función.
+ * ⚠️ La SUMA de todos los ítems tiene que dar `Compra.totalPagado`: el webhook
+ * cruza `transaction_amount` contra ese número y rechaza el pago si no coincide.
+ */
+async function crearPreferencia({ titulo, precio, cantidad, email, preferenciaId, backUrls, itemsExtra }) {
   const preference = new Preference(client);
 
   const base = config.baseUrl && config.baseUrl.startsWith('http')
@@ -18,15 +28,20 @@ async function crearPreferencia({ titulo, precio, cantidad, email, preferenciaId
     pending: `${base}/?status=pending`,
   };
 
+  const items = [
+    {
+      title: titulo,
+      unit_price: precio,
+      quantity: cantidad,
+      currency_id: 'ARS',
+    },
+  ];
+  for (const extra of itemsExtra || []) {
+    items.push({ currency_id: 'ARS', ...extra });
+  }
+
   const body = {
-    items: [
-      {
-        title: titulo,
-        unit_price: precio,
-        quantity: cantidad,
-        currency_id: 'ARS',
-      },
-    ],
+    items,
     payer: { email },
     external_reference: preferenciaId,
     back_urls: resolvedBackUrls,

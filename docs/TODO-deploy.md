@@ -883,9 +883,154 @@ Notas de implementación, por si hay que volver:
 
 ---
 
+## 🍽️ Sprint 7 — Entrada + menú de Casa Metro (aprobado 16/8, cargado 17/8)
+
+**Scope nuevo, ninguno es defecto.** Origen: 3 audios del operador del backoffice, del 10/8 → ficha interna del backlog (15/8) → adenda aprobada el 16/8. Se cargan acá recién ahora porque se dejaron afuera a propósito hasta que el alcance estuviera acordado por escrito.
+
+**Qué es.** Vender el menú de Casa Metro **en el mismo checkout que la entrada**, con la plata del menú identificable por separado y con la cocina sabiendo cuántos platos hacer y a quién entregárselos.
+
+> **La numeración de cara al cliente no es esta.** En la adenda los puntos van del 1 al 6 (1·Venta del menú=43a, 2·Lista para la cocina=44, 3·Tope=43b, 4·Cierre 18h=43c, 5·Aviso validador=45, 6·Descarga a planilla=42), para que el bloque acordado quede contiguo.
+
+**Cinco reglas que gobiernan los cuatro ítems** (del kickoff del 17/8):
+
+1. **No tocar `tipoEntrada`.** El menú es ortogonal a base/aporte — 87 líneas en 11 archivos usan esa semántica y ninguna se toca.
+2. **Cero dependencias npm nuevas.** El proyecto tiene 16 y ya cerró 6 CVEs borrando un import. CSV con BOM para el 42, `@media print` para el 44.
+3. **El cupón nunca descuenta el menú.** Es la regla más cara de romper (ver 43a).
+4. **No replicar el contador desnormalizado de `Tanda.cantidadVendida`** — esa race es deuda preexistente, no se le suma una segunda.
+5. **Congelar el precio en la compra.** Subirlo después no reescribe la historia contable.
+
+---
+
+### 43. 🍽️ Entrada con menú — **scope nuevo** · 13-18 h
+
+**El pedido literal era "una segunda tanda" y no se hace así.** Las tandas son secuenciales por diseño (`@@unique([eventoId, orden])`) y lo que se pide es que **convivan**; además partiría el aforo (dos `capacidad` que suman mal) y rompería el precio al agotarse. Se resuelve como **cantidad independiente**, al lado del *A la Gorra* — con la diferencia de que la gorra es un **atributo** de la entrada y el menú es una **cantidad aparte**.
+
+#### 43a. Núcleo del menú · 9-12 h · **el cuello: todo lo demás depende de esto**
+
+**Archivos:** `prisma/schema.prisma` · `src/services/precios.service.js` · `src/controllers/compras.controller.js` · `src/services/pagos.service.js` · `public/assets/js/app.js` · `home-cms.html` · `evento-detalle.html` · `src/services/brevo.service.js` · `src/controllers/dashboard.controller.js` · **Sesiones:** S1a (backend) + S1b (UI)
+
+**Modelo — migración ÚNICA con los 6 campos** (el kickoff del 17/8 unificó los 4 de la ficha con los de 43b y 43c, para no correr una segunda migración sobre una base con ventas vivas). Aditiva y con defaults, así que los eventos existentes quedan sin menú habilitado:
+
+| Campo | Tipo | Para |
+|---|---|---|
+| `Home.precioMenu` | `Int @default(15000)` | Precio global editable |
+| `Home.menuCorteHora` | `String @default("18:00")` | Lo usa 43c, se crea ahora |
+| `Evento.menuHabilitado` | `Boolean @default(false)` | Toggle por evento |
+| `Evento.topeMenus` | `Int?` | Lo usa 43b, se crea ahora |
+| `Compra.cantidadMenus` | `Int @default(0)` | La cantidad comprada |
+| `Compra.menuUnitario` | `Int @default(0)` | **Congela el precio al comprar** |
+
+**⚠️ El cupón NO puede descontar el menú.** Regla vigente en `precios.service.js:9`: *"el cupón se aplica SOLO sobre el precio base […] el excedente del aporte nunca se descuenta"*. El menú necesita la misma protección **y es más grave**: el aporte descontado es plata que la coop no recibe, pero el menú descontado es plata que la coop **le paga igual a Casa Metro**. Con `AMIGOS25` y 10 entradas con menú son **$37.500** del bolsillo del SAB — y los cupones ya se aplican × cantidad de entradas. Es checklist obligatorio, no nice-to-have.
+
+- [x] Migración Prisma con los 6 campos + backfill en 0/false (los eventos existentes no ofrecen menú) — `20260817163938_sprint7_menu_casa_metro`
+- [x] `precios.service.js`: el menú suma **después** del descuento, con test de que el cupón no lo toca
+- [ ] Checkout público (`app.js`): **segundo selector de cantidad**, no un checkbox — con su subtotal y el total actualizado. Es el cambio de UI más visible del ítem
+- [x] Validaciones (confirmadas por el operador el 17/8, son reglas duras): mínimo 1 entrada · `cantidadMenus <= cantidadEntradas` · no vender menú si `menuHabilitado` es false
+- [ ] Backoffice `home-cms.html`: campo de precio global · `evento-detalle.html`: toggle por evento
+- [ ] Mail de confirmación (`brevo.service.js`): "incluye N menús"
+- [ ] Reportes y dashboard: el menú como línea separada, igual que el aporte extra — **es el "diferenciado" que el operador pidió explícitamente**
+- [x] Tests: las 4 combinaciones (base/aporte × con/sin menú), cupón, y devolución — `tests/integration/menu-checkout.test.js`, 26 checks
+
+> **Backend cerrado (S1a, 17/8).** Falta solo la capa visible (S1b). Lo hecho:
+> - Migración **escrita a mano** como 6 `ALTER TABLE ADD COLUMN`. `prisma migrate dev` generaba un
+>   `RedefineTables` (create + copy + `DROP TABLE` + rename) de `Home`, `Evento` y **`Compra`**, y esa
+>   tabla nunca fue reescrita en producción (la migración del 5/7 sumó los campos de devolución con
+>   `ALTER TABLE`). Verificado con `prisma migrate dev` post-aplicación: **sin drift**. ⚠️ El archivo
+>   `migration.sql` **no se toca más**: Prisma guarda su checksum y editarlo bloquea el deploy.
+> - El cupón no puede tocar el menú **por construcción**, no por una guarda: el menú no entra a
+>   `calcularPrecioFinal` (donde vive el descuento) sino que se suma en `calcularTotalCompra`.
+>   Verificado por mutación: al hacer que el descuento alcance al menú, **5 checks se ponen en rojo**.
+> - El menú viaja como **ítem aparte** en la preferencia de MP, no sumado al precio de la entrada: la
+>   plata de la sede queda diferenciada hasta el reporte de MP. La suma de los ítems tiene que dar
+>   `Compra.totalPagado` — es lo que el webhook cruza contra `transaction_amount`.
+> - `revertirCompraAprobada` ahora reporta `menus_devueltos`.
+>
+> **Deuda que hereda S1b (2 líneas, backend):** los dos endpoints de edición tienen whitelist
+> explícita de campos, así que los toggles no se van a guardar hasta agregarlos —
+> `home.controller.js:19` (`precioMenu`) y `eventos.controller.js:226` (`menuHabilitado`). Lo que **no**
+> hace falta tocar: los endpoints de lectura devuelven la fila entera, así que el front ya recibe
+> `precioMenu` y `menuHabilitado` sin cambios.
+
+> **Corrección del kickoff (17/8) a la ficha:** la reversión de compras **no vive en el controller**. Vive en `pagos.service.js` y son **3 puntos de toque**, no 1 — `procesarPagoAprobado` (incrementa), `procesarPagoCancelado` (el autocancel de pendientes, 72 h) y `revertirCompraAprobada` (la devolución del backoffice, US-A). Tocar solo uno deja el estado desangrándose en silencio.
+
+#### 43b. Tope de menús · 2-3 h · depende de 43a
+
+**Archivos:** `src/services/precios.service.js` · `src/services/pagos.service.js` · `src/controllers/compras.controller.js` · `evento-detalle.html` · **Sesión:** S2
+
+- [ ] `Evento.topeMenus` (`Int?`, null = sin tope) + campo en `evento-detalle.html` *(el campo ya lo crea la migración de 43a)*
+- [ ] **Reserva atómica** copiando el patrón de `reservarCupon()` (`precios.service.js:154`): increment dentro de la transacción y verificar el tope **después**, con rollback si se pasó. **No** replicar el contador desnormalizado de `Tanda.cantidadVendida`: ahí vive la race de stock que es deuda preexistente del proyecto
+- [ ] UI: menús restantes visibles, "menús agotados" cuando llega a 0, y qué pasa si quedan 3 y pide 5 (mensaje claro, no un error genérico)
+- [ ] Liberar la reserva en los **3 puntos** de `pagos.service.js`, igual que hace hoy `liberarCupon()`
+- [ ] Test de race: 2 compras simultáneas del último menú → una falla con rollback limpio
+
+#### 43c. Corte a las 18:00 del día del evento · 2-3 h · depende de 43a
+
+**Archivos:** helper estilo `src/services/tandas.service.js` · `src/controllers/compras.controller.js` · `public/assets/js/app.js` · `home-cms.html` · **Sesión:** S3
+
+- [ ] `Home.menuCorteHora` (`String`, default `"18:00"`) editable — cuesta casi nada y evita tocar código si Casa Metro cambia el horario *(el campo ya lo crea la migración de 43a)*
+- [ ] Derivar el límite de `Evento.fecha` + esa hora. **⚠️ Timezone:** el proyecto ya tuvo un fix por esto (sesión 8-9/5). Mal calculado, corta a las 15 o a las 21. Test explícito con hora fija, no con `new Date()`. El molde es `estaDisponible()` de `tandas.service.js:17`, que ya resuelve corte-por-fecha en backend y está testeado
+- [ ] **Doble capa:** ocultar la opción en el front *y* rechazarla en `crearPreferencia` — alguien puede tener la página abierta desde las 17:50
+- [ ] **Caso borde real:** el corte se evalúa al **crear la preferencia**, no al acreditar. Un pago de Rapipago iniciado 17:55 puede acreditarse al día siguiente (el autocancel espera 72 h justo por eso) y meter un menú que la cocina no cocinó. Definir el criterio y dejarlo escrito acá antes de hacer el 44, que lo consume: lo sano es que el reporte de cocina de las 18 salga con lo **aprobado** y advierta los pendientes
+
+---
+
+### 42. 📊 Exportar compradores a planilla — **scope nuevo, pero es lo que se venía debiendo** · 2-3 h
+
+**Archivos:** `src/controllers/compras.controller.js` · `public/backoffice/evento-compras.html` · **Independiente de todo lo demás** · **Sesión:** S5
+
+El operador lo dijo así: *"no tengo la posibilidad de bajar un Excel de toda la lista de compradores"*. Figura como P1 desde la auditoría del 4/4 y está anunciado en `docs/FAQS.md:44` como *"feature pendiente (Sprint 2)"* — nunca llegó a entregarse.
+
+**⚠️ Endpoint dedicado, no reusar el paginado.** El listado pagina de a 20 y topea en 200 cuando hay búsqueda (recién arreglado en el ítem 40): el export necesita el conjunto **completo**. Es el patrón ya documentado en el proyecto para agregaciones.
+
+**CSV, no `.xlsx`.** Sumar una librería de planillas trae superficie de CVEs a un proyecto que ya limpió 6 borrando un import. **CSV con BOM UTF-8** abre en Excel de doble clic con los acentos bien. Si hiciera falta `.xlsx` de verdad, se trata como alcance aparte.
+
+- [ ] `GET /api/admin/compras/export` con los mismos filtros que el listado (evento, validación, búsqueda)
+- [ ] BOM UTF-8 al inicio + `Content-Disposition: attachment` con nombre fechado
+- [ ] Columnas: nombre, apellido, email, teléfono, cantidad, tipo de entrada, **cantidad de menús**, total, estado, fecha, códigos QR
+- [ ] Decidir si incluye devueltas y pendientes (por defecto **solo aprobadas**, con toggle)
+- [ ] Botón en `evento-compras.html` que respete los filtros activos en pantalla
+
+> La columna "cantidad de menús" es lo único que depende de 43a. Si esto se hace antes, se deja anotada y se agrega después (5 minutos).
+
+---
+
+### 44. 🧾 Lista de menús para la cocina — **scope nuevo** · 3-4 h · depende de 43a
+
+**Archivos:** vista nueva `public/backoffice/evento-menus.html` · `src/routes/backoffice.routes.js` · endpoint admin · **Sesión:** S4
+
+Es el *"exportar un PDF de la gente que compró el menú"*. Lista **operativa**, distinta del 42: va a la cocina y a la puerta, no a la administración. Sin emails ni teléfonos.
+
+**Subió de prioridad.** Por la decisión de producto del 16/8 no hay segundo QR: **este documento ES el control de entrega**. En la puerta se tilda esta hoja impresa, y es lo que se lleva Casa Metro.
+
+**Sin librería de PDF:** vista HTML con `@media print` → *Imprimir → Guardar como PDF*. El navegador ya trae el motor, y encima le sirve impresa, que es exactamente lo que va a usar.
+
+- [ ] Vista `/backoffice/evento-menus.html` filtrada por evento
+- [ ] **Total de menús** bien visible arriba — es el número que Casa Metro necesita para cocinar
+- [ ] Una fila por compra con **la cantidad** ("Pérez, Juan — 2 menús") y **un casillero por menú**, no uno por persona: con la decisión 1 puede retirar 2 y hay que poder tildar de a uno
+- [ ] Ordenada alfabéticamente por apellido, con la colación `es` ya resuelta en el ítem 40 — reusarla, no reimplementarla
+- [ ] CSS de impresión: sin sidebar, nombre y fecha del evento en el encabezado, y la **hora de emisión** del listado (para saber si es anterior o posterior al corte de las 18)
+- [ ] Marcar visualmente las compras **pendientes de pago** si las hubiera, o excluirlas, según el criterio que defina 43c
+
+---
+
+### 45. 🎫 Aviso de menú en el validador QR — **scope nuevo, descartable** · 1-1,5 h · depende de 43a
+
+**Archivos:** `src/controllers/entradas.controller.js` · `public/backoffice/lector-qr.html` · **Sesión:** S6
+
+**No hace falta un segundo QR**, y con la decisión 1 tampoco tendría sentido: los menús no están atados a entradas puntuales, así que ninguna entrada individual "incluye menú". El validador **no controla la entrega** — eso lo hace la lista impresa del 44. Acá solo **avisa**, para que en la puerta manden a la persona al mostrador. `_validarQRCore` (`entradas.controller.js:43`) ya trae la compra entera: es mostrar un dato que ya está.
+
+- [ ] Agregar el dato a lo que devuelve `_validarQRCore`
+- [ ] Agregarlo **también** a `entradaReducida()` — es la versión recortada que ve **Casa Metro** con su token público (`ValidationAccessToken`), y es justo quien necesita saberlo
+- [ ] Mostrarlo grande y en color en `lector-qr.html`: en la puerta se mira de reojo
+- [ ] Verificar en el validador **público con token**, no solo en el admin
+
+> **Se puede dejar afuera del sprint sin romper nada.** Si el tiempo aprieta, es el primero que sale: la operación funciona con 43a + 43b/43c + 44.
+
+---
+
 ## 🆕 Hallazgo del 17/8 — landing (detectado por la coordinadora usando el sitio)
 
-Los números 42-45 quedan reservados para los ítems del Sprint 7 (ficha `docs/backlog-menu-export-20260815.md`), así que este arranca en 46.
+Este arranca en 46 porque los números 42-45 estaban reservados para los ítems del Sprint 7 (cargados arriba el 17/8).
 
 ### 46. 🔧 El Instagram de la sede no es un campo del CMS — **defecto de diseño, no de código**
 

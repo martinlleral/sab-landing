@@ -15,6 +15,20 @@
  *  - El incremento del contador de usos es responsabilidad del controller dentro
  *    de una transacción Prisma (ver `reservarCupon`). Este helper solo CALCULA y
  *    VALIDA, no muta estado.
+ *
+ * Regla del menú de Casa Metro (Sprint 7, 17/8/2026):
+ *  - EL CUPÓN NO DESCUENTA EL MENÚ. Nunca. Es la misma protección que tiene el
+ *    excedente del aporte, pero por un motivo más caro: el aporte descontado es
+ *    plata que la coop no recibe, mientras que el menú descontado es plata que la
+ *    coop le paga IGUAL a Casa Metro. Con AMIGOS25 (25 %) y 10 entradas con menú
+ *    a $15.000, serían $37.500 saliendo del bolsillo del SAB.
+ *    La protección acá es ESTRUCTURAL, no un `if`: el menú no entra nunca a
+ *    `calcularPrecioFinal` (que es donde vive el descuento), sino que se suma
+ *    aparte en `calcularTotalCompra`. Para que un cupón toque el menú habría que
+ *    reescribir la composición de las dos funciones, no olvidarse de una guarda.
+ *  - El menú es una CANTIDAD propia, ortogonal a `tipoEntrada`: las 4
+ *    combinaciones (base/aporte × con/sin menú) se calculan sin tocar nada de la
+ *    semántica del Sprint 3.
  */
 
 const prisma = require('../utils/prisma');
@@ -141,6 +155,119 @@ async function calcularPrecioFinal(tanda, opciones = {}) {
 }
 
 /**
+ * Valida las reglas duras del menú de Casa Metro. Puras: no tocan la base de
+ * datos. Tiran Error con .code para que el controller mapee a 400 con mensaje
+ * específico, igual que `validarCupon`.
+ *
+ * Las tres reglas las confirmó el operador el 17/8/2026 (antes eran supuestos):
+ *   1. Mínimo 1 entrada — no existe la compra de menú suelto.
+ *   2. `cantidadMenus <= cantidadEntradas` — 2 entradas y 5 menús no tiene
+ *      sentido físico.
+ *   3. Si el evento no tiene `menuHabilitado`, no se vende menú.
+ *
+ * Ojo con la 1: se aplica a TODA compra (con o sin menú), y es lo que hace que
+ * "menú suelto" sea imposible por construcción. Antes de esto, una compra con
+ * `cantidad: 0` llegaba hasta Prisma y explotaba con un 500.
+ *
+ * @param {Object} params
+ * @param {number} params.cantidad - entradas pedidas (ya parseado a Int)
+ * @param {number} [params.cantidadMenus=0] - menús pedidos (ya parseado a Int)
+ * @param {boolean} [params.menuHabilitado=false] - `Evento.menuHabilitado`
+ * @param {number} [params.precioMenu=0] - `Home.precioMenu` vigente
+ */
+function validarMenu({ cantidad, cantidadMenus = 0, menuHabilitado = false, precioMenu = 0 }) {
+  if (!Number.isInteger(cantidad) || cantidad < 1) {
+    const e = new Error('La cantidad de entradas debe ser al menos 1');
+    e.code = 'CANTIDAD_INVALIDA';
+    throw e;
+  }
+  if (!Number.isInteger(cantidadMenus) || cantidadMenus < 0) {
+    const e = new Error('La cantidad de menús no es válida');
+    e.code = 'MENUS_INVALIDO';
+    throw e;
+  }
+
+  if (cantidadMenus === 0) return;
+
+  if (!menuHabilitado) {
+    const e = new Error('Este evento no ofrece menú');
+    e.code = 'MENU_NO_HABILITADO';
+    throw e;
+  }
+  if (cantidadMenus > cantidad) {
+    const e = new Error(`No se pueden comprar más menús (${cantidadMenus}) que entradas (${cantidad})`);
+    e.code = 'MENUS_EXCEDEN_ENTRADAS';
+    throw e;
+  }
+  // Guarda de configuración: si el evento tiene el menú habilitado pero el precio
+  // global quedó en 0, es un error de carga del backoffice. Vender un menú en $0
+  // en silencio sería plata que la coop le debe pagar igual a Casa Metro.
+  if (!Number.isInteger(precioMenu) || precioMenu <= 0) {
+    const e = new Error('El menú no tiene precio configurado');
+    e.code = 'MENU_PRECIO_NO_CONFIGURADO';
+    throw e;
+  }
+}
+
+/**
+ * Calcula el TOTAL de la compra: entradas (con tipo y cupón) + menús.
+ *
+ * Es el único punto de entrada que debería usar el checkout, porque es el que
+ * garantiza el orden correcto de las operaciones:
+ *
+ *   1. valida las reglas duras del menú,
+ *   2. calcula el precio por entrada con `calcularPrecioFinal` — que aplica el
+ *      descuento SOLO sobre la base y no sabe que el menú existe,
+ *   3. suma el menú DESPUÉS, sobre un total ya descontado.
+ *
+ * `menuUnitario` es el precio que hay que CONGELAR en la compra: se devuelve
+ * resuelto (0 si no lleva menú) para que el controller lo persista sin recalcular.
+ *
+ * @param {Object} tanda - Tanda vigente (precio, eventoId, porcentajeAporte)
+ * @param {Object} opciones
+ * @param {number} opciones.cantidad - entradas
+ * @param {string} [opciones.tipoEntrada='base'] - 'base' | 'aporte'
+ * @param {string} [opciones.cuponCodigo]
+ * @param {number} [opciones.cantidadMenus=0]
+ * @param {boolean} [opciones.menuHabilitado=false] - `Evento.menuHabilitado`
+ * @param {number} [opciones.precioMenu=0] - `Home.precioMenu` vigente
+ * @returns {Promise<Object>} lo mismo que `calcularPrecioFinal` (por entrada) más
+ *   `cantidad`, `cantidadMenus`, `menuUnitario`, `totalPagado` y el desglose
+ *   `totales: { entradas, menus, total }`.
+ */
+async function calcularTotalCompra(tanda, opciones = {}) {
+  const cantidad = opciones.cantidad;
+  const cantidadMenus = opciones.cantidadMenus || 0;
+  const precioMenu = opciones.precioMenu || 0;
+
+  validarMenu({
+    cantidad,
+    cantidadMenus,
+    menuHabilitado: opciones.menuHabilitado,
+    precioMenu,
+  });
+
+  const precioCalc = await calcularPrecioFinal(tanda, opciones);
+
+  const menuUnitario = cantidadMenus > 0 ? precioMenu : 0;
+  const totalEntradas = precioCalc.precioUnitarioFinal * cantidad;
+  const totalMenus = menuUnitario * cantidadMenus;
+
+  return {
+    ...precioCalc,
+    cantidad,
+    cantidadMenus,
+    menuUnitario,
+    totalPagado: totalEntradas + totalMenus,
+    totales: {
+      entradas: totalEntradas,
+      menus: totalMenus,
+      total: totalEntradas + totalMenus,
+    },
+  };
+}
+
+/**
  * Reserva atómicamente un uso del cupón dentro de una transacción Prisma.
  * Debe llamarse desde dentro de `prisma.$transaction(async (tx) => { ... })`
  * junto con la creación de la Compra y del CuponUso. Si el tope se rompe por
@@ -188,7 +315,9 @@ module.exports = {
   TIPO_CUPON,
   normalizarCodigo,
   validarCupon,
+  validarMenu,
   calcularPrecioFinal,
+  calcularTotalCompra,
   reservarCupon,
   liberarCupon,
 };
