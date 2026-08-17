@@ -60,7 +60,14 @@
       <div class="bo-stat" style="border-left:3px solid #48bb78;">
         <div class="bo-stat-value" style="color:#48bb78;" id="r-recaudado">—</div>
         <div class="bo-stat-label">Recaudado total</div>
-        <div class="bo-stat-desc">Base + aporte extra</div>
+        <div class="bo-stat-desc" id="r-recaudado-desc">Base + aporte extra</div>
+      </div>
+      <!-- Menú de la sede: visible solo si hubo menús vendidos. Esta plata la cobra
+           la cooperativa pero se la paga a la sede: no es recaudación propia. -->
+      <div class="bo-stat" style="border-left:3px solid #c4384b; display:none;" id="r-menus-card">
+        <div class="bo-stat-value" style="color:#c4384b;" id="r-menus">—</div>
+        <div class="bo-stat-label">Menú de la sede</div>
+        <div class="bo-stat-desc" id="r-menus-desc">A pagarle a la sede — no es recaudación del SAB</div>
       </div>
       <div class="bo-stat" style="border-left:3px solid #a78bfa;">
         <div class="bo-stat-value" style="color:#a78bfa;" id="r-aporte">—</div>

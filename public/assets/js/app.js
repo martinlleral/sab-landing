@@ -29,6 +29,35 @@ let cuponAplicado = null;
 // el comprador elige la opción "Entrada con Aporte".
 let tipoEntradaSeleccionado = 'base';
 
+// Menú de la sede (Sprint 7). El precio es GLOBAL y editable desde el CMS
+// (Home.precioMenu); el toggle es POR EVENTO (Evento.menuHabilitado). La cantidad
+// de menús es un eje independiente de tipoEntrada: las 4 combinaciones
+// (base/aporte × con/sin menú) conviven. Lo que se manda al backend es
+// `cantidadMenus`; el precio se resuelve y se congela allá, nunca acá.
+function getPrecioMenu() {
+  const p = homeData && homeData.precioMenu;
+  return Number.isFinite(p) && p > 0 ? p : 0;
+}
+
+// ¿El evento seleccionado ofrece menú? Requiere el toggle del evento Y un precio
+// global cargado: con precio 0 el backend rechaza con MENU_PRECIO_NO_CONFIGURADO,
+// así que ofrecerlo sería mandar a la gente a un error.
+function eventoOfreceMenu(ev) {
+  if (!ev || !ev.menuHabilitado) return false;
+  if (ev.esExterno && ev.linkExterno) return false;
+  if (!ev.tandaVigente) return false;
+  return getPrecioMenu() > 0;
+}
+
+// Cantidad de menús elegida. Lee del select; 0 si la sección está oculta.
+function getCantidadMenus() {
+  const section = document.getElementById('menu-section');
+  if (!section || section.style.display === 'none') return 0;
+  const sel = document.getElementById('modal-cantidad-menus');
+  const n = parseInt(sel?.value, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 // Sanitización XSS — escapar HTML en datos del CMS
 function esc(str) {
   if (!str) return '';
@@ -743,6 +772,10 @@ function onEventoSeleccionadoChange() {
   // Cambiar de evento también resetea el tipo de entrada (cada tanda decide
   // si ofrece aporte y con qué porcentaje).
   tipoEntradaSeleccionado = 'base';
+  // Y resetea el menú: menuHabilitado es por evento, y arrastrar "2 menús" a un
+  // evento que no los ofrece haría que el backend rechace con MENU_NO_HABILITADO.
+  const selMenus = document.getElementById('modal-cantidad-menus');
+  if (selMenus) selMenus.value = '0';
 
   const ev = getEventoSeleccionado();
   const nombreEl = document.getElementById('modal-evento-nombre');
@@ -756,6 +789,7 @@ function onEventoSeleccionadoChange() {
     if (flyerWrap) flyerWrap.style.display = 'none';
     fillEventoInfoCards(null);
     renderTandasInfo(null);
+    renderMenuSection();
     updateTotal();
     updateBtnPagarState(null);
     return;
@@ -777,6 +811,7 @@ function onEventoSeleccionadoChange() {
   fillEventoInfoCards(ev);
   renderTandasInfo(ev);
   renderTipoEntradaSection();
+  renderMenuSection();
   updateTotal();
   updateBtnPagarState(ev);
 }
@@ -849,17 +884,34 @@ function updateTotal() {
   // El aporte siempre llega íntegro a la coop, aún con cupón.
   const descuentoUnit = cuponAplicado?.descuentoUnitario || 0;
   const descuentoTotal = descuentoUnit * cant;
-  const total = Math.max(0, subtotal - descuentoTotal);
+
+  // El menú se suma DESPUÉS del descuento y NUNCA se descuenta (regla del
+  // Sprint 7): es plata que la coop le paga igual a la sede. Misma aritmética
+  // que calcularTotalCompra en el backend, que es quien cobra de verdad.
+  const menus = getCantidadMenus();
+  const precioMenu = getPrecioMenu();
+  const totalMenus = menus * precioMenu;
+
+  const totalEntradas = Math.max(0, subtotal - descuentoTotal);
+  const total = totalEntradas + totalMenus;
 
   totalEl.textContent = `$ ${formatPrecio(total)}`;
 
-  // Breakdown visible cuando hay descuento O cuando hay excedente por aporte.
+  // Breakdown visible cuando hay descuento, excedente por aporte O menú: en los
+  // tres casos el total deja de ser "cantidad × precio de la card".
   const breakdown = document.getElementById('modal-breakdown');
   if (breakdown) {
-    if (descuentoTotal > 0 || excedente > 0) {
+    if (descuentoTotal > 0 || excedente > 0 || totalMenus > 0) {
       breakdown.style.display = 'block';
       const subEl = document.getElementById('modal-subtotal');
       const descEl = document.getElementById('modal-descuento');
+      // Con menú en juego, "Subtotal" es ambiguo: se aclara a qué corresponde.
+      const subLabelEl = document.getElementById('modal-subtotal-label');
+      if (subLabelEl) {
+        subLabelEl.textContent = totalMenus > 0
+          ? `Entradas (${cant} × $${formatPrecio(precioUnit)})`
+          : 'Subtotal';
+      }
       if (subEl) subEl.textContent = `$ ${formatPrecio(subtotal)}`;
       if (descEl) {
         // Bootstrap .d-flex incluye !important, así que mutar style.display
@@ -877,11 +929,96 @@ function updateTotal() {
           }
         }
       }
+
+      // Línea del menú. Mismo toggle por classList que la del descuento (el
+      // !important de Bootstrap). La nota aclaratoria solo aparece cuando hay
+      // menú Y cupón a la vez: es ahí donde el número sorprende.
+      const menuRow = document.getElementById('modal-menu-row');
+      const menuTotalEl = document.getElementById('modal-menu-total');
+      const menuLabelEl = document.getElementById('modal-menu-label');
+      const menuNotaEl = document.getElementById('modal-menu-nota');
+      if (menuRow && menuTotalEl) {
+        if (totalMenus > 0) {
+          menuRow.classList.remove('d-none');
+          menuRow.classList.add('d-flex');
+          if (menuLabelEl) {
+            menuLabelEl.textContent = menus > 1
+              ? `${nombreMenu()} (${menus} × $${formatPrecio(precioMenu)})`
+              : nombreMenu();
+          }
+          menuTotalEl.textContent = `$ ${formatPrecio(totalMenus)}`;
+        } else {
+          menuRow.classList.remove('d-flex');
+          menuRow.classList.add('d-none');
+        }
+      }
+      if (menuNotaEl) {
+        menuNotaEl.style.display = (totalMenus > 0 && descuentoTotal > 0) ? 'block' : 'none';
+      }
     } else {
       breakdown.style.display = 'none';
     }
   }
 }
+
+// ============================================
+// MENÚ DE LA SEDE (cantidad independiente de las entradas)
+// ============================================
+
+// El nombre de la sede sale del CMS (override del evento → default de Home), así
+// que si el menú se ofrece en otro lugar el copy acompaña sin tocar código.
+function nombreMenu() {
+  const ev = getEventoSeleccionado();
+  const sede = (ev && ev.boxLugarOverride && ev.boxLugarOverride.trim())
+    || (homeData && homeData.boxLugar)
+    || '';
+  return sede ? `Menú de ${sede}` : 'Menú';
+}
+
+// Muestra u oculta la sección del menú y repuebla el select con las opciones
+// 0..cantidadEntradas. Conserva la elección previa si sigue siendo válida, y la
+// baja al máximo si el comprador redujo la cantidad de entradas (no la resetea a
+// 0: perder la elección sin avisar es peor que ajustarla).
+function renderMenuSection() {
+  const section = document.getElementById('menu-section');
+  const sel = document.getElementById('modal-cantidad-menus');
+  if (!section || !sel) return;
+
+  const ev = getEventoSeleccionado();
+  if (!eventoOfreceMenu(ev)) {
+    section.style.display = 'none';
+    sel.innerHTML = '<option value="0">Sin menú</option>';
+    sel.value = '0';
+    return;
+  }
+
+  const precioMenu = getPrecioMenu();
+  const cantEntradas = parseInt(document.getElementById('modal-cantidad')?.value, 10) || 1;
+  const previo = parseInt(sel.value, 10) || 0;
+  const elegido = Math.min(previo, cantEntradas);
+
+  const opciones = ['<option value="0">Sin menú</option>'];
+  for (let i = 1; i <= cantEntradas; i++) {
+    opciones.push(`<option value="${i}">${i} menú${i > 1 ? 's' : ''} — $ ${formatPrecio(precioMenu * i)}</option>`);
+  }
+  sel.innerHTML = opciones.join('');
+  sel.value = String(elegido);
+
+  const labelEl = document.getElementById('menu-label');
+  if (labelEl) labelEl.textContent = nombreMenu();
+  const precioLabelEl = document.getElementById('menu-precio-unit-label');
+  if (precioLabelEl) precioLabelEl.textContent = ` — $ ${formatPrecio(precioMenu)} por persona`;
+
+  section.style.display = 'block';
+}
+
+// Cambiar la cantidad de entradas cambia el techo del menú: hay que repoblar el
+// select antes de recalcular el total, o el máximo queda desfasado un paso.
+function onCantidadEntradasChange() {
+  renderMenuSection();
+  updateTotal();
+}
+window.onCantidadEntradasChange = onCantidadEntradasChange;
 
 // ============================================
 // TIPO DE ENTRADA (base vs aporte "A la Gorra")
@@ -1077,7 +1214,8 @@ window.quitarCupon = quitarCupon;
 
 document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'modal-cantidad') {
-    updateTotal();
+    // Repuebla el select de menús antes de recalcular: su máximo depende de esto.
+    onCantidadEntradasChange();
   }
 });
 
@@ -1129,6 +1267,8 @@ async function handleComprar() {
     };
     if (cuponAplicado) body.cuponCodigo = cuponAplicado.codigo;
     if (tipoEntradaSeleccionado === 'aporte') body.tipoEntrada = 'aporte';
+    const menus = getCantidadMenus();
+    if (menus > 0) body.cantidadMenus = menus;
 
     const result = await fetchJSON(API.preferencia, {
       method: 'POST',
@@ -1142,10 +1282,28 @@ async function handleComprar() {
       throw new Error('No se recibió link de pago');
     }
   } catch (err) {
-    showModalError(err.message || 'Error al procesar el pago. Intentá de nuevo.');
+    showModalError(mensajeErrorCompra(err));
     btn.disabled = false;
     if (spinner) spinner.style.display = 'none';
   }
+}
+
+// Traduce los `code` de las reglas duras del backend a algo que se entienda en el
+// modal. Son estados que la UI ya previene (el select acota los menús al máximo,
+// la sección se oculta si el evento no ofrece menú), así que llegar acá significa
+// que el estado del front quedó viejo: el mensaje tiene que decir qué hacer, no
+// solo que falló. Fallback al `error` del backend para todo lo demás.
+const MENSAJES_ERROR_COMPRA = {
+  MENU_NO_HABILITADO: 'Este evento ya no ofrece menú. Recargá la página y volvé a intentar.',
+  MENUS_EXCEDEN_ENTRADAS: 'No se puede comprar más menús que entradas. Ajustá las cantidades.',
+  CANTIDAD_INVALIDA: 'Elegí al menos 1 entrada.',
+  MENU_PRECIO_NO_CONFIGURADO: 'El menú no está disponible en este momento. Escribinos por WhatsApp y lo resolvemos.',
+  MENUS_INVALIDO: 'La cantidad de menús no es válida. Elegila de nuevo.',
+};
+
+function mensajeErrorCompra(err) {
+  if (err && err.code && MENSAJES_ERROR_COMPRA[err.code]) return MENSAJES_ERROR_COMPRA[err.code];
+  return (err && err.message) || 'Error al procesar el pago. Intentá de nuevo.';
 }
 
 function showModalError(msg) {
@@ -1319,7 +1477,14 @@ function renderPaymentStatus(status, preferenciaId, data) {
 async function fetchJSON(url, options = {}) {
   const res = await fetch(url, options);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    // Se adjunta el `code` del backend al Error para que quien llama pueda dar un
+    // mensaje específico (ver mensajeErrorCompra). El `message` sigue siendo el
+    // texto del backend, así que los callers que no miran el code no cambian.
+    const err = new Error(data.error || `HTTP ${res.status}`);
+    if (data.code) err.code = data.code;
+    throw err;
+  }
   return data;
 }
 

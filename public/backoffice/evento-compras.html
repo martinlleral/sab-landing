@@ -106,7 +106,15 @@
               <div class="bo-stat" style="border-left:3px solid #48bb78;">
                 <div class="bo-stat-value" style="color:#48bb78;" id="stat-recaudado">—</div>
                 <div class="bo-stat-label">Recaudado</div>
-                <div class="bo-stat-desc">Solo compras aprobadas con pago real</div>
+                <div class="bo-stat-desc" id="stat-recaudado-desc">Solo compras aprobadas con pago real</div>
+              </div>
+              <!-- Menú de la sede: aparece solo si este evento vendió menús. Es el
+                   número que la cocina necesita (cuántos cocinar) y el que la coop
+                   tiene que pagarle a la sede. -->
+              <div class="bo-stat" style="border-left:3px solid #c4384b; display:none;" id="stat-menus-card">
+                <div class="bo-stat-value" style="color:#c4384b;" id="stat-menus">—</div>
+                <div class="bo-stat-label">Menús vendidos</div>
+                <div class="bo-stat-desc" id="stat-menus-desc">Aprobados. La plata es de la sede, no del SAB.</div>
               </div>
             </div>
 
@@ -321,6 +329,32 @@
       document.getElementById('stat-invitaciones').textContent = stats.entradas.invitaciones;
       document.getElementById('stat-pendientes').textContent = stats.entradas.pendientes;
       document.getElementById('stat-recaudado').textContent = boPrecio(stats.recaudado);
+
+      // Menú de la sede (Sprint 7). `stats.recaudado` incluye el menú porque
+      // `Compra.totalPagado` lo incluye — es lo que se cobró por MP. Acá se muestra
+      // el CONTEO de menús (lo que la cocina necesita) y, en la descripción del
+      // recaudado, el neto del SAB, para que el operador no lea como propia la plata
+      // que le tiene que pagar a la sede.
+      const menusCant = stats.menus?.cantidad || 0;
+      const menusTotal = stats.menus?.total || 0;
+      const menusPend = stats.menus?.pendientes || 0;
+      const menusCard = document.getElementById('stat-menus-card');
+      const recDesc = document.getElementById('stat-recaudado-desc');
+      if (menusCant > 0 || menusPend > 0) {
+        if (menusCard) menusCard.style.display = '';
+        document.getElementById('stat-menus').textContent = menusCant;
+        document.getElementById('stat-menus-desc').textContent =
+          `${boPrecio(menusTotal)} para la sede, no del SAB`
+          + (menusPend > 0 ? ` · ${menusPend} más en compras pendientes` : '');
+        if (recDesc) {
+          recDesc.textContent = menusTotal > 0
+            ? `Incluye ${boPrecio(menusTotal)} de menú. Del SAB: ${boPrecio(stats.recaudadoSab ?? stats.recaudado)}`
+            : 'Solo compras aprobadas con pago real';
+        }
+      } else {
+        if (menusCard) menusCard.style.display = 'none';
+        if (recDesc) recDesc.textContent = 'Solo compras aprobadas con pago real';
+      }
 
       // Restante del evento: suma de capacidades de todas las tandas - vendidas (real,
       // contando invitaciones también porque consumen cupo). Si alguna tanda tiene

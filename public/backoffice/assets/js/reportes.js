@@ -109,9 +109,36 @@ async function cargarResumen() {
     document.getElementById('r-recaudado').textContent = fmtPesos(data.recaudado.total);
     document.getElementById('r-aporte').textContent = fmtPesos(data.recaudado.aporteExtra);
     document.getElementById('r-asistencia').textContent = fmtPct(data.asistenciaPct);
+    renderMenusResumen(data);
   } catch (err) {
     console.error('Error en resumen:', err);
   }
+}
+
+// Menú de la sede (Sprint 7). El KPI "Recaudado total" es todo lo cobrado por MP
+// e incluye el menú, que NO es plata del SAB. Cuando hay menús vendidos se muestra
+// la card del menú y la descripción del total pasa a decir el neto de la coop, para
+// que nadie tenga que restar a mano el número que después se le paga a la sede.
+function renderMenusResumen(data) {
+  const totalMenus = data.recaudado?.menus || 0;
+  const card = document.getElementById('r-menus-card');
+  const desc = document.getElementById('r-recaudado-desc');
+
+  if (!totalMenus) {
+    if (card) card.style.display = 'none';
+    if (desc) desc.textContent = 'Base + aporte extra';
+    return;
+  }
+
+  if (card) card.style.display = '';
+  const valEl = document.getElementById('r-menus');
+  if (valEl) valEl.textContent = fmtPesos(totalMenus);
+  const menusDesc = document.getElementById('r-menus-desc');
+  if (menusDesc) {
+    const cant = data.menus?.cantidad || 0;
+    menusDesc.textContent = `${cant} menú${cant === 1 ? '' : 's'} · a pagarle a la sede, no es recaudación del SAB`;
+  }
+  if (desc) desc.textContent = `Cobrado por MP, incluye el menú. Del SAB: ${fmtPesos(data.recaudado.sab)}`;
 }
 
 // ============================================
@@ -124,6 +151,13 @@ async function cargarTimeline() {
     destroyChart('timeline');
     if (!data.data.length) { empty.style.display = 'block'; return; }
     empty.style.display = 'none';
+
+    // La curva de plata grafica el NETO DEL SAB, no el total cobrado: incluir el
+    // menú de la sede haría leer como propia plata que se le paga a un tercero.
+    // Cuando no hay menús las dos series son idénticas; el label lo aclara solo
+    // cuando hay diferencia, para no agregar ruido a los eventos sin menú.
+    const hayMenus = data.data.some((r) => (r.menus || 0) > 0);
+    const labelPlata = hayMenus ? 'Recaudado acumulado (del SAB, sin menú)' : 'Recaudado acumulado';
 
     charts.timeline = new Chart(document.getElementById('chart-timeline'), {
       type: 'line',
@@ -139,14 +173,22 @@ async function cargarTimeline() {
             tension: 0.2,
           },
           {
-            label: 'Recaudado acumulado',
-            data: data.data.map((r) => r.recaudadoAcumulado),
+            label: labelPlata,
+            data: data.data.map((r) => r.recaudadoSabAcumulado ?? r.recaudadoAcumulado),
             borderColor: COLOR.recaudado,
             backgroundColor: COLOR.recaudado + '22',
             yAxisID: 'y1',
             tension: 0.2,
             borderDash: [4, 4],
           },
+          ...(hayMenus ? [{
+            label: 'Menú de la sede (por período)',
+            data: data.data.map((r) => r.menus || 0),
+            borderColor: '#c4384b',
+            backgroundColor: '#c4384b22',
+            yAxisID: 'y1',
+            tension: 0.2,
+          }] : []),
         ],
       },
       options: {
@@ -280,7 +322,12 @@ function renderTandas(data) {
               const t = data.tandas[idx];
               const cap = t.capacidad === null ? '∞' : t.capacidad;
               const ocup = t.pctOcupacion === null ? '—' : fmtPct(t.pctOcupacion);
-              return `Recaudado: ${fmtPesos(t.recaudado)} · Capacidad: ${cap} · Ocup: ${ocup}`;
+              // Con menús vendidos, "Recaudado" pasa a mostrar el neto del SAB y
+              // el menú se declara aparte: es el número que se le paga a la sede.
+              const plata = (t.menus || 0) > 0
+                ? `SAB: ${fmtPesos(t.recaudadoSab)} · Menú sede: ${fmtPesos(t.menus)}`
+                : `Recaudado: ${fmtPesos(t.recaudado)}`;
+              return `${plata} · Capacidad: ${cap} · Ocup: ${ocup}`;
             },
           },
         },
@@ -332,18 +379,23 @@ async function cargarComparativa() {
     const data = await boFetch(`/api/admin/dashboard/comparativa-eventos?${getQueryParams()}`);
     const tbody = document.getElementById('comparativa-body');
     if (!data.eventos.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4" style="color:#666;">Sin eventos.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4" style="color:#666;">Sin eventos.</td></tr>';
       return;
     }
     tbody.innerHTML = data.eventos.map((e) => {
       const externo = e.esExterno ? ' <span title="Evento externo" style="color:#888;">(ext)</span>' : '';
+      // La columna de plata es el NETO del SAB; el menú de la sede va en su propia
+      // columna. Antes de esto, "Recaudado" sumaba las dos cosas en un solo número.
+      const recaudadoSab = e.recaudadoSab ?? e.recaudado;
+      const menus = e.menus || 0;
       return `
         <tr>
           <td><a href="/backoffice/evento-compras.html?id=${e.eventoId}" style="color:#fff; text-decoration:none;">${e.nombre}${externo}</a></td>
           <td>${boFecha(e.fecha)}</td>
           <td>${e.vendidas}</td>
           <td>${e.invitaciones}</td>
-          <td>${fmtPesos(e.recaudado)}</td>
+          <td>${fmtPesos(recaudadoSab)}</td>
+          <td>${menus > 0 ? `<span style="color:#c4384b;">${fmtPesos(menus)}</span> <span style="color:#888;font-size:.8rem;">(${e.cantidadMenus})</span>` : '—'}</td>
           <td>${e.aporteExtra > 0 ? fmtPesos(e.aporteExtra) : '—'}</td>
           <td>${e.pctOcupacion !== null ? fmtPct(e.pctOcupacion) : '<span style="color:#666;">∞</span>'}</td>
         </tr>`;

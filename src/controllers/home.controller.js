@@ -20,6 +20,7 @@ async function updateHome(req, res) {
       textoEvento, youtubeUrl, totalEdiciones, totalShows, totalPersonas,
       boxLugar, boxDireccion, boxCiudad, boxEtiquetaEntrada,
       eventosVisiblesPortada, mostrarCicloMiercoles,
+      precioMenu,
     } = req.body;
     const data = {};
 
@@ -51,6 +52,15 @@ async function updateHome(req, res) {
     if (eventosVisiblesPortada !== undefined) {
       const v = parseStat(eventosVisiblesPortada);
       if (v !== null && v >= 1) data.eventosVisiblesPortada = v;
+    }
+    // Precio global del menú de la sede (Sprint 7). Se persiste tal cual venga
+    // (incluido 0, que apaga la venta de menú vía MENU_PRECIO_NO_CONFIGURADO —
+    // es la forma de desactivarlo globalmente sin tocar cada evento). Cada Compra
+    // congela su propio `menuUnitario`, así que cambiarlo acá NO reescribe las
+    // compras ya hechas ni los reportes históricos.
+    if (precioMenu !== undefined) {
+      const v = parseStat(precioMenu);
+      if (v !== null) data.precioMenu = v;
     }
     // Toggle de la sección del ciclo Amor de Miércoles. Llega como string desde
     // el FormData del backoffice ('true'/'false'); aceptamos también booleano.

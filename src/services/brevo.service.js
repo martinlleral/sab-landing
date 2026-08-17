@@ -148,6 +148,30 @@ function buildAporteBlock(compra) {
       </div>`;
 }
 
+// Bloque visible solo cuando la compra incluye menús de la sede (Sprint 7).
+// Cumple dos funciones: es el comprobante de que el menú se pagó (el QR NO lo
+// incluye — los menús no tienen entrada propia) y le dice al comprador qué hacer
+// en la puerta, porque el control de entrega es una lista impresa que tilda la
+// cocina, no el validador. Vacío si la compra no lleva menú.
+function buildMenuBlock(compra) {
+  if (!compra || !compra.cantidadMenus) return '';
+  const cant = compra.cantidadMenus;
+  const totalMenus = (compra.menuUnitario || 0) * cant;
+  const detalle = totalMenus > 0
+    ? ` — $${formatPesos(totalMenus)}${cant > 1 ? ` (${cant} × $${formatPesos(compra.menuUnitario)})` : ''}`
+    : '';
+  return `
+      <div style="background:#fdf6e3; border-radius:8px; padding:14px 16px; margin:16px 0; border-left:4px solid #c4384b;">
+        <p style="margin:0 0 6px; color:#7a3b16; font-size:14px;">
+          🍽️ <strong>Tu compra incluye ${cant} menú${cant > 1 ? 's' : ''}</strong>${detalle}
+        </p>
+        <p style="margin:0; color:#8a5a2b; font-size:13px;">
+          El menú <strong>no va en el QR</strong>: se retira en el lugar la noche del evento.
+          Acercate al mostrador y dá tu nombre y apellido — ya estás en la lista.
+        </p>
+      </div>`;
+}
+
 // Arma la línea de dirección del mail. Antes estaba hardcodeada ("Espacio Doble
 // T — Calle 23..."), por lo que al mover un evento de sede el mail seguía
 // mostrando la dirección vieja.
@@ -180,6 +204,7 @@ async function resolverDireccion(evento) {
 function buildHtml({ nombre, evento, entradas, compra, direccionLinea }) {
   const esSingular = entradas.length === 1;
   const aporteBlock = buildAporteBlock(compra);
+  const menuBlock = buildMenuBlock(compra);
   // URL pública absoluta del QR. Usamos el PNG ya persistido en disk por
   // qrService.generarQR. Así evitamos data URLs (bloqueadas por Gmail mobile
   // y WhatsApp Web) y CIDs (renderizado inconsistente entre providers).
@@ -218,6 +243,7 @@ function buildHtml({ nombre, evento, entradas, compra, direccionLinea }) {
       </div>
 
       ${aporteBlock}
+      ${menuBlock}
 
       <h3 style="color:#111;">🎟️ ${esSingular ? 'Tu Entrada' : 'Tus Entradas'}</h3>
       ${qrItems}
@@ -262,7 +288,8 @@ function inlineCidsAsDataUrls(html, attachments) {
 async function enviarConfirmacion({ email, nombre, evento, entradas, compra }) {
   const http = useBrevoHttp();
   const aporteTag = compra?.tipoEntrada === 'aporte' ? ' [aporte]' : '';
-  console.log(`📧 Enviando confirmación a ${email} (${entradas.length} entrada(s)${aporteTag}, evento: ${evento.nombre}) — transport: ${http ? 'brevo-http' : 'smtp'}`);
+  const menuTag = compra?.cantidadMenus ? ` [${compra.cantidadMenus} menú(s)]` : '';
+  console.log(`📧 Enviando confirmación a ${email} (${entradas.length} entrada(s)${aporteTag}${menuTag}, evento: ${evento.nombre}) — transport: ${http ? 'brevo-http' : 'smtp'}`);
 
   const direccionLinea = await resolverDireccion(evento);
   const html = buildHtml({ nombre, evento, entradas, compra, direccionLinea });
@@ -278,6 +305,12 @@ async function enviarConfirmacion({ email, nombre, evento, entradas, compra }) {
     '',
     `Adjuntamos tu${entradas.length === 1 ? '' : 's'} entrada${entradas.length === 1 ? '' : 's'} con código QR. Presentá el QR en la puerta del evento.`,
     `Código${entradas.length === 1 ? '' : 's'}: ${entradas.map((e) => e.codigoQR).join(', ')}`,
+    ...(compra?.cantidadMenus
+      ? [
+        '',
+        `Tu compra incluye ${compra.cantidadMenus} menú(s). No van en el QR: se retiran en el lugar la noche del evento, dando tu nombre en el mostrador.`,
+      ]
+      : []),
     '',
     'Dudas: WhatsApp +54 9 221 591-7409',
     '— Sindicato Argentino de Boleros',

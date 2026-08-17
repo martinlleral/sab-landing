@@ -924,14 +924,48 @@ Notas de implementación, por si hay que volver:
 
 - [x] Migración Prisma con los 6 campos + backfill en 0/false (los eventos existentes no ofrecen menú) — `20260817163938_sprint7_menu_casa_metro`
 - [x] `precios.service.js`: el menú suma **después** del descuento, con test de que el cupón no lo toca
-- [ ] Checkout público (`app.js`): **segundo selector de cantidad**, no un checkbox — con su subtotal y el total actualizado. Es el cambio de UI más visible del ítem
+- [x] Checkout público (`app.js`): **segundo selector de cantidad**, no un checkbox — con su subtotal y el total actualizado. Es el cambio de UI más visible del ítem
 - [x] Validaciones (confirmadas por el operador el 17/8, son reglas duras): mínimo 1 entrada · `cantidadMenus <= cantidadEntradas` · no vender menú si `menuHabilitado` es false
-- [ ] Backoffice `home-cms.html`: campo de precio global · `evento-detalle.html`: toggle por evento
-- [ ] Mail de confirmación (`brevo.service.js`): "incluye N menús"
-- [ ] Reportes y dashboard: el menú como línea separada, igual que el aporte extra — **es el "diferenciado" que el operador pidió explícitamente**
+- [x] Backoffice `home-cms.html`: campo de precio global · `evento-detalle.html`: toggle por evento
+- [x] Mail de confirmación (`brevo.service.js`): "incluye N menús"
+- [x] Reportes y dashboard: el menú como línea separada, igual que el aporte extra — **es el "diferenciado" que el operador pidió explícitamente**
 - [x] Tests: las 4 combinaciones (base/aporte × con/sin menú), cupón, y devolución — `tests/integration/menu-checkout.test.js`, 26 checks
+- [x] Tests de la capa visible: los 6 endpoints de recaudación restan el menú, el precio congelado no se mueve al cambiar el global, y las dos whitelists persisten — `tests/integration/menu-reportes.test.js`, 55 checks
 
-> **Backend cerrado (S1a, 17/8).** Falta solo la capa visible (S1b). Lo hecho:
+> ### ✅ 43a COMPLETO (S1a backend + S1b UI, 17/8)
+>
+> **La capa visible (S1b, 17/8).** Checkout, backoffice, mail y reportes:
+> - **Checkout:** segundo selector de cantidad `0..cantidadEntradas`, así la regla
+>   "menús ≤ entradas" no se puede romper desde la UI (el backend igual la valida). El breakdown
+>   pasó a 3 líneas — Entradas / Descuento / Menú — con una nota que aparece **solo** cuando hay
+>   cupón y menú a la vez: sin ella, alguien con cupón cree que le cobraron mal.
+> - **Backoffice:** card "Menú de la sede" en `home-cms.html` (el precio global, con aviso de que
+>   en 0 no se vende en ningún evento) y toggle por evento en `evento-detalle.html`, que muestra el
+>   precio vigente para no activarlo a ciegas. Las **dos whitelists** que heredaba S1b quedaron
+>   cerradas, y también la de `adminCrear` — el form de "Nuevo evento" trae el mismo toggle, así que
+>   sin eso marcarlo al crear el evento se perdía en silencio.
+> - **Mail:** bloque con la cantidad, el monto y **qué hacer en la puerta** — el menú no va en el QR
+>   y se retira dando el nombre en el mostrador, que es el control de entrega vigente (44).
+> - **Reportes:** ver el hallazgo de abajo. Eran **6** lugares, no 4.
+>
+> **🔺 El hallazgo de S1a, cerrado en S1b: la plata de la sede se leía como recaudación propia.**
+> `Compra.totalPagado` incluye el menú (tiene que incluirlo: es lo que el comprador paga y lo que el
+> webhook cruza contra MP), y **toda** la recaudación del backoffice se calculaba sumando
+> `totalPagado`. S1a listó 4 lugares; contra el código eran **6** — faltaban
+> `dashboard.distribucionTandas` y `dashboard.comparativaEventos`, y el que S1a señaló como "el que
+> se comparte por token" no era ese: **el reporte público reusa los controllers del dashboard**
+> (`reporte.routes.js`), así que los que viajan al link de la coop son `resumen`, `ventasTimeline` y
+> `distribucionTandas`. Los 6 ahora devuelven `menus` y el neto (`recaudadoSab`), y las 5 vistas lo
+> muestran: el KPI grande sigue siendo el cobrado por MP —es el que concilia— pero su etiqueta
+> declara el neto, y al lado va "Menú de la sede" en carmín. La plata del menú se lee de
+> `Compra.menuUnitario` (congelado), **nunca** del precio global: hay un test que se pone en rojo si
+> alguien lo cambia por el global.
+>
+> **Verificado en el navegador, no solo con tests:** 35 checks sobre el checkout real (incluido
+> cupón 25 % + 2 menús → $52.500, con el menú entero sin descontar) y 21 sobre las 5 vistas del
+> backoffice y el reporte por token.
+>
+> **Backend (S1a, 17/8).** Lo hecho:
 > - Migración **escrita a mano** como 6 `ALTER TABLE ADD COLUMN`. `prisma migrate dev` generaba un
 >   `RedefineTables` (create + copy + `DROP TABLE` + rename) de `Home`, `Evento` y **`Compra`**, y esa
 >   tabla nunca fue reescrita en producción (la migración del 5/7 sumó los campos de devolución con
@@ -945,11 +979,11 @@ Notas de implementación, por si hay que volver:
 >   `Compra.totalPagado` — es lo que el webhook cruza contra `transaction_amount`.
 > - `revertirCompraAprobada` ahora reporta `menus_devueltos`.
 >
-> **Deuda que hereda S1b (2 líneas, backend):** los dos endpoints de edición tienen whitelist
+> ~~**Deuda que hereda S1b (2 líneas, backend):** los dos endpoints de edición tienen whitelist
 > explícita de campos, así que los toggles no se van a guardar hasta agregarlos —
-> `home.controller.js:19` (`precioMenu`) y `eventos.controller.js:226` (`menuHabilitado`). Lo que **no**
-> hace falta tocar: los endpoints de lectura devuelven la fila entera, así que el front ya recibe
-> `precioMenu` y `menuHabilitado` sin cambios.
+> `home.controller.js:19` (`precioMenu`) y `eventos.controller.js:226` (`menuHabilitado`).~~
+> ✅ **Cerrada en S1b**, más una tercera que no estaba en la lista: `adminCrear`. Lo que **no** hizo
+> falta tocar, como decía S1a: los endpoints de lectura devuelven la fila entera.
 
 > **Corrección del kickoff (17/8) a la ficha:** la reversión de compras **no vive en el controller**. Vive en `pagos.service.js` y son **3 puntos de toque**, no 1 — `procesarPagoAprobado` (incrementa), `procesarPagoCancelado` (el autocancel de pendientes, 72 h) y `revertirCompraAprobada` (la devolución del backoffice, US-A). Tocar solo uno deja el estado desangrándose en silencio.
 

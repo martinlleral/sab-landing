@@ -110,8 +110,32 @@ async function resumen(req, res) {
     `;
     const aporteExtra = Number(aporteExtraRow[0]?.aporteExtra || 0);
 
+    // MENÚ DE LA SEDE (Sprint 7) — esta plata NO es del SAB.
+    // `Compra.totalPagado` incluye el menú (tiene que incluirlo: es lo que el
+    // comprador paga y lo que el webhook cruza contra MP), así que TODA la
+    // recaudación calculada como SUM(totalPagado) viene inflada con plata que la
+    // coop le debe pagar a la sede. Se lee de la compra (cantidadMenus ×
+    // menuUnitario) y NO del precio global, porque menuUnitario está congelado
+    // por compra: usar el global reescribiría la historia al cambiar el precio.
+    // Mismos filtros que `vendidasAgg` para que la resta cierre exacta.
+    const menusRow = await prisma.$queryRaw`
+      SELECT COALESCE(SUM(cantidadMenus * menuUnitario), 0) AS totalMenus,
+             COALESCE(SUM(cantidadMenus), 0) AS cantidadMenus
+      FROM Compra
+      WHERE mpEstado = 'approved'
+        AND totalPagado > 0
+        ${eventoId ? Prisma.sql`AND eventoId = ${eventoId}` : Prisma.empty}
+        ${desde ? Prisma.sql`AND createdAt >= ${desde}` : Prisma.empty}
+        ${hasta ? Prisma.sql`AND createdAt <= ${hasta}` : Prisma.empty}
+    `;
+    const totalMenus = Number(menusRow[0]?.totalMenus || 0);
+    const cantidadMenus = Number(menusRow[0]?.cantidadMenus || 0);
+
     const recaudadoTotal = vendidasAgg._sum.totalPagado || 0;
-    const recaudadoBase = recaudadoTotal - aporteExtra;
+    // `base` = precio base puro de las entradas: sin el aporte voluntario y sin
+    // el menú de la sede. `sab` = lo que efectivamente le queda a la cooperativa.
+    const recaudadoBase = recaudadoTotal - aporteExtra - totalMenus;
+    const recaudadoSab = recaudadoTotal - totalMenus;
 
     // Asistencia: entradas validadas / entradas con compra approved (vendidas + invitaciones).
     const asistenciaRow = await prisma.$queryRaw`
@@ -147,9 +171,18 @@ async function resumen(req, res) {
         validadas,
       },
       recaudado: {
+        // `total` es todo lo que pasó por MP — incluye el menú de la sede. Se deja
+        // así a propósito (es lo que concilia contra MP), y las etiquetas de la UI
+        // lo dicen. Lo que le queda al SAB es `sab`.
         total: recaudadoTotal,
         base: recaudadoBase,
         aporteExtra,
+        menus: totalMenus,
+        sab: recaudadoSab,
+      },
+      menus: {
+        cantidad: cantidadMenus,
+        total: totalMenus,
       },
       asistenciaPct,
       filtros: {
@@ -183,7 +216,8 @@ async function ventasTimeline(req, res) {
         ${formatSql} AS periodo,
         COUNT(*) AS compras,
         SUM(c.cantidadEntradas) AS entradas,
-        SUM(c.totalPagado) AS recaudado
+        SUM(c.totalPagado) AS recaudado,
+        SUM(c.cantidadMenus * c.menuUnitario) AS menus
       FROM Compra c
       WHERE c.mpEstado = 'approved'
         AND c.totalPagado > 0
@@ -194,16 +228,27 @@ async function ventasTimeline(req, res) {
       ORDER BY periodo ASC
     `;
 
+    // `recaudado` es el cobrado por MP (incluye el menú de la sede) y
+    // `recaudadoSab` le resta esa plata. El gráfico grafica el segundo: es la curva
+    // que el SAB necesita leer. Los dos acumulados van, para no obligar a nadie a
+    // sumar a mano si quiere la otra vista.
     let acum = 0;
+    let acumSab = 0;
     const data = rows.map((r) => {
       const recaudado = Number(r.recaudado || 0);
+      const menus = Number(r.menus || 0);
+      const recaudadoSab = recaudado - menus;
       acum += recaudado;
+      acumSab += recaudadoSab;
       return {
         periodo: r.periodo,
         compras: Number(r.compras || 0),
         entradas: Number(r.entradas || 0),
         recaudado,
         recaudadoAcumulado: acum,
+        menus,
+        recaudadoSab,
+        recaudadoSabAcumulado: acumSab,
       };
     });
 
@@ -250,6 +295,23 @@ async function distribucionTandas(req, res) {
     });
     const invsByTanda = new Map(invs.map((i) => [i.tandaId, i]));
 
+    // Menú de la sede por tanda (Sprint 7). Va en $queryRaw porque el groupBy de
+    // Prisma no puede sumar un producto de dos columnas. Esta vista se comparte
+    // por token con la cooperativa: sin la resta, el recaudado por tanda muestra
+    // como propia la plata que hay que pagarle a la sede.
+    const menusRows = await prisma.$queryRaw`
+      SELECT tandaId,
+             COALESCE(SUM(cantidadMenus * menuUnitario), 0) AS totalMenus,
+             COALESCE(SUM(cantidadMenus), 0) AS cantidadMenus
+      FROM Compra
+      WHERE eventoId = ${eventoId} AND mpEstado = 'approved'
+      GROUP BY tandaId
+    `;
+    const menusByTanda = new Map(menusRows.map((r) => [Number(r.tandaId), {
+      total: Number(r.totalMenus || 0),
+      cantidad: Number(r.cantidadMenus || 0),
+    }]));
+
     const data = evento.tandas.map((t) => {
       const total = aggsByTanda.get(t.id);
       const inv = invsByTanda.get(t.id);
@@ -257,6 +319,7 @@ async function distribucionTandas(req, res) {
       const entradasInv = inv?._sum.cantidadEntradas || 0;
       const entradasVendidas = entradasTotalAprobadas - entradasInv;
       const recaudado = total?._sum.totalPagado || 0;
+      const menus = menusByTanda.get(t.id) || { total: 0, cantidad: 0 };
       const pctOcupacion = t.capacidad
         ? Math.round((t.cantidadVendida / t.capacidad) * 1000) / 10
         : null;
@@ -270,6 +333,9 @@ async function distribucionTandas(req, res) {
         vendidas: entradasVendidas,
         invitaciones: entradasInv,
         recaudado,
+        recaudadoSab: recaudado - menus.total,
+        menus: menus.total,
+        cantidadMenus: menus.cantidad,
         pctOcupacion,
         porcentajeAporte: t.porcentajeAporte,
       };
@@ -337,6 +403,25 @@ async function comparativaEventos(req, res) {
     `;
     const aporteByEvento = new Map(aporteRows.map((r) => [Number(r.eventoId), Number(r.aporteExtra)]));
 
+    // Menú de la sede por evento (Sprint 7): misma forma que el aporte extra, y
+    // por el mismo motivo — es una porción del `recaudado` que no le corresponde
+    // al SAB. Mismos filtros que `vendidas` para que la resta cierre.
+    const menusRows = await prisma.$queryRaw`
+      SELECT eventoId,
+             COALESCE(SUM(cantidadMenus * menuUnitario), 0) AS totalMenus,
+             COALESCE(SUM(cantidadMenus), 0) AS cantidadMenus
+      FROM Compra
+      WHERE mpEstado = 'approved' AND totalPagado > 0
+        AND eventoId IN (${Prisma.join(eventoIds)})
+        ${desde ? Prisma.sql`AND createdAt >= ${desde}` : Prisma.empty}
+        ${hasta ? Prisma.sql`AND createdAt <= ${hasta}` : Prisma.empty}
+      GROUP BY eventoId
+    `;
+    const menusByEvento = new Map(menusRows.map((r) => [Number(r.eventoId), {
+      total: Number(r.totalMenus || 0),
+      cantidad: Number(r.cantidadMenus || 0),
+    }]));
+
     const data = eventos.map((ev) => {
       const v = vendByEvento.get(ev.id);
       const i = invByEvento.get(ev.id);
@@ -350,6 +435,8 @@ async function comparativaEventos(req, res) {
       const pctOcupacion = capacidadInf || capacidad === 0
         ? null
         : Math.round((totalEntradas / capacidad) * 1000) / 10;
+      const recaudado = v?._sum.totalPagado || 0;
+      const menus = menusByEvento.get(ev.id) || { total: 0, cantidad: 0 };
       return {
         eventoId: ev.id,
         nombre: ev.nombre,
@@ -360,7 +447,10 @@ async function comparativaEventos(req, res) {
         invitaciones: i?._sum.cantidadEntradas || 0,
         comprasVendidas: v?._count._all || 0,
         comprasInvitaciones: i?._count._all || 0,
-        recaudado: v?._sum.totalPagado || 0,
+        recaudado,
+        recaudadoSab: recaudado - menus.total,
+        menus: menus.total,
+        cantidadMenus: menus.cantidad,
         aporteExtra: aporteByEvento.get(ev.id) || 0,
         capacidad: capacidadInf ? null : capacidad,
         pctOcupacion,

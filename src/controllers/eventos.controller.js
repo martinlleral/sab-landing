@@ -165,6 +165,7 @@ async function adminCrear(req, res) {
       nombre, descripcion, fecha, hora, invitado,
       precioEntrada, cantidadDisponible,
       esDestacado, estaPublicado, estaAgotado, esExterno, linkExterno,
+      menuHabilitado,
     } = req.body;
 
     if (!nombre || !descripcion || !fecha || !hora || !precioEntrada || !cantidadDisponible) {
@@ -190,6 +191,10 @@ async function adminCrear(req, res) {
       estaAgotado: estaAgotado === 'true' || estaAgotado === true,
       esExterno: esExterno === 'true' || esExterno === true,
       linkExterno: linkExterno || null,
+      // Menú de la sede: el form de "Nuevo evento" trae el mismo toggle que el de
+      // edición, así que se lee también acá. Sin esto, marcarlo al crear el evento
+      // se perdía en silencio y había que volver a entrar a editarlo.
+      menuHabilitado: menuHabilitado === 'true' || menuHabilitado === true,
       tandas: {
         create: [{
           nombre: 'General',
@@ -226,6 +231,7 @@ async function adminEditar(req, res) {
     const {
       nombre, descripcion, fecha, hora, invitado,
       esDestacado, estaPublicado, estaAgotado, esExterno, linkExterno,
+      menuHabilitado,
     } = req.body;
 
     const data = {};
@@ -239,6 +245,12 @@ async function adminEditar(req, res) {
     if (estaAgotado !== undefined) data.estaAgotado = estaAgotado === 'true' || estaAgotado === true;
     if (esExterno !== undefined) data.esExterno = esExterno === 'true' || esExterno === true;
     if (linkExterno !== undefined) data.linkExterno = linkExterno || null;
+    // Menú de la sede (Sprint 7): toggle por evento. Llega como string desde el
+    // FormData del backoffice. El precio es global (Home.precioMenu); acá solo se
+    // decide si ESTE evento lo ofrece. Apagarlo no toca las compras ya hechas.
+    if (menuHabilitado !== undefined) {
+      data.menuHabilitado = menuHabilitado === 'true' || menuHabilitado === true;
+    }
     if (req.file) data.flyerUrl = `/assets/img/uploads/eventos/${req.file.filename}`;
     for (const f of BOX_OVERRIDE_FIELDS) {
       if (req.body[f] !== undefined) data[f] = String(req.body[f]).trim();
@@ -388,6 +400,28 @@ async function adminEventoStats(req, res) {
     const entradasPendientes = pendientesAgg._sum.cantidadEntradas || 0;
     const recaudado = vendidasAgg._sum.totalPagado || 0;
 
+    // Menú de la sede (Sprint 7). `totalPagado` incluye el menú, así que
+    // `recaudado` viene inflado con plata que la coop le debe pagar a la sede. Se
+    // lee de la compra (menuUnitario está congelado por compra) con los mismos
+    // filtros que `vendidasAgg`, para que `recaudadoSab` cierre exacto.
+    const menusRow = await prisma.$queryRaw`
+      SELECT COALESCE(SUM(cantidadMenus * menuUnitario), 0) AS totalMenus,
+             COALESCE(SUM(cantidadMenus), 0) AS cantidadMenus
+      FROM Compra
+      WHERE eventoId = ${eventoId} AND mpEstado = 'approved' AND totalPagado > 0
+    `;
+    const menusTotal = Number(menusRow[0]?.totalMenus || 0);
+    const menusCantidad = Number(menusRow[0]?.cantidadMenus || 0);
+
+    // Menús pendientes de pago: no están cocinados ni cobrados, pero la cocina
+    // necesita saber que existen (el reporte de las 18 sale con lo aprobado).
+    const menusPendientesRow = await prisma.$queryRaw`
+      SELECT COALESCE(SUM(cantidadMenus), 0) AS cantidadMenus
+      FROM Compra
+      WHERE eventoId = ${eventoId} AND mpEstado = 'pending'
+    `;
+    const menusPendientes = Number(menusPendientesRow[0]?.cantidadMenus || 0);
+
     // Capacidad del evento: suma de capacidades de todas las tandas. Si alguna
     // tanda tiene capacidad null (sin límite), el total del evento es null (∞).
     const tandas = evento.tandas;
@@ -427,7 +461,15 @@ async function adminEventoStats(req, res) {
         pendientes: entradasPendientes,
         aprobadas: entradasVendidas + entradasInvitaciones,
       },
+      // `recaudado` es todo lo cobrado por MP (incluye el menú de la sede, que es
+      // lo que concilia contra MP). `recaudadoSab` es lo que le queda a la coop.
       recaudado,
+      recaudadoSab: recaudado - menusTotal,
+      menus: {
+        cantidad: menusCantidad,
+        total: menusTotal,
+        pendientes: menusPendientes,
+      },
       capacidad: {
         evento: capacidadInfinita ? null : capacidadEvento,
         vendidaEvento,
@@ -461,13 +503,27 @@ async function adminStatsGlobal(req, res) {
       }),
     ]);
 
+    // Menú de la sede (Sprint 7): la misma resta que en el resto de los reportes.
+    // Sin esto, el KPI grande del dashboard suma como propia la plata de la sede.
+    const menusRow = await prisma.$queryRaw`
+      SELECT COALESCE(SUM(cantidadMenus * menuUnitario), 0) AS totalMenus,
+             COALESCE(SUM(cantidadMenus), 0) AS cantidadMenus
+      FROM Compra
+      WHERE mpEstado = 'approved' AND totalPagado > 0
+    `;
+    const menusTotal = Number(menusRow[0]?.totalMenus || 0);
+    const menusCantidad = Number(menusRow[0]?.cantidadMenus || 0);
+    const recaudado = vendidasAgg._sum.totalPagado || 0;
+
     return res.json({
       totalEventos,
       totalCompras,
       comprasAprobadas: vendidasAgg._count._all + invitacionesAgg._count._all,
       entradasVendidas: vendidasAgg._sum.cantidadEntradas || 0,
       entradasInvitaciones: invitacionesAgg._sum.cantidadEntradas || 0,
-      recaudado: vendidasAgg._sum.totalPagado || 0,
+      recaudado,
+      recaudadoSab: recaudado - menusTotal,
+      menus: { cantidad: menusCantidad, total: menusTotal },
     });
   } catch (err) {
     console.error('Error en adminStatsGlobal:', err);

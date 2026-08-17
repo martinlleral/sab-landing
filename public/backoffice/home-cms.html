@@ -153,6 +153,34 @@
               </div>
             </div>
 
+            <!-- Menú de la sede (Sprint 7): precio global, se activa por evento -->
+            <div class="col-12">
+              <div class="bo-card">
+                <div class="bo-card-header">
+                  <h5 class="bo-card-title"><i class="bi bi-cup-hot me-2"></i>Menú de la sede</h5>
+                </div>
+                <div class="bo-card-body">
+                  <p class="small mb-3" style="color:#666;">
+                    Precio del menú que se vende <strong>junto con la entrada</strong>. Es un valor
+                    <strong>global</strong>: se carga una vez acá y después se <strong>activa evento por evento</strong>
+                    desde "Editar evento". Cada compra <strong>congela el precio del momento</strong>, así que
+                    cambiarlo acá no modifica las compras ya hechas ni los reportes.
+                  </p>
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="precioMenu">Precio del menú (ARS)</label>
+                      <input type="number" min="0" step="500" class="bo-form-control" id="precioMenu" name="precioMenu" placeholder="15000">
+                    </div>
+                  </div>
+                  <p class="small mb-0 mt-3" style="color:#e0a800;">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    En <strong>0</strong> el menú no se vende en ningún evento, aunque el toggle esté activado.
+                    Es la forma de apagarlo de golpe sin entrar a cada fecha.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <!-- Sección "El Evento" (ciclo Amor de Miércoles): mostrar / ocultar -->
             <div class="col-12">
               <div class="bo-card">
@@ -289,6 +317,7 @@
         document.getElementById('totalShows').value = data.totalShows ?? 0;
         document.getElementById('totalPersonas').value = data.totalPersonas ?? 0;
         document.getElementById('eventosVisiblesPortada').value = data.eventosVisiblesPortada ?? 3;
+        document.getElementById('precioMenu').value = data.precioMenu ?? 0;
         // Default true: si el campo no viniera (bases viejas), lo tratamos como visible.
         document.getElementById('mostrarCicloMiercoles').checked = data.mostrarCicloMiercoles !== false;
         document.getElementById('boxLugar').value = data.boxLugar ?? '';
