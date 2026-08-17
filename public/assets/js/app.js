@@ -454,8 +454,9 @@ function renderUbicacion(evento) {
     mapa.title = `Ubicación ${sede.lugar}`;
   }
 
-  // El IG @espaciodoblet es propio de la sede default (Doble T). Si el evento
-  // tiene sede propia (override), no tenemos su IG → se oculta el link.
+  // El IG @casametrolp es propio de la sede default (Casa Metro) y está
+  // hardcodeado en el HTML: todavía no es un campo del CMS. Si el evento tiene
+  // sede propia (override), no tenemos su IG → se oculta el link.
   if (elIg) elIg.style.display = sede.esOverride ? 'none' : '';
 }
 
