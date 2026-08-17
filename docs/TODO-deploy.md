@@ -883,6 +883,28 @@ Notas de implementación, por si hay que volver:
 
 ---
 
+## 🆕 Hallazgo del 17/8 — landing (detectado por la coordinadora usando el sitio)
+
+Los números 42-45 quedan reservados para los ítems del Sprint 7 (ficha `docs/backlog-menu-export-20260815.md`), así que este arranca en 46.
+
+### 46. 🔧 El Instagram de la sede no es un campo del CMS — **defecto de diseño, no de código**
+
+**Archivos:** `public/index.html` · `public/assets/js/app.js` · `prisma/schema.prisma` · **Severidad:** media (mandaba tráfico del SAB al Instagram de un espacio que ya no es la sede)
+
+**Síntoma reportado.** Después de la mudanza a Casa Metro, el bloque "Cómo llegar" mostraba la sede nueva pero linkeaba `@espaciodoblet`.
+
+**Causa raíz.** La sede está a medias en el CMS. `boxLugar`, `boxDireccion` y `boxCiudad` son campos editables — la coordinadora los actualizó bien y el sitio los tomó — pero **el Instagram nunca lo fue**: está escrito a mano en el HTML. `renderUbicacion()` solo sabe *ocultar* ese link cuando un evento trae sede propia (`esOverride`), nunca cambiarlo. Es decir: el sistema modela "esta sede no tiene IG conocido", pero no modela "el IG de la sede cambió". Cambiar de sede sin tocar código deja el link apuntando a la anterior.
+
+- [x] **17/8** — Link y texto a `@casametrolp` (handle oficial, verificado en `casametro.com.ar` y en la ficha del espacio). Deployado y verificado en producción
+- [x] **17/8** — Actualizado el HTML estático de la sede (iframe del mapa, `title`, nombre y dirección) y la tarjeta "Dónde" del hero, que seguían en Calle 23. El JS los pisa al cargar, pero es lo que ve un crawler que no ejecuta JS y lo que se muestra el primer frame
+- [x] **17/8** — Placeholders del CMS (`home-cms.html`), que le ofrecían a la coordinadora la sede vieja como ejemplo
+- [ ] **El fondo:** `boxIg` en `Home` + `boxIgOverride` en `Evento`, para que la sede se mude entera desde el backoffice y sin deploy. Toca schema + migración Prisma, `home.controller.js`, la whitelist de `eventos.controller.js`, los dos formularios del backoffice y `renderUbicacion()`. Con `boxIgOverride` además se gana algo que hoy no existe: un evento en sede ajena puede **mostrar el IG de esa sede** en vez de esconder el link
+- [ ] Al hacerlo, revisar de paso los defaults que todavía nombran la sede vieja como fallback de CMS vacío (`app.js` 432-433 y 720, `brevo.service.js` 171, y los `@default` del schema). Hoy no se ven porque el CMS tiene valor, pero son la misma clase de resto
+
+> **El patrón, para la próxima:** cuando un dato se vuelve editable desde el CMS, hay que mudar **todo el bloque**, no los campos que se piden. El que queda hardcodeado no falla el día del cambio: falla callado, semanas después, cuando ya nadie se acuerda de que era código.
+
+---
+
 ### 🟢 P3 — Sprint 2 (marketing orgánico post-campaña)
 
 #### 36. Google Knowledge Panel (recuadro lateral con foto + próximo evento)
