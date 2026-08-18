@@ -94,9 +94,15 @@ async function crearPreferencia(req, res) {
       : parseInt(cantidadMenus);
     let precioMenu = 0;
     let menusRestantes = null;
+    // Corte horario (S3): la hora sale de la MISMA lectura de Home que el precio.
+    // null = no se pudo leer la config → sin corte; el precio en 0 ya frena la
+    // venta por MENU_PRECIO_NO_CONFIGURADO, así que no hace falta una segunda
+    // guarda acá.
+    let menuCorteHora = null;
     if (Number.isInteger(menusPedidos) && menusPedidos > 0) {
-      const home = await prisma.home.findFirst({ select: { precioMenu: true } });
+      const home = await prisma.home.findFirst({ select: { precioMenu: true, menuCorteHora: true } });
       precioMenu = home?.precioMenu ?? 0;
+      menuCorteHora = home?.menuCorteHora ?? null;
 
       // Cupo de menús (S2). Pre-chequeo de cortesía: da un mensaje concreto
       // ("quedan 3 y pediste 5") antes de crear nada. Puede quedar viejo entre
@@ -121,6 +127,11 @@ async function crearPreferencia(req, res) {
         menuHabilitado: evento.menuHabilitado,
         precioMenu,
         menusRestantes,
+        // DOBLE CAPA. El front oculta el select pasado el corte, pero alguien
+        // pudo abrir la página a las 17:50 y pagar a las 18:05: la validación
+        // que vale es esta, con el reloj del servidor.
+        fechaEvento: evento.fecha,
+        menuCorteHora,
       });
     } catch (err) {
       if (err.code) {
@@ -128,6 +139,7 @@ async function crearPreferencia(req, res) {
         // El cupo viaja en el body para que el checkout pueda recortar el select
         // al número real sin pedir el evento de nuevo.
         if (err.menusRestantes !== undefined) payload.menusRestantes = err.menusRestantes;
+        if (err.menuCorteHora !== undefined) payload.menuCorteHora = err.menuCorteHora;
         return res.status(400).json(payload);
       }
       throw err;

@@ -171,6 +171,21 @@
                       <label class="bo-form-label" for="precioMenu">Precio del menú (ARS)</label>
                       <input type="number" min="0" step="500" class="bo-form-control" id="precioMenu" name="precioMenu" placeholder="15000">
                     </div>
+                    <!-- Corte horario (Sprint 7): la cocina cierra la cuenta a esta
+                         hora del día del evento. Editable para no tocar código si
+                         la sede cambia el horario. -->
+                    <!-- col-8 no por el input (es chico) sino por su ayuda: en una
+                         columna angosta la explicación se parte en seis renglones. -->
+                    <div class="col-md-8">
+                      <label class="bo-form-label" for="menuCorteHora">Se vende hasta las…</label>
+                      <input type="time" class="bo-form-control" id="menuCorteHora" name="menuCorteHora" step="60" placeholder="18:00">
+                      <!-- El widget nativo muestra la hora en el formato del
+                           navegador de quien mira (en inglés sale "6:00 p.m."), así
+                           que el valor REAL se repite abajo en 24 h. Sin esto, la
+                           ayuda habla un idioma y el campo muestra otro. -->
+                      <div class="form-text" id="menuCorteEco" style="color:#666;"></div>
+                      <div class="form-text" style="color:#666;">Del <strong>día del evento</strong>. Después de esa hora ya no se puede sumar menú (las entradas sí siguen a la venta). Para vender hasta el final del día, cargá <strong>23:59</strong>: el horario no puede quedar vacío.</div>
+                    </div>
                   </div>
                   <p class="small mb-0 mt-3" style="color:#e0a800;">
                     <i class="bi bi-exclamation-triangle me-1"></i>
@@ -318,6 +333,11 @@
         document.getElementById('totalPersonas').value = data.totalPersonas ?? 0;
         document.getElementById('eventosVisiblesPortada').value = data.eventosVisiblesPortada ?? 3;
         document.getElementById('precioMenu').value = data.precioMenu ?? 0;
+        // Default "18:00": bases viejas (o una fila creada antes del Sprint 7) no
+        // traen el campo, y mostrar el input vacío haría creer que no hay corte.
+        document.getElementById('menuCorteHora').value = data.menuCorteHora || '18:00';
+        ecoCorteMenu();
+        document.getElementById('menuCorteHora').addEventListener('input', ecoCorteMenu);
         // Default true: si el campo no viniera (bases viejas), lo tratamos como visible.
         document.getElementById('mostrarCicloMiercoles').checked = data.mostrarCicloMiercoles !== false;
         document.getElementById('boxLugar').value = data.boxLugar ?? '';
@@ -336,6 +356,17 @@
       } catch (err) {
         boAlert('Error al cargar datos: ' + err.message);
       }
+    }
+
+    // Repite el horario elegido en 24 h y hora de Argentina, que es como lo aplica
+    // el sistema. El input nativo lo muestra en el formato local del navegador.
+    function ecoCorteMenu() {
+      const v = document.getElementById('menuCorteHora').value;
+      const eco = document.getElementById('menuCorteEco');
+      if (!eco) return;
+      eco.innerHTML = /^([01]\d|2[0-3]):([0-5]\d)$/.test(v)
+        ? `Queda en <strong>${v}</strong> (hora de Argentina, formato 24 h).`
+        : '<span style="color:#c1121f;">Sin horario válido: se guarda el que ya estaba.</span>';
     }
 
     function setPreviewImg(n, url) {

@@ -253,7 +253,7 @@ async function main() {
   try {
     await cleanup();
     const f = await setupFixture();
-    homeOriginal = await prisma.home.findFirst({ select: { id: true, precioMenu: true } });
+    homeOriginal = await prisma.home.findFirst({ select: { id: true, precioMenu: true, menuCorteHora: true } });
 
     // ============================================
     // BLOQUE 1 — dashboard.resumen: la resta principal
@@ -419,6 +419,33 @@ async function main() {
       check('updateHome: un precioMenu inválido no pisa el valor guardado',
         filaMal.precioMenu === 0, filaMal.precioMenu);
 
+      // Hora de corte del menú (S3). Misma whitelist, mismos tres casos que
+      // `parseTopeMenus`, con una diferencia declarada: acá el vacío NO borra
+      // nada (el campo es String NOT NULL; para vender hasta el final del día se
+      // carga 23:59). Sin estos checks el campo "guarda" sin guardar y el corte
+      // se queda en el default para siempre.
+      await call(home.updateHome, { body: { menuCorteHora: '20:30' } });
+      const filaHora = await prisma.home.findFirst({ select: { menuCorteHora: true } });
+      check('updateHome: menuCorteHora PERSISTIDO (whitelist del destructuring)',
+        filaHora.menuCorteHora === '20:30', filaHora.menuCorteHora);
+
+      // "25:00" es el caso caro: una hora que no existe deja el checkout del menú
+      // caído con MENU_CORTE_INVALIDO hasta que alguien lo note.
+      await call(home.updateHome, { body: { menuCorteHora: '25:00' } });
+      const filaMala = await prisma.home.findFirst({ select: { menuCorteHora: true } });
+      check('updateHome: una hora imposible ("25:00") no pisa la guardada',
+        filaMala.menuCorteHora === '20:30', filaMala.menuCorteHora);
+
+      await call(home.updateHome, { body: { menuCorteHora: '' } });
+      const filaVacia = await prisma.home.findFirst({ select: { menuCorteHora: true } });
+      check('updateHome: vaciar el campo NO borra el corte (no hay "sin corte": es 23:59)',
+        filaVacia.menuCorteHora === '20:30', filaVacia.menuCorteHora);
+
+      await call(home.updateHome, { body: { textoEvento: 'otra cosa' } });
+      const filaIntacta = await prisma.home.findFirst({ select: { menuCorteHora: true } });
+      check('updateHome: editar otro campo no toca el corte',
+        filaIntacta.menuCorteHora === '20:30', filaIntacta.menuCorteHora);
+
       // 🔴 El precio global cambió DOS veces y los reportes no se movieron: es lo
       // que garantiza menuUnitario congelado. Sin eso, subir el precio reescribiría
       // la contabilidad de las compras viejas.
@@ -488,7 +515,7 @@ async function main() {
     if (homeOriginal) {
       await prisma.home.update({
         where: { id: homeOriginal.id },
-        data: { precioMenu: homeOriginal.precioMenu },
+        data: { precioMenu: homeOriginal.precioMenu, menuCorteHora: homeOriginal.menuCorteHora },
       });
     }
     await cleanup();

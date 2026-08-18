@@ -4,7 +4,7 @@ const qrService = require('../services/qr.service');
 const brevoService = require('../services/brevo.service');
 const { getTandaVigente } = require('../services/tandas.service');
 const {
-  ESTADOS_MENU_OCUPADO, contarMenusOcupados, calcularMenusRestantes,
+  ESTADOS_MENU_OCUPADO, contarMenusOcupados, calcularMenusRestantes, menuVentaCerrada,
 } = require('../services/precios.service');
 
 // Adjunta al evento la tandaVigente calculada + precio/stock derivados para el
@@ -17,38 +17,71 @@ function adjuntarTandaVigente(evento) {
 }
 
 /**
- * Adjunta `menusRestantes` a una lista de eventos (Sprint 7, S2). null = sin
- * tope, que NO es lo mismo que 0 (agotado); el checkout distingue los dos casos.
+ * Adjunta a cada evento el estado de su menú para el checkout público:
  *
- * Se resuelve en UNA query para toda la lista, no una por evento: la portada
- * puede traer hasta 50 eventos y un aggregate por cada uno serían 50 viajes a la
- * base en el endpoint más caliente del sitio.
+ *   `menusRestantes` (S2) — cuántos menús quedan. null = SIN TOPE, que no es lo
+ *      mismo que 0 (agotado); el checkout distingue los dos casos.
+ *   `menuCerrado` (S3) — si ya pasó el corte horario del día del evento.
+ *
+ * Los dos se resuelven acá y no en el front a propósito: con el RELOJ DEL
+ * SERVIDOR y con una sola definición de la regla. Que el navegador tenga la hora
+ * mal es común; que la tenga mal el servidor que además valida la compra, no.
+ * Igual es información que puede envejecer con el modal abierto — la garantía la
+ * da el backend al crear la preferencia (`MENU_CORTE_PASADO`), esto es lo que
+ * evita que la persona llegue hasta el botón de pagar.
+ *
+ * El cupo se resuelve en UNA query para toda la lista, no una por evento: la
+ * portada puede traer hasta 50 eventos y un aggregate por cada uno serían 50
+ * viajes a la base en el endpoint más caliente del sitio.
  *
  * El conteo usa `ESTADOS_MENU_OCUPADO` — la misma definición de "cupo tomado"
  * que la reserva atómica, para que el número que ve el comprador y el que aplica
  * el backend no puedan divergir.
  */
-async function adjuntarMenusRestantes(eventos) {
-  const conTope = eventos.filter((e) => e.menuHabilitado && e.topeMenus !== null);
-  if (conTope.length === 0) {
-    return eventos.map((e) => ({ ...e, menusRestantes: null }));
+async function adjuntarEstadoMenu(eventos) {
+  const conMenu = eventos.filter((e) => e.menuHabilitado);
+  if (conMenu.length === 0) {
+    return eventos.map((e) => ({ ...e, menusRestantes: null, menuCerrado: false }));
   }
 
-  const filas = await prisma.compra.groupBy({
-    by: ['eventoId'],
-    where: {
-      eventoId: { in: conTope.map((e) => e.id) },
-      mpEstado: { in: ESTADOS_MENU_OCUPADO },
-    },
-    _sum: { cantidadMenus: true },
-  });
-  const ocupados = new Map(filas.map((f) => [f.eventoId, f._sum.cantidadMenus || 0]));
+  // La hora de corte es global (Home.menuCorteHora): una lectura para toda la lista.
+  const home = await prisma.home.findFirst({ select: { menuCorteHora: true } });
+  const corteHora = home?.menuCorteHora ?? null;
+  const ahora = new Date();
+  const estaCerrado = (ev) => {
+    if (!ev.menuHabilitado) return false;
+    try {
+      return menuVentaCerrada(ev.fecha, corteHora, ahora);
+    } catch (err) {
+      // MENU_CORTE_INVALIDO: la config quedó rota (solo se llega editando la base
+      // a mano, la whitelist del CMS no deja persistir basura). Se muestra cerrado
+      // en vez de tumbar la portada entera: el checkout aplica el mismo criterio
+      // y responde 400 con el motivo, así que las dos capas dicen lo mismo.
+      console.error('[menu] menuCorteHora inválido en Home:', corteHora, err.code || err.message);
+      return true;
+    }
+  };
+
+  const conTope = conMenu.filter((e) => e.topeMenus !== null);
+  let ocupados = new Map();
+  if (conTope.length > 0) {
+    const filas = await prisma.compra.groupBy({
+      by: ['eventoId'],
+      where: {
+        eventoId: { in: conTope.map((e) => e.id) },
+        mpEstado: { in: ESTADOS_MENU_OCUPADO },
+      },
+      _sum: { cantidadMenus: true },
+    });
+    ocupados = new Map(filas.map((f) => [f.eventoId, f._sum.cantidadMenus || 0]));
+  }
 
   return eventos.map((e) => ({
     ...e,
     menusRestantes: (e.menuHabilitado && e.topeMenus !== null)
       ? calcularMenusRestantes(e.topeMenus, ocupados.get(e.id) || 0)
       : null,
+    menuCerrado: estaCerrado(e),
   }));
 }
 
@@ -77,7 +110,7 @@ async function getDestacado(req, res) {
       include: { tandas: { orderBy: { orden: 'asc' } } },
     });
     if (!evento) return res.status(404).json({ error: 'No hay evento destacado' });
-    const [conMenus] = await adjuntarMenusRestantes([adjuntarTandaVigente(evento)]);
+    const [conMenus] = await adjuntarEstadoMenu([adjuntarTandaVigente(evento)]);
     return res.json(conMenus);
   } catch (err) {
     console.error('Error en getDestacado:', err);
@@ -99,7 +132,7 @@ async function getProximos(req, res) {
       take: 50,
       include: { tandas: { orderBy: { orden: 'asc' } } },
     });
-    return res.json(await adjuntarMenusRestantes(eventos.map(adjuntarTandaVigente)));
+    return res.json(await adjuntarEstadoMenu(eventos.map(adjuntarTandaVigente)));
   } catch (err) {
     console.error('Error en getProximos:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -175,7 +208,7 @@ async function adminGetById(req, res) {
       },
     });
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
-    const [conMenus] = await adjuntarMenusRestantes([adjuntarTandaVigente(evento)]);
+    const [conMenus] = await adjuntarEstadoMenu([adjuntarTandaVigente(evento)]);
     return res.json(conMenus);
   } catch (err) {
     console.error('Error en adminGetById evento:', err);

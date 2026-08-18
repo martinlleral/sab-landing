@@ -58,6 +58,22 @@ function getMenusRestantes(ev) {
   return Number.isFinite(r) ? r : null;
 }
 
+// ¿Ya cerró la venta de menús de este evento? (Sprint 7, S3). Lo decide el
+// BACKEND con su propio reloj y lo manda en el evento: acá no se recalcula la
+// hora de corte. El navegador puede tener la hora mal, y sobre todo: la regla
+// del corte tiene que estar escrita en un solo lugar — la que vale es la que
+// aplica el checkout al crear la preferencia.
+function menuCerradoPorHora(ev) {
+  return !!(ev && ev.menuCerrado);
+}
+
+// Hora de cierre configurada en el CMS ("HH:MM"). Solo para TEXTO: avisar de
+// antemano hasta cuándo se puede sumar el menú. Nunca para decidir.
+function horaCorteMenu() {
+  const h = homeData && homeData.menuCorteHora;
+  return typeof h === 'string' && /^([01]\d|2[0-3]):([0-5]\d)$/.test(h) ? h : '';
+}
+
 // Cantidad de menús elegida. Lee del select; 0 si la sección está oculta.
 function getCantidadMenus() {
   const section = document.getElementById('menu-section');
@@ -1019,6 +1035,31 @@ function renderMenuSection() {
   const precioLabelEl = document.getElementById('menu-precio-unit-label');
   if (precioLabelEl) precioLabelEl.textContent = ` — $ ${formatPrecio(precioMenu)} por persona`;
 
+  // Cerrado por horario: mismo tratamiento que "agotado" —la sección se muestra
+  // con el select deshabilitado y una nota— por el mismo motivo: esconderla haría
+  // creer que esta fecha nunca tuvo menú. Va ANTES que el cupo porque es el
+  // estado terminal del día: pasado el corte, cuántos quedaban ya no le sirve a
+  // nadie.
+  if (menuCerradoPorHora(ev)) {
+    const hora = horaCorteMenu();
+    sel.innerHTML = '<option value="0">Cerrado por hoy</option>';
+    sel.value = '0';
+    sel.disabled = true;
+    if (cupoNota) {
+      cupoNota.innerHTML = '<i class="bi bi-info-circle me-1"></i>'
+        + 'La venta de menús para esta fecha <strong>ya cerró</strong>'
+        + (hora ? ` (cierra a las ${hora} del día del show)` : '')
+        + '. Las entradas siguen disponibles.';
+      // El gris de las notas: cerrar a horario es un estado previsto, no un error
+      // de la persona. Misma decisión que tomó S2 para "agotado".
+      cupoNota.style.color = '#a0aec0';
+      cupoNota.style.display = 'block';
+    }
+    if (retiroNota) retiroNota.style.display = 'none';
+    section.style.display = 'block';
+    return;
+  }
+
   // Agotado: la sección se muestra igual (que exista el menú es información útil,
   // y su ausencia se leería como que esta fecha no tiene), pero sin nada que elegir.
   if (restantes === 0) {
@@ -1054,6 +1095,13 @@ function renderMenuSection() {
   sel.disabled = false;
 
   if (retiroNota) retiroNota.style.display = 'block';
+  // Hasta cuándo se puede sumar: dicho ANTES, cuando todavía sirve para algo.
+  // Enterarse del corte recién al chocarse con él es enterarse tarde.
+  const corteNota = document.getElementById('menu-corte-nota');
+  if (corteNota) {
+    const hora = horaCorteMenu();
+    corteNota.textContent = hora ? ` Se puede sumar hasta las ${hora} del día del show.` : '';
+  }
   if (cupoNota) {
     // El aviso solo aparece cuando el cupo es lo que limita la elección. Si
     // quedan 40 menús y pediste 2 entradas, el número no aporta nada y ensucia.
@@ -1360,6 +1408,19 @@ async function handleComprar() {
         updateTotal();
       }
     }
+    // Mismo trato para el corte horario (S3): el modal pudo abrirse a las 17:50 y
+    // pagarse a las 18:05. Se corrige el estado del front con lo que dice el
+    // servidor y se repuebla la sección ANTES de mostrar el error, para que la
+    // compra se pueda completar con entradas solas sin recargar. Es el hallazgo
+    // de R1: un rechazo que no deja salida convierte una venta en un abandono.
+    if (err && err.code === 'MENU_CORTE_PASADO') {
+      const ev = getEventoSeleccionado();
+      if (ev) {
+        ev.menuCerrado = true;
+        renderMenuSection();
+        updateTotal();
+      }
+    }
     showModalError(mensajeErrorCompra(err));
     btn.disabled = false;
     if (spinner) spinner.style.display = 'none';
@@ -1383,6 +1444,11 @@ const MENSAJES_ERROR_COMPRA = {
   // de arriesgar un número inventado.
   MENUS_AGOTADO_RACE: 'Alguien tomó los últimos menús mientras completabas la compra. '
     + 'Recargá la página para ver cuántos quedan; no se te cobró nada.',
+  MENU_CORTE_PASADO: 'La venta de menús para esta fecha ya cerró. '
+    + 'Ya ajustamos tu pedido: tocá Pagar de nuevo para confirmar solo las entradas.',
+  // Config rota (la hora de corte quedó en un valor imposible). No es algo que la
+  // persona pueda arreglar, así que se la manda a un humano en vez de a reintentar.
+  MENU_CORTE_INVALIDO: 'El menú no está disponible en este momento. Escribinos por WhatsApp y lo resolvemos.',
 };
 
 function mensajeErrorCompra(err) {
@@ -1398,6 +1464,12 @@ function mensajeErrorCompra(err) {
     // decir nada.
     return `${n === 1 ? 'Queda 1 menú' : `Quedan ${n} menús`} para esta fecha. `
       + 'Ya ajustamos tu pedido: tocá Pagar de nuevo para confirmarlo.';
+  }
+  // El corte tiene mensaje propio cuando el backend manda la hora: decir a qué
+  // hora cerró explica el rechazo y evita el "¿y por qué?" por WhatsApp.
+  if (err && err.code === 'MENU_CORTE_PASADO' && typeof err.menuCorteHora === 'string' && err.menuCorteHora) {
+    return `La venta de menús cerró a las ${err.menuCorteHora} del día del show. `
+      + 'Ya ajustamos tu pedido: tocá Pagar de nuevo para confirmar solo las entradas.';
   }
   if (err && err.code && MENSAJES_ERROR_COMPRA[err.code]) return MENSAJES_ERROR_COMPRA[err.code];
   return (err && err.message) || 'Error al procesar el pago. Intentá de nuevo.';
@@ -1583,6 +1655,9 @@ async function fetchJSON(url, options = {}) {
     // Cupo de menús que devuelve el backend al rechazar por tope (S2): permite
     // corregir el select con el número real sin volver a pedir el evento.
     if (Number.isFinite(data.menusRestantes)) err.menusRestantes = data.menusRestantes;
+    // Hora de corte del menú (S3): viaja por el mismo camino y por el mismo
+    // motivo — que el mensaje pueda decir a qué hora cerró.
+    if (typeof data.menuCorteHora === 'string') err.menuCorteHora = data.menuCorteHora;
     throw err;
   }
   return data;

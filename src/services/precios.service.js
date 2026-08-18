@@ -165,6 +165,90 @@ async function calcularPrecioFinal(tanda, opciones = {}) {
 }
 
 /**
+ * ── Corte horario de venta de menús (Sprint 7, S3) ──
+ *
+ * Casa Metro cocina contra un número y necesita cerrar la cuenta: pasada la hora
+ * de corte del día del evento (`Home.menuCorteHora`, default "18:00") ya no se
+ * vende menú. Las entradas siguen a la venta — el corte es del menú, no del
+ * evento.
+ *
+ * TIMEZONE (el proyecto ya tuvo un fix por esto, 8-9/5/2026). La convención
+ * vigente es: las fechas se GUARDAN como si fueran hora local (mediodía UTC del
+ * día del evento, ver `parsearFechaLocal`) y se LEEN forzando UTC (el front
+ * formatea con `timeZone:'UTC'`). Por eso el día calendario del evento sale de
+ * los componentes UTC crudos de `fecha` y NO de restarle 3 h: restar movería al
+ * día anterior a cualquier fecha guardada entre las 00:00 y las 03:00 UTC, que
+ * es exactamente el bug de aquella sesión. El offset de Argentina (UTC-3, sin
+ * DST desde 2009) se suma del otro lado, al construir el instante de corte:
+ * 18:00 ART del 23/8 = 2026-08-23T21:00:00Z.
+ *
+ * `Date.UTC` normaliza solo el overflow: un corte a las 22:00 ART cae a la 01:00
+ * UTC del día siguiente, que es el instante correcto.
+ */
+const HORA_HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const OFFSET_ART_HORAS = 3;
+
+/**
+ * Instante exacto en que cierra la venta de menús de un evento.
+ *
+ * Fail-closed a propósito: un `corteHora` que no sea "HH:MM" válido TIRA en vez
+ * de caer a un default. Un `|| '18:00'` acá dejaría el corte en una hora que
+ * nadie eligió y el error viviría en silencio hasta la noche del evento (es el
+ * mismo hallazgo que R1 encontró con el `|| 0` de `cantidadMenus`). La whitelist
+ * del CMS no deja persistir basura, así que llegar acá con un valor malo
+ * significa que alguien editó la base a mano: se corta la venta del menú y se
+ * avisa, que es lo barato de revertir. Vender menús sin corte no lo es.
+ *
+ * @param {Date|string} fechaEvento - `Evento.fecha`
+ * @param {string} corteHora - `Home.menuCorteHora`, formato "HH:MM"
+ * @returns {Date} instante UTC del corte
+ */
+function calcularCorteMenu(fechaEvento, corteHora) {
+  const fecha = fechaEvento instanceof Date ? fechaEvento : new Date(fechaEvento);
+  if (!(fecha instanceof Date) || Number.isNaN(fecha.getTime())) {
+    const e = new Error('La fecha del evento no es válida');
+    e.code = 'MENU_CORTE_INVALIDO';
+    throw e;
+  }
+  const m = HORA_HHMM.exec(String(corteHora === undefined || corteHora === null ? '' : corteHora).trim());
+  if (!m) {
+    const e = new Error('El horario de cierre del menú no está bien configurado');
+    e.code = 'MENU_CORTE_INVALIDO';
+    throw e;
+  }
+  return new Date(Date.UTC(
+    fecha.getUTCFullYear(),
+    fecha.getUTCMonth(),
+    fecha.getUTCDate(),
+    parseInt(m[1], 10) + OFFSET_ART_HORAS,
+    parseInt(m[2], 10),
+    0,
+    0
+  ));
+}
+
+/**
+ * ¿Ya cerró la venta de menús? Misma forma que `estaDisponible(tanda, now)` de
+ * tandas.service.js: recibe el dato y el reloj, devuelve un booleano y no toca
+ * la base.
+ *
+ * Sin `corteHora` no hay corte configurado y no se bloquea nada (las llamadas
+ * que no pasan el dato —tests unitarios de precio, clientes viejos— siguen
+ * calculando igual). El corte real siempre viaja: `Home.menuCorteHora` es un
+ * String NOT NULL con default "18:00".
+ *
+ * @param {Date|string} fechaEvento
+ * @param {string} corteHora
+ * @param {Date} [ahora=new Date()]
+ * @returns {boolean}
+ */
+function menuVentaCerrada(fechaEvento, corteHora, ahora = new Date()) {
+  if (corteHora === undefined || corteHora === null || String(corteHora).trim() === '') return false;
+  if (!fechaEvento) return false;
+  return ahora >= calcularCorteMenu(fechaEvento, corteHora);
+}
+
+/**
  * Valida las reglas duras del menú de Casa Metro. Puras: no tocan la base de
  * datos. Tiran Error con .code para que el controller mapee a 400 con mensaje
  * específico, igual que `validarCupon`.
@@ -191,10 +275,22 @@ async function calcularPrecioFinal(tanda, opciones = {}) {
  * @param {number} [params.cantidadMenus=0] - menús pedidos (ya parseado a Int)
  * @param {boolean} [params.menuHabilitado=false] - `Evento.menuHabilitado`
  * @param {number} [params.precioMenu=0] - `Home.precioMenu` vigente
+ * La quinta regla (S3) es el CORTE HORARIO: pasada `menuCorteHora` del día del
+ * evento, Casa Metro ya cerró la cuenta de cuánto cocinar. Acá entran los datos
+ * crudos (`fechaEvento` + `menuCorteHora`) y no un booleano resuelto afuera,
+ * porque el cálculo es aritmética de fechas y no una lectura a la base — el
+ * precedente literal es `validarCupon(cupon, eventoId, ahora = new Date())`, que
+ * ya resuelve un vencimiento con esta misma forma. El reloj entra por parámetro
+ * para que se pueda testear con una hora fija en vez de con `new Date()`.
+ *
  * @param {number|null} [params.menusRestantes=null] - cupo libre; null = sin tope
+ * @param {Date|string} [params.fechaEvento] - `Evento.fecha`; sin esto no hay corte
+ * @param {string} [params.menuCorteHora] - `Home.menuCorteHora` ("HH:MM")
+ * @param {Date} [params.ahora=new Date()] - reloj, inyectable para tests
  */
 function validarMenu({
   cantidad, cantidadMenus = 0, menuHabilitado = false, precioMenu = 0, menusRestantes = null,
+  fechaEvento = null, menuCorteHora = null, ahora = new Date(),
 }) {
   if (!Number.isInteger(cantidad) || cantidad < 1) {
     const e = new Error('La cantidad de entradas debe ser al menos 1');
@@ -212,6 +308,21 @@ function validarMenu({
   if (!menuHabilitado) {
     const e = new Error('Este evento no ofrece menú');
     e.code = 'MENU_NO_HABILITADO';
+    throw e;
+  }
+  // Corte horario. Va pegado a MENU_NO_HABILITADO porque las dos contestan la
+  // misma pregunta —¿esta fecha vende menú AHORA?— y esa respuesta le gana a
+  // cualquier reproche sobre la cantidad pedida: decirle "no compres más menús
+  // que entradas" a alguien que ya no puede comprar ninguno es mandarlo a
+  // arreglar algo que no lo va a desbloquear.
+  if (menuVentaCerrada(fechaEvento, menuCorteHora, ahora)) {
+    const hora = String(menuCorteHora).trim();
+    const e = new Error(`La venta de menús cerró a las ${hora} del día del evento`);
+    e.code = 'MENU_CORTE_PASADO';
+    // Viaja la hora igual que `menusRestantes` viaja con MENUS_AGOTADOS: es lo
+    // que le permite al checkout corregir su estado y dejar el pedido comprable
+    // con entradas solas, diciendo además por qué.
+    e.menuCorteHora = hora;
     throw e;
   }
   if (cantidadMenus > cantidad) {
@@ -278,6 +389,9 @@ function validarMenu({
  * @param {boolean} [opciones.menuHabilitado=false] - `Evento.menuHabilitado`
  * @param {number} [opciones.precioMenu=0] - `Home.precioMenu` vigente
  * @param {number|null} [opciones.menusRestantes=null] - cupo libre; null = sin tope
+ * @param {Date|string} [opciones.fechaEvento] - `Evento.fecha` (corte horario)
+ * @param {string} [opciones.menuCorteHora] - `Home.menuCorteHora` ("HH:MM")
+ * @param {Date} [opciones.ahora] - reloj, inyectable para tests
  * @returns {Promise<Object>} lo mismo que `calcularPrecioFinal` (por entrada) más
  *   `cantidad`, `cantidadMenus`, `menuUnitario`, `totalPagado` y el desglose
  *   `totales: { entradas, menus, total }`.
@@ -298,6 +412,14 @@ async function calcularTotalCompra(tanda, opciones = {}) {
     menuHabilitado: opciones.menuHabilitado,
     precioMenu,
     menusRestantes: opciones.menusRestantes ?? null,
+    // El corte horario entra por acá y no por una guarda al lado en el
+    // controller: así las cinco reglas duras del menú viven en un solo lugar y
+    // el camino real (controller → calcularTotalCompra → validarMenu) las aplica
+    // todas, que es lo que el candado de R1 pide para cualquier regla que
+    // proteja plata.
+    fechaEvento: opciones.fechaEvento ?? null,
+    menuCorteHora: opciones.menuCorteHora ?? null,
+    ahora: opciones.ahora ?? new Date(),
   });
 
   const precioCalc = await calcularPrecioFinal(tanda, opciones);
@@ -447,6 +569,8 @@ module.exports = {
   normalizarCodigo,
   validarCupon,
   validarMenu,
+  calcularCorteMenu,
+  menuVentaCerrada,
   calcularPrecioFinal,
   calcularTotalCompra,
   reservarCupon,
