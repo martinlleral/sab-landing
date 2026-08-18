@@ -5,7 +5,9 @@ const brevoService = require('../services/brevo.service');
 const { getTandaVigente } = require('../services/tandas.service');
 const {
   ESTADOS_MENU_OCUPADO, contarMenusOcupados, calcularMenusRestantes, menuVentaCerrada,
+  calcularCorteMenu,
 } = require('../services/precios.service');
+const { compararPorApellido } = require('../utils/orden');
 
 // Adjunta al evento la tandaVigente calculada + precio/stock derivados para el
 // frontend público. No reemplaza los campos legacy del evento (ese cleanup es
@@ -599,6 +601,119 @@ async function adminEventoStats(req, res) {
   }
 }
 
+/**
+ * Lista de menús para la cocina de la sede (ítem 44, Sprint 7 · S4).
+ *
+ * ESTE ENDPOINT ALIMENTA EL CONTROL DE ENTREGA REAL. Por decisión de producto
+ * del 16/8 no hay segundo QR: en la puerta se tilda la hoja impresa. Y desde el
+ * hallazgo 📋 de R1, además, es lo único que hace verdadero al mail de
+ * confirmación, que le promete al comprador "dá tu nombre y apellido — ya estás
+ * en la lista". Por eso devuelve NOMBRES, no solo agregados: sin nombres, la
+ * lista que el mail promete no existe.
+ *
+ * ⚠️ QUÉ CUENTA CADA NÚMERO. Hay tres conteos de menús en el sistema y NO son
+ * intercambiables (es el desvío 3 de S2, que ya casi hace cocinar de menos):
+ *
+ *   - `adminEventoStats.menus.cantidad` mide **plata**: filtra `totalPagado > 0`,
+ *     o sea deja afuera las invitaciones. Sirve para la contabilidad.
+ *   - `adminEventoStats.menus.ocupados` mide **cupo**: aprobadas + pendientes,
+ *     valga lo que valga la compra. Es lo que corta la venta en el checkout.
+ *   - lo que devuelve ESTE endpoint mide **platos aprobados**: lo que hay que
+ *     cocinar. Es la suma de las filas que se imprimen, y se calcula sumando
+ *     esas mismas filas a propósito — así el total de la hoja no puede
+ *     divergir de lo que la hoja lista, que es el criterio de éxito de S4.
+ *
+ * Hoy los tres coinciden casi siempre (una invitación no lleva menús y una
+ * compra con menú tiene total > 0 porque el cupón no toca el menú), pero son
+ * definiciones distintas. La que le importa a la cocina es la de los platos.
+ *
+ * PENDIENTES (criterio cerrado por S3, §5 del documento madre): no se ocultan
+ * ni se suman al total. El corte de las 18:00 se evalúa al CREAR la compra, así
+ * que quien pagó por Rapipago a las 17:55 compró en horario y su cupo ya está
+ * reservado — pero nadie cobró todavía. Van advertidos aparte, con nombre, y
+ * quien decide cocinar de más es la sede, no el software.
+ */
+async function adminEventoMenus(req, res) {
+  try {
+    const eventoId = parseInt(req.params.id);
+    if (!eventoId) return res.status(400).json({ error: 'ID inválido' });
+
+    const evento = await prisma.evento.findUnique({
+      where: { id: eventoId },
+      select: {
+        id: true, nombre: true, fecha: true, hora: true,
+        menuHabilitado: true, topeMenus: true,
+      },
+    });
+    if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    // Una sola query para las dos listas: `ESTADOS_MENU_OCUPADO` es la misma
+    // definición de "compra viva" que usa la reserva del cupo. Reusarla es lo
+    // que hace que valga el invariante `aprobados + pendientes === ocupados`:
+    // la hoja de la cocina y el contador que corta la venta miran lo mismo.
+    // Sin email ni teléfono: esta hoja va a la cocina y a la puerta, no a la
+    // administración, y sale impresa de un sistema que guarda PII.
+    const filas = await prisma.compra.findMany({
+      where: {
+        eventoId,
+        cantidadMenus: { gt: 0 },
+        mpEstado: { in: ESTADOS_MENU_OCUPADO },
+      },
+      select: {
+        id: true, nombre: true, apellido: true,
+        cantidadMenus: true, cantidadEntradas: true, mpEstado: true,
+      },
+    });
+
+    const aprobadas = filas.filter((c) => c.mpEstado === 'approved').sort(compararPorApellido);
+    const pendientes = filas.filter((c) => c.mpEstado === 'pending').sort(compararPorApellido);
+    const sumarMenus = (arr) => arr.reduce((s, c) => s + (c.cantidadMenus || 0), 0);
+
+    // Hora de emisión: la del SERVIDOR, no la del navegador que imprime. Es el
+    // dato que le dice a la cocina si esta hoja es anterior o posterior al
+    // corte, y comparar el corte contra un reloj que puede estar corrido sería
+    // el mismo error que S3 sacó del front.
+    const emitidoEn = new Date();
+    const home = await prisma.home.findFirst({ select: { menuCorteHora: true } });
+    const corteHora = home?.menuCorteHora ?? null;
+    let corte = null;
+    try {
+      corte = corteHora && evento.menuHabilitado
+        ? {
+          hora: corteHora,
+          instante: calcularCorteMenu(evento.fecha, corteHora).toISOString(),
+          pasado: menuVentaCerrada(evento.fecha, corteHora, emitidoEn),
+        }
+        : null;
+    } catch (err) {
+      // MENU_CORTE_INVALIDO: config rota (solo se llega editando la base a
+      // mano). La hoja se imprime igual —la cocina la necesita— pero sin
+      // afirmar que la lista está cerrada, que es lo que no se puede sostener.
+      console.error('[menu] menuCorteHora inválido en Home:', corteHora, err.code || err.message);
+      corte = null;
+    }
+
+    return res.json({
+      evento,
+      emitidoEn: emitidoEn.toISOString(),
+      corte,
+      aprobadas,
+      pendientes,
+      totales: {
+        // El número contra el que cocina la sede.
+        menusAprobados: sumarMenus(aprobadas),
+        comprasAprobadas: aprobadas.length,
+        // Advertencia, no suma.
+        menusPendientes: sumarMenus(pendientes),
+        comprasPendientes: pendientes.length,
+      },
+    });
+  } catch (err) {
+    console.error('Error en adminEventoMenus:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
 // Stats globales del backoffice (dashboard). Mismo principio que el endpoint
 // por evento: todo agregado en BD para que el dashboard no tenga que sumar
 // sobre una página de 20 compras (el bug que motivó este endpoint).
@@ -674,5 +789,6 @@ module.exports = {
   adminEnviarInvitacion,
   adminListarInvitaciones,
   adminEventoStats,
+  adminEventoMenus,
   adminStatsGlobal,
 };

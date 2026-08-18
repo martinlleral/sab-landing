@@ -22,6 +22,8 @@ const adminRouter = express.Router();
 adminRouter.use(requireAdmin);
 adminRouter.get('/pasados', controller.adminListarPasados);
 adminRouter.get('/:id/stats', controller.adminEventoStats);
+// Lista de menús para la cocina (ítem 44): nombres + cantidades, no agregados.
+adminRouter.get('/:id/menus', controller.adminEventoMenus);
 adminRouter.get('/:id/invitaciones', controller.adminListarInvitaciones);
 adminRouter.post('/:id/invitacion', controller.adminEnviarInvitacion);
 adminRouter.get('/:id', controller.adminGetById);

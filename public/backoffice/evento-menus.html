@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Menús para la cocina — SAB Backoffice</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/backoffice/assets/css/bo.css">
+  <style>
+    /* ============================================================
+       LISTA DE MENÚS PARA LA COCINA (ítem 44 · Sprint 7 · S4)
+       ============================================================
+       Esta pantalla tiene DOS superficies y por eso tiene dos bloques
+       de CSS que casi no se tocan:
+
+         PANTALLA (Operate) — el backoffice oscuro de bo.css. Lo que
+           importa es encontrar el evento, ver el número y llegar al
+           botón de imprimir.
+         PAPEL (Read) — la hoja que se lleva la sede. Fondo claro,
+           tinta negra, un solo carmín. El dark puro consume tinta y
+           se lee mal fotocopiado; en print invertido el carmín se da
+           vuelta: #c1121f es el TEXTO y #e63946 lo gráfico.
+
+       Sin librería de PDF: el navegador ya trae el motor
+       (Imprimir → Guardar como PDF). El proyecto tiene 16 dependencias
+       y ninguna de PDF, y ya cerró 6 CVEs borrando un import.
+       ============================================================ */
+
+    /* ---------- común a las dos superficies ---------- */
+    .menu-total-num {
+      font-size: 4.5rem;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -2px;
+      color: var(--bo-accent);
+    }
+    .menu-total-label {
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-size: 0.8rem;
+      color: var(--bo-text-muted);
+    }
+    /* Casilleros dibujados con CSS, no <input type="checkbox">: se tildan con
+       birome sobre papel. Un checkbox nativo se imprime chico, con el estilo
+       del sistema operativo de quien imprime, y encima invita a tildarlo en
+       pantalla — donde no se guardaría nada. */
+    .menu-casilleros { display: flex; flex-wrap: wrap; gap: 6px; }
+    /* En PANTALLA los casilleros van atenuados a propósito: son una vista
+       previa de lo que se imprime, no un control. Dibujados con el contraste
+       del papel parecerían clickeables, y tildarlos no guardaría nada — el
+       sitio ya trata así lo inactivo (desatura, no resalta). */
+    .menu-casillero {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 1px dashed #4a4a4a;
+      border-radius: 3px;
+    }
+    .menu-fila-pendiente { color: var(--bo-text-muted); }
+
+    /* La advertencia de pendientes tiene caja en el papel; en pantalla también
+       tiene que leerse como advertencia y no como una sección más. */
+    .hoja-pendientes {
+      margin-top: 24px;
+      border: 1px solid #c4384b;
+      border-left: 4px solid #c4384b;
+      border-radius: 6px;
+      padding: 16px 20px;
+      background: rgba(196, 56, 75, 0.06);
+    }
+    .hoja-pendientes h3 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #e08a97;
+      margin: 0 0 8px 0;
+    }
+    .hoja-pendientes p { font-size: 0.9rem; color: var(--bo-text-muted); margin: 0 0 8px 0; }
+    .hoja-pendientes ul { margin: 0; padding-left: 20px; font-size: 0.95rem; }
+    .menu-total-sub { color: var(--bo-text-muted); font-size: 0.9rem; margin-top: 6px; }
+    /* Identificación de la hoja: solo tiene sentido impresa (en pantalla ya
+       está en el encabezado de la página). Se repite en cada página de papel. */
+    .hoja-id { display: none; }
+    .solo-print { display: none; }
+
+    /* ============================================================
+       @media print — LA HOJA
+       ============================================================ */
+    @media print {
+      /* Márgenes generosos a la izquierda: la hoja se abrocha o se apoya en
+         una tabla de la cocina, y la primera columna es la que se lee. */
+      @page { size: A4 portrait; margin: 12mm 12mm 14mm 12mm; }
+
+      /* Fondo claro forzado. `print-color-adjust: exact` NO se usa a propósito:
+         no queremos que el navegador imprima el fondo negro del backoffice si
+         alguien tiene activado "imprimir gráficos de fondo". */
+      html, body {
+        background: #fff !important;
+        color: #000 !important;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        font-size: 11pt;
+      }
+
+      /* Todo lo que es navegación, acción o ayuda de pantalla desaparece:
+         no hay nada que clickear en una hoja de papel. */
+      .bo-sidebar, .bo-topbar, .bo-alert, .no-print,
+      .bo-card-header .btn-bo-secondary, .bo-pagination { display: none !important; }
+      .solo-print { display: block !important; }
+
+      .bo-layout, .bo-main, .bo-content {
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        min-height: 0 !important;
+      }
+      .bo-card {
+        background: #fff !important;
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+      }
+      .bo-card-body { padding: 0 !important; }
+
+      /* ---------- encabezado de la hoja ---------- */
+      .hoja-cabecera {
+        border-bottom: 2px solid #e63946;
+        padding-bottom: 6mm;
+        margin-bottom: 6mm;
+      }
+      .hoja-titulo {
+        font-size: 10pt;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        color: #c1121f;
+        margin: 0 0 2mm 0;
+        font-weight: 700;
+      }
+      .hoja-evento {
+        font-size: 17pt;
+        font-weight: 700;
+        line-height: 1.15;
+        margin: 0 0 1mm 0;
+        color: #000;
+      }
+      .hoja-fecha { font-size: 11pt; color: #000; margin: 0; }
+      .hoja-emision {
+        font-size: 10pt;
+        color: #000;
+        margin-top: 3mm;
+        border-left: 3px solid #e63946;
+        padding-left: 3mm;
+      }
+      .hoja-emision strong { font-weight: 700; }
+
+      /* ---------- el número, aislado ---------- */
+      .menu-total-box {
+        text-align: center;
+        margin: 7mm 0;
+        page-break-inside: avoid;
+      }
+      .menu-total-num {
+        font-size: 46pt !important;
+        color: #c1121f !important;
+        letter-spacing: -1px;
+      }
+      .menu-total-label {
+        color: #000 !important;
+        font-size: 9pt !important;
+        letter-spacing: 2px;
+        margin-top: 1mm;
+      }
+      .menu-total-sub { font-size: 10pt; color: #000; margin-top: 1mm; }
+
+      /* ---------- la tabla ---------- */
+      table.bo-table { width: 100%; border-collapse: collapse; }
+      /* thead como grupo de encabezado → el navegador lo repite en CADA página.
+         Por eso la fila de identificación vive acá dentro: la página 3 de una
+         hoja abrochada tiene que decir de qué evento es y a qué hora se emitió. */
+      thead { display: table-header-group; }
+      tr { page-break-inside: avoid; }
+      .hoja-id { display: table-row !important; }
+      .hoja-id th {
+        font-size: 8pt !important;
+        font-weight: 400 !important;
+        text-transform: none !important;
+        letter-spacing: 0 !important;
+        color: #000 !important;
+        background: #fff !important;
+        border: none !important;
+        border-bottom: 1px solid #ccc !important;
+        padding: 0 0 1mm 0 !important;
+        text-align: left !important;
+      }
+      .bo-table thead th {
+        background: #fff !important;
+        color: #000 !important;
+        border-bottom: 1.5pt solid #000 !important;
+        font-size: 8.5pt !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 2mm 2mm 1.5mm 0 !important;
+      }
+      .bo-table tbody td {
+        border-bottom: 0.5pt solid #bbb !important;
+        color: #000 !important;
+        background: #fff !important;
+        padding: 2.6mm 2mm 2.6mm 0 !important;
+        vertical-align: middle;
+        font-size: 11pt;
+      }
+      /* Cada 5 filas, una línea más marcada. Es lo que hace que el ojo no se
+         pierda de renglón en una lista larga, sin gastar tinta en zebra
+         (un gris claro se empasta al fotocopiar). */
+      .bo-table tbody tr:nth-child(5n) td { border-bottom: 1.2pt solid #666 !important; }
+      .col-nombre { font-weight: 600; }
+      /* Anchos explícitos, no automáticos. Con la columna del nombre en `auto`
+         se comía ~140mm y el casillero quedaba a media hoja de distancia del
+         apellido: en la puerta, con la lista en la mano, ahí es donde se salta
+         de renglón. 105 + 16 + 65 = 186mm, el ancho útil de un A4 con estos
+         márgenes. */
+      .col-nombre { width: 105mm; }
+      .col-menus {
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        width: 16mm;
+      }
+      .col-entradas { display: none !important; }
+      .col-casilleros { width: 65mm; }
+      .menu-casillero {
+        width: 6mm !important; height: 6mm !important;
+        border: 1pt solid #000 !important;
+        border-radius: 0 !important;
+      }
+
+      /* ---------- pendientes: advertidos aparte, nunca sumados ---------- */
+      .hoja-pendientes {
+        margin-top: 8mm;
+        border: 1.5pt solid #e63946;
+        border-left: 1.5pt solid #e63946;
+        border-radius: 0;
+        /* Sin relleno: el navegador imprime los fondos solo si el operador tiene
+           activado "gráficos de fondo", así que un bloque que depende del fondo
+           para leerse sale distinto en cada impresora. El borde no depende de
+           nadie. */
+        background: #fff !important;
+        padding: 4mm;
+        page-break-inside: avoid;
+      }
+      .hoja-pendientes h3 {
+        font-size: 10pt;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: #c1121f;
+        margin: 0 0 2mm 0;
+      }
+      .hoja-pendientes p { font-size: 10pt; color: #000; margin: 0 0 2mm 0; }
+      .hoja-pendientes ul { margin: 0; padding-left: 5mm; font-size: 10.5pt; color: #000; }
+      .hoja-pendientes li { margin-bottom: 1mm; }
+      .menu-fila-pendiente { color: #000 !important; }
+
+      .hoja-pie {
+        margin-top: 8mm;
+        padding-top: 3mm;
+        border-top: 0.5pt solid #999;
+        font-size: 8.5pt;
+        color: #000;
+      }
+      a[href]::after { content: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bo-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="bo-sidebar" id="sidebar">
+      <div class="bo-sidebar-brand">S.A. <span>BOLEROS</span></div>
+      <nav class="bo-nav">
+        <a href="/backoffice/dashboard.html" class="bo-nav-link">
+          <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <a href="/backoffice/reportes.html" class="bo-nav-link">
+          <i class="bi bi-bar-chart-line"></i> Reportes
+        </a>
+        <a href="/backoffice/home-cms.html" class="bo-nav-link">
+          <i class="bi bi-house-gear"></i> Home CMS
+        </a>
+        <a href="/backoffice/eventos-lista.html" class="bo-nav-link active">
+          <i class="bi bi-calendar-event"></i> Eventos
+        </a>
+        <a href="/backoffice/lector-qr.html" class="bo-nav-link">
+          <i class="bi bi-qr-code-scan"></i> Lector QR
+        </a>
+        <a href="/backoffice/validacion-accesos.html" class="bo-nav-link"><i class="bi bi-link-45deg"></i> Accesos QR</a>
+        <div class="bo-nav-divider"></div>
+        <a href="#" class="bo-nav-link text-danger" onclick="handleLogout()">
+          <i class="bi bi-box-arrow-right"></i> Cerrar sesión
+        </a>
+      </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="bo-main">
+      <header class="bo-topbar">
+        <button class="bo-sidebar-toggle" onclick="toggleSidebar()">
+          <i class="bi bi-list fs-4"></i>
+        </button>
+        <h1 class="bo-page-title" id="page-title">Menús para la cocina</h1>
+        <div class="bo-topbar-user" id="topbar-user">—</div>
+      </header>
+
+      <div class="bo-content">
+
+        <div id="bo-alert" class="bo-alert"></div>
+
+        <!-- Barra de acciones: no se imprime -->
+        <div class="no-print d-flex gap-2 align-items-center flex-wrap mb-3" id="barra-acciones" style="display:none;">
+          <a id="btn-volver" href="/backoffice/eventos-lista.html" class="btn-bo-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Volver a las compras
+          </a>
+          <button class="btn-bo-secondary" onclick="cargar()">
+            <i class="bi bi-arrow-clockwise me-1"></i> Actualizar datos
+          </button>
+          <button class="btn-bo-primary" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i> Imprimir / Guardar PDF
+          </button>
+          <span id="aviso-vieja" style="display:none; color:#f6c90e; font-size:0.85rem;">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <span id="aviso-vieja-txt"></span>
+          </span>
+        </div>
+
+        <p class="no-print" id="ayuda-hoja" style="display:none; color:#888; font-size:0.85rem; max-width:70ch; margin-bottom:16px;">
+          <i class="bi bi-info-circle me-1"></i>
+          Esta es la hoja de control de entrega: se imprime, se lleva a la sede y se tilda
+          un casillero por cada menú que se entrega. Los casilleros de acá abajo son la vista
+          previa de lo que sale en el papel — se tildan a mano, no en la pantalla.
+        </p>
+
+        <div class="bo-card">
+          <div class="bo-card-body" id="hoja" style="display:none;">
+
+            <!-- ENCABEZADO DE LA HOJA -->
+            <div class="hoja-cabecera">
+              <p class="hoja-titulo solo-print">Menús — control de entrega</p>
+              <h2 class="hoja-evento" id="hoja-evento">—</h2>
+              <p class="hoja-fecha" id="hoja-fecha">—</p>
+              <div class="hoja-emision" id="hoja-emision">—</div>
+            </div>
+
+            <!-- EL NÚMERO -->
+            <div class="menu-total-box text-center my-4">
+              <div class="menu-total-num" id="total-menus">—</div>
+              <div class="menu-total-label">Menús a cocinar</div>
+              <div class="menu-total-sub" id="total-sub">—</div>
+            </div>
+
+            <!-- LA LISTA -->
+            <div class="table-responsive">
+              <table class="bo-table">
+                <thead>
+                  <tr class="hoja-id">
+                    <th colspan="4" id="hoja-id-txt"></th>
+                  </tr>
+                  <tr>
+                    <th class="col-nombre">Apellido y nombre</th>
+                    <th class="col-menus">Menús</th>
+                    <th class="col-entradas">Entradas</th>
+                    <th class="col-casilleros">Entregado</th>
+                  </tr>
+                </thead>
+                <tbody id="cuerpo">
+                  <tr><td colspan="4" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- PENDIENTES: advertidos aparte, nunca sumados al total -->
+            <div class="hoja-pendientes" id="bloque-pendientes" style="display:none;">
+              <h3>Compras esperando pago — no están en el total</h3>
+              <p id="pendientes-resumen">—</p>
+              <ul id="pendientes-lista"></ul>
+            </div>
+
+            <div class="hoja-pie solo-print" id="hoja-pie"></div>
+
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/backoffice/assets/js/bo.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const eventoId = parseInt(params.get('id'));
+    // Momento en que se trajeron los datos, para avisar si la pestaña quedó
+    // abierta y lo que hay en pantalla ya envejeció.
+    let traidoEn = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!eventoId) {
+        boAlert('No se especificó un evento. Entrá desde la lista de compras del evento.', 'error');
+        return;
+      }
+      document.getElementById('btn-volver').href = `/backoffice/evento-compras.html?id=${eventoId}`;
+      cargar();
+      setInterval(chequearAntiguedad, 30000);
+    });
+
+    async function cargar() {
+      try {
+        const data = await boFetch(`/api/admin/eventos/${eventoId}/menus`);
+        traidoEn = new Date();
+        render(data);
+        document.getElementById('barra-acciones').style.display = 'flex';
+        document.getElementById('hoja').style.display = 'block';
+        document.getElementById('ayuda-hoja').style.display = 'block';
+        chequearAntiguedad();
+      } catch (err) {
+        boAlert('Error al cargar la lista: ' + err.message);
+        document.getElementById('cuerpo').innerHTML =
+          `<tr><td colspan="4" class="text-center py-4" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    // Una hoja impresa vale por su hora de emisión. Si la pestaña quedó abierta
+    // desde la mañana, lo que se imprimiría es la foto de la mañana — con su
+    // hora correcta, pero desactualizada. El aviso es de pantalla, no de papel.
+    function chequearAntiguedad() {
+      if (!traidoEn) return;
+      const min = Math.floor((Date.now() - traidoEn.getTime()) / 60000);
+      const aviso = document.getElementById('aviso-vieja');
+      if (min >= 5) {
+        document.getElementById('aviso-vieja-txt').textContent =
+          `Estos datos son de hace ${min} min. Actualizá antes de imprimir.`;
+        aviso.style.display = 'inline';
+      } else {
+        aviso.style.display = 'none';
+      }
+    }
+
+    // Formato explícito en hora de Argentina: quien imprime puede tener el
+    // navegador en otro huso, y la hoja afirma una hora local. Es el mismo
+    // cuidado que S3 le puso al campo de la hora de corte en el CMS.
+    const TZ = 'America/Argentina/Buenos_Aires';
+    const fmtHora = (iso) => new Date(iso).toLocaleTimeString('es-AR', {
+      timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    const fmtFechaHora = (iso) => new Date(iso).toLocaleString('es-AR', {
+      timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    const fmtFechaEvento = (iso) => new Date(iso).toLocaleDateString('es-AR', {
+      timeZone: 'UTC', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+    });
+
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+    const plural = (n, sing, plu) => `${n} ${n === 1 ? sing : plu}`;
+
+    function render(data) {
+      const ev = data.evento;
+      const t = data.totales;
+
+      document.getElementById('page-title').textContent = `Menús: ${ev.nombre}`;
+      document.getElementById('hoja-evento').textContent = ev.nombre;
+      document.getElementById('hoja-fecha').textContent =
+        `${fmtFechaEvento(ev.fecha)}${ev.hora ? ' · ' + ev.hora + ' h' : ''}`;
+
+      // Hora de emisión + su lectura operativa: si la hoja es posterior al
+      // corte, la lista ya no puede crecer y la cocina cocina contra este
+      // número. Si es anterior, todavía se vende.
+      const emision = fmtFechaHora(data.emitidoEn);
+      let leyendaCorte = '';
+      if (data.corte) {
+        leyendaCorte = data.corte.pasado
+          ? ` La venta de menús cerró a las ${data.corte.hora}: <strong>esta lista ya está cerrada</strong>.`
+          : ` La venta de menús cierra a las ${data.corte.hora} del día del evento: <strong>todavía puede crecer</strong>.`;
+      }
+      document.getElementById('hoja-emision').innerHTML =
+        `Hoja emitida el <strong>${esc(emision)}</strong> (hora de Argentina).${leyendaCorte}`;
+      document.getElementById('hoja-id-txt').textContent =
+        `${ev.nombre} · ${fmtFechaEvento(ev.fecha)} · hoja emitida ${emision} h`;
+
+      document.getElementById('total-menus').textContent = t.menusAprobados;
+      document.getElementById('total-sub').textContent =
+        `de ${plural(t.comprasAprobadas, 'compra paga', 'compras pagas')}`;
+
+      // ---- filas ----
+      const cuerpo = document.getElementById('cuerpo');
+      if (data.aprobadas.length === 0) {
+        const motivo = !ev.menuHabilitado
+          ? 'Este evento todavía no tiene el menú habilitado. Se activa desde "Editar evento".'
+          : 'Todavía no se vendió ningún menú para este evento.';
+        cuerpo.innerHTML =
+          `<tr><td colspan="4" class="text-center py-4" style="color:#888;">${esc(motivo)}</td></tr>`;
+      } else {
+        cuerpo.innerHTML = data.aprobadas.map((c) => `
+          <tr>
+            <td class="col-nombre">${esc(c.apellido)}, ${esc(c.nombre)}</td>
+            <td class="col-menus">${c.cantidadMenus}</td>
+            <td class="col-entradas">${c.cantidadEntradas}</td>
+            <td class="col-casilleros">
+              <div class="menu-casilleros">
+                ${'<span class="menu-casillero"></span>'.repeat(c.cantidadMenus)}
+              </div>
+            </td>
+          </tr>`).join('');
+      }
+
+      // ---- pendientes ----
+      const bloque = document.getElementById('bloque-pendientes');
+      if (data.pendientes.length > 0) {
+        bloque.style.display = 'block';
+        document.getElementById('pendientes-resumen').textContent =
+          `${plural(t.comprasPendientes, 'compra', 'compras')} con `
+          + `${plural(t.menusPendientes, 'menú', 'menús')} en total todavía no confirmaron el pago. `
+          + 'No están sumados arriba y no hay que cocinarlos, salvo que la cooperativa avise que el pago entró.';
+        document.getElementById('pendientes-lista').innerHTML = data.pendientes.map((c) => `
+          <li class="menu-fila-pendiente">${esc(c.apellido)}, ${esc(c.nombre)} — ${plural(c.cantidadMenus, 'menú', 'menús')}</li>
+        `).join('');
+      } else {
+        bloque.style.display = 'none';
+      }
+
+      document.getElementById('hoja-pie').textContent =
+        'Sindicato Argentino de Boleros · Se tilda un casillero por cada menú entregado.';
+    }
+  </script>
+</body>
+</html>

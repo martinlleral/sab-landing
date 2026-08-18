@@ -1105,12 +1105,27 @@ Es el *"exportar un PDF de la gente que compró el menú"*. Lista **operativa**,
 
 **Sin librería de PDF:** vista HTML con `@media print` → *Imprimir → Guardar como PDF*. El navegador ya trae el motor, y encima le sirve impresa, que es exactamente lo que va a usar.
 
-- [ ] Vista `/backoffice/evento-menus.html` filtrada por evento
-- [ ] **Total de menús** bien visible arriba — es el número que Casa Metro necesita para cocinar
-- [ ] Una fila por compra con **la cantidad** ("Pérez, Juan — 2 menús") y **un casillero por menú**, no uno por persona: con la decisión 1 puede retirar 2 y hay que poder tildar de a uno
-- [ ] Ordenada alfabéticamente por apellido, con la colación `es` ya resuelta en el ítem 40 — reusarla, no reimplementarla
-- [ ] CSS de impresión: sin sidebar, nombre y fecha del evento en el encabezado, y la **hora de emisión** del listado (para saber si es anterior o posterior al corte de las 18)
-- [ ] Marcar visualmente las compras **pendientes de pago** si las hubiera, o excluirlas, según el criterio que defina 43c
+- [x] Vista `/backoffice/evento-menus.html` filtrada por evento
+- [x] **Total de menús** bien visible arriba — es el número que Casa Metro necesita para cocinar
+- [x] Una fila por compra con **la cantidad** ("Pérez, Juan — 2 menús") y **un casillero por menú**, no uno por persona: con la decisión 1 puede retirar 2 y hay que poder tildar de a uno
+- [x] Ordenada alfabéticamente por apellido, con la colación `es` ya resuelta en el ítem 40 — reusarla, no reimplementarla
+- [x] CSS de impresión: sin sidebar, nombre y fecha del evento en el encabezado, y la **hora de emisión** del listado (para saber si es anterior o posterior al corte de las 18)
+- [x] Marcar visualmente las compras **pendientes de pago** si las hubiera, o excluirlas, según el criterio que defina 43c
+
+**✅ Cerrado el 18/8.** `GET /api/admin/eventos/:id/menus` + la vista imprimible, con 31 checks nuevos
+(`menu-cocina.test.js`) y verificación en el navegador con sesión real. Tres cosas que conviene tener
+escritas:
+
+1. **El total de la hoja cuenta PLATOS, no plata.** No sale de `adminEventoStats.menus.cantidad`
+   (que filtra `totalPagado > 0`): se suma de las mismas filas que la hoja imprime, así que el
+   número de arriba no puede divergir de la lista de abajo. Hay un check con un fixture sintético
+   que se pone en rojo si alguien lo "simplifica".
+2. **Los pendientes van advertidos aparte, con nombre**, ni ocultos ni sumados — el criterio que
+   cerró el 43c. La hoja trae su hora de emisión y dice si es anterior o posterior al corte.
+3. ⚠️ **El deploy suma DOS archivos nuevos**: `public/backoffice/evento-menus.html` y
+   `src/utils/orden.js`. El segundo lo requiere `compras.controller.js`, así que un deploy que
+   copie solo los archivos modificados **no arranca**: `Cannot find module '../utils/orden'` corta
+   la cadena de rutas y el server no levanta. Verificado a propósito, no supuesto.
 
 ---
 

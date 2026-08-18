@@ -7,6 +7,7 @@ const qrService = require('../services/qr.service');
 const { procesarPagoAprobado, revertirCompraAprobada } = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
 const { calcularTotalCompra, reservarCupon, validarCupon } = require('../services/precios.service');
+const { compararPorApellido } = require('../utils/orden');
 // El módulo entero, además de los destructurados: las funciones del tope de menús
 // se llaman como `precios.x()` para que los tests puedan monkey-patchear el
 // pre-chequeo y simular una lectura vieja (patrón sin jest del proyecto, el mismo
@@ -464,12 +465,11 @@ async function adminListar(req, res) {
         select: { id: true, apellido: true, nombre: true },
       });
 
+      // El comparador vive en utils/orden.js porque la lista de cocina (ítem 44)
+      // tiene que ordenar exactamente igual: es el mismo operador buscando el
+      // mismo apellido en dos pantallas distintas.
       claves.sort((a, b) => {
-        const va = `${a.apellido || ''} ${a.nombre || ''}`;
-        const vb = `${b.apellido || ''} ${b.nombre || ''}`;
-        // sensitivity 'base' → ignora mayúsculas y acentos, que es como busca
-        // una persona. Desempate por id para que el orden sea estable.
-        const cmp = va.localeCompare(vb, 'es', { sensitivity: 'base' }) || (a.id - b.id);
+        const cmp = compararPorApellido(a, b);
         return dirOrden === 'asc' ? cmp : -cmp;
       });
 

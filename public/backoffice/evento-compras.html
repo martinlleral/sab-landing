@@ -69,6 +69,12 @@
                 <div id="evento-fecha" style="color:#888; font-size:0.9rem; margin-top:4px;"></div>
                 <div id="evento-precio" style="color:#e63946; font-size:1rem; font-weight:600; margin-top:4px;"></div>
               </div>
+              <!-- Lista de la cocina (ítem 44). Aparece solo si este evento tiene
+                   menús vendidos o esperando pago: es la hoja que se imprime y se
+                   tilda en la puerta, y no existe si nadie compró menú. -->
+              <a id="btn-lista-menus" href="#" class="btn-bo-secondary" style="display:none; color:#c4384b; border-color:#c4384b;">
+                <i class="bi bi-printer me-1"></i> Lista para la cocina
+              </a>
               <a id="btn-editar-evento" href="#" class="btn-bo-secondary">
                 <i class="bi bi-pencil me-1"></i> Editar evento
               </a>
@@ -340,8 +346,13 @@
       const menusPend = stats.menus?.pendientes || 0;
       const menusCard = document.getElementById('stat-menus-card');
       const recDesc = document.getElementById('stat-recaudado-desc');
+      const btnLista = document.getElementById('btn-lista-menus');
       if (menusCant > 0 || menusPend > 0) {
         if (menusCard) menusCard.style.display = '';
+        if (btnLista) {
+          btnLista.href = `/backoffice/evento-menus.html?id=${eventoId}`;
+          btnLista.style.display = '';
+        }
         document.getElementById('stat-menus').textContent = menusCant;
         document.getElementById('stat-menus-desc').textContent =
           `${boPrecio(menusTotal)} para la sede, no del SAB`
@@ -353,6 +364,7 @@
         }
       } else {
         if (menusCard) menusCard.style.display = 'none';
+        if (btnLista) btnLista.style.display = 'none';
         if (recDesc) recDesc.textContent = 'Solo compras aprobadas con pago real';
       }
 
