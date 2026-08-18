@@ -1150,6 +1150,61 @@ Este arranca en 46 porque los números 42-45 estaban reservados para los ítems 
 
 ---
 
+## 🆕 Hallazgo del 18/8 — repo (detectado al sanear los archivos sin trackear)
+
+### 47. 🔤 Las fuentes se piden a Google en cada visita — **mejora, no defecto** · 1-2 h
+
+**Archivos:** `public/assets/css/app.css` (línea 4) · **Severidad:** baja (funciona bien; se gana privacidad y tiempo de render)
+
+**Cómo apareció.** Saneando el repo después del code review del núcleo apareció un
+`public/assets/fonts/` **sin trackear** con Open Sans y Oswald ya descargadas (120 KB, `.woff2` +
+sus licencias OFL), del 6/8. Ningún CSS, HTML ni JS las referenciaba: alguien empezó a
+auto-hospedarlas y quedó a mitad. El directorio se borró —tenerlo suelto hacía parecer que el sitio
+ya lo hacía— y el trabajo real queda acá, anotado, que es donde se puede decidir.
+
+**Cómo entran hoy, que es la parte que importa.** No hay ningún `<link>` en el HTML: las fuentes se
+piden desde un **`@import` en la línea 4 de `app.css`**. Es la peor de las formas de cargarlas, y es
+un dato que conviene tener escrito antes de estimar:
+
+```css
+@import url('https://fonts.googleapis.com/css2?family=Oswald:...&family=Open+Sans:...&display=swap');
+```
+
+Un `@import` dentro de un CSS **serializa** dos viajes: el navegador baja `app.css`, recién ahí
+descubre el import, y sale a buscar el CSS de Google — y después, las fuentes. Con un `<link>` en el
+`<head>` los dos arrancan juntos. O sea que auto-hospedarlas no ahorra una request: **desarma una
+cadena de tres saltos en el camino crítico del render.**
+
+**Qué se gana.**
+
+- **Velocidad.** Se cae la cadena serializada de arriba. Encima Cloudflare ya cachea `/assets/*`, así
+  que auto-hospedadas viajan por el mismo CDN que el resto del sitio.
+- **Privacidad.** Cada visitante le informa su IP y su user-agent a un tercero para leer la página de
+  una cooperativa. Es evitable, y es coherente con el resto del proyecto, que ya trata los datos de
+  los compradores con criterio de Ley 25.326.
+- **Robustez.** Un tercero menos entre el visitante y la portada.
+
+**Alcance real: solo la landing.** El backoffice **no** pide fuentes a Google (se verificó con
+`git grep`), así que el cambio es de un archivo.
+
+**Qué cuesta.** Bajar los `.woff2` de nuevo (dos minutos), sumar los `@font-face` con
+`font-display: swap`, precargar la de titulares, sacar el `<link>` a Google y **comparar el render
+antes y después** — las métricas de las dos familias no son idénticas a sus fallback, y un cambio
+mal hecho se nota en los titulares. Las licencias OFL permiten el auto-hospedaje: hay que conservar
+el archivo de licencia junto a las fuentes.
+
+- [ ] Bajar `opensans-latin.woff2` y `oswald-latin.woff2` (subset latin) + sus `OFL.txt` a `public/assets/fonts/`
+- [ ] `@font-face` en `app.css` con `font-display: swap`, y `<link rel="preload">` para la de titulares
+- [ ] Borrar el `@import` de `app.css:4` (es el único lugar; el backoffice no lo tiene)
+- [ ] Verificar en el navegador que no queda **ninguna** request a dominios de Google, y comparar el render contra el actual (titulares sobre todo)
+- [ ] Purgar la caché de Cloudflare de `/assets/*` al deployar, o esperar las 4 h de TTL
+
+> **No entra en el Sprint 7** — no tiene nada que ver con el menú y el sprint tiene fecha dura.
+> Es candidato natural para un hueco entre sprints: no toca la base, no toca la plata y se revierte
+> con un `git revert`.
+
+---
+
 ### 🟢 P3 — Sprint 2 (marketing orgánico post-campaña)
 
 #### 36. Google Knowledge Panel (recuadro lateral con foto + próximo evento)
