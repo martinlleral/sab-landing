@@ -1035,6 +1035,32 @@ Notas de implementación, por si hay que volver:
 > clickeable parecía clickeable. Los dos apagados, en la misma línea que el tratamiento "AGOTADO"
 > de las cards de evento, que desatura en vez de resaltar.
 
+> ### 🔍 Code review del núcleo (43a + 43b), 17/8
+>
+> Con el 43b cerrado, los tres archivos que tocan la plata quedaron quietos por primera vez y se
+> revisó el bloque entero antes de que el resto se apoye encima. **Cuatro hallazgos: tres fixeados
+> con test, uno documentado sin código.**
+>
+> - 🟠 **El rechazo por "menús agotados" dejaba el checkout sin salida.** El error no traía el cupo,
+>   y el front solo se recupera cuando ese dato viene en la respuesta: quien tenía el modal abierto
+>   desde antes de que se agotaran veía el cartel *"podés seguir con las entradas solas"* con el
+>   selector todavía en "2 menús", y cada reintento moría igual. El camino gemelo sí se
+>   autocorregía — dos formas de llegar al mismo estado con comportamientos distintos.
+> - 🟠 **Un `cantidadMenus` no numérico creaba la compra sin menús y sin error.** `parseInt('dos')`
+>   da `NaN`, y un `|| 0` lo convertía en 0 **antes** de que la validación lo viera: HTTP 200 en vez
+>   del 400 que el propio código documenta. Los negativos sí se rechazaban, así que la regla valía
+>   distinto según por dónde entrara el número. No hay pérdida de plata, pero produce justo el
+>   estado caro de este sprint: **una compra sin menú no se arregla después**.
+> - ⚪ `colspan` desalineado en la fila "Cargando..." de la comparativa de eventos.
+> - 📋 **Sin fix, porque no es código:** el mail promete una lista que todavía no existe. Ver el
+>   ítem 44, que por esto dejó de ser recortable.
+>
+> **Lo que el review verificó y está sano:** la regla del cupón sigue blindada por composición (el
+> 43b no abrió ninguna vía nueva) · el invariante de la preferencia de pago (suma de ítems ===
+> total de la compra, que es contra lo que cruza el webhook) · las 6 restas de recaudación, que
+> leen el precio congelado de la compra y no el global · la atomicidad de la reserva del tope · las
+> 3 whitelists, sin una cuarta escondida.
+
 #### 43c. Corte a las 18:00 del día del evento · 2-3 h · depende de 43a
 
 **Archivos:** helper estilo `src/services/tandas.service.js` · `src/controllers/compras.controller.js` · `public/assets/js/app.js` · `home-cms.html` · **Sesión:** S3
@@ -1073,6 +1099,8 @@ El operador lo dijo así: *"no tengo la posibilidad de bajar un Excel de toda la
 Es el *"exportar un PDF de la gente que compró el menú"*. Lista **operativa**, distinta del 42: va a la cocina y a la puerta, no a la administración. Sin emails ni teléfonos.
 
 **Subió de prioridad.** Por la decisión de producto del 16/8 no hay segundo QR: **este documento ES el control de entrega**. En la puerta se tilda esta hoja impresa, y es lo que se lleva Casa Metro.
+
+> **⚠️ Y dejó de ser recortable (hallazgo del code review del núcleo, 17/8).** El mail de confirmación del 43a ya dice *"acercate al mostrador y dá tu nombre — ya estás en la lista"*, y esa lista es **esta**. El mail sale con cada compra aprobada apenas se deployee el 43a, así que si este ítem se cayera no quedaría una funcionalidad faltante: quedaría **una promesa escrita a gente que pagó**. Sigue siendo diferible respecto del día de la venta (la cocina lo imprime el día del evento), pero **antes del evento no es negociable** — y si por lo que sea no llegara, la salida barata es sacarle esa frase al mail **antes** del deploy, no después.
 
 **Sin librería de PDF:** vista HTML con `@media print` → *Imprimir → Guardar como PDF*. El navegador ya trae el motor, y encima le sirve impresa, que es exactamente lo que va a usar.
 
