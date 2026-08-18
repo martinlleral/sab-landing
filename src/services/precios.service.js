@@ -564,6 +564,7 @@ async function reservarMenus(tx, eventoId, topeMenus) {
 
 module.exports = {
   TIPO_ENTRADA,
+  OFFSET_ART_HORAS,
   TIPO_CUPON,
   ESTADOS_MENU_OCUPADO,
   normalizarCodigo,

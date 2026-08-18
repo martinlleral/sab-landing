@@ -1083,13 +1083,58 @@ El operador lo dijo así: *"no tengo la posibilidad de bajar un Excel de toda la
 
 **CSV, no `.xlsx`.** Sumar una librería de planillas trae superficie de CVEs a un proyecto que ya limpió 6 borrando un import. **CSV con BOM UTF-8** abre en Excel de doble clic con los acentos bien. Si hiciera falta `.xlsx` de verdad, se trata como alcance aparte.
 
-- [ ] `GET /api/admin/compras/export` con los mismos filtros que el listado (evento, validación, búsqueda)
-- [ ] BOM UTF-8 al inicio + `Content-Disposition: attachment` con nombre fechado
-- [ ] Columnas: nombre, apellido, email, teléfono, cantidad, tipo de entrada, **cantidad de menús**, total, estado, fecha, códigos QR
-- [ ] Decidir si incluye devueltas y pendientes (por defecto **solo aprobadas**, con toggle)
-- [ ] Botón en `evento-compras.html` que respete los filtros activos en pantalla
+- [x] `GET /api/admin/compras/export` con los mismos filtros que el listado (evento, validación, búsqueda) — **y también el de estado**, que la ficha no listaba
+- [x] BOM UTF-8 al inicio + `Content-Disposition: attachment` con nombre fechado
+- [x] Columnas: nombre, apellido, email, teléfono, cantidad, tipo de entrada, **cantidad de menús**, total, estado, fecha, códigos QR — **más el desglose de la plata** (precio del menú, total de Casa Metro, total del SAB) y las entradas validadas
+- [x] Decidir si incluye devueltas y pendientes → **por defecto solo aprobadas**, con un switch para sumar el resto, y el filtro elegido a mano en pantalla gana sobre las dos reglas
+- [x] Botón en `evento-compras.html` que respete los filtros activos en pantalla, con un cartel que dice qué va a bajar
 
-> La columna "cantidad de menús" es lo único que depende de 43a. Si esto se hace antes, se deja anotada y se agrega después (5 minutos).
+> La columna "cantidad de menús" era lo único que dependía de 43a — y 43a ya estaba hecha, así que entró en la misma sesión sin quedar anotada.
+
+> ### ✅ 42 COMPLETO (S5, 18/8)
+>
+> **Endpoint** `GET /api/admin/compras/export` ([compras.controller.js](../src/controllers/compras.controller.js)),
+> **serializador** en [`src/utils/csv.js`](../src/utils/csv.js) (nuevo, sin dependencias) y **botón +
+> switch de alcance** en `evento-compras.html`. `npm test` → **19/19 suites**, con
+> `compras-export.test.js` nuevo (**23 checks**), más **14 checks en el navegador** con sesión real.
+>
+> **Lo que el filtro y el listado comparten.** Los dos endpoints arman su `where` con la misma
+> función (`construirFiltroCompras`), así que el CSV no puede traer un conjunto distinto del que la
+> pantalla muestra. Hay un check que lo ata: misma búsqueda → mismos IDs en los dos.
+>
+> **Tres decisiones que no estaban en la ficha:**
+>
+> 1. **Separador `;`, no `,`.** Excel no usa una coma fija: usa el separador de listas del locale, y
+>    en es-AR es `;`. Con comas, un doble clic en un Excel en español mete las 16 columnas dentro de
+>    la columna A — justo el criterio de éxito que se buscaba. Google Sheets detecta el delimitador
+>    solo, así que no se pierde nada del otro lado. Se cambia en una línea de `csv.js` si hiciera falta.
+> 2. **Neutralización de fórmulas (CSV injection).** Nombres, mails y teléfonos los escribe quien
+>    compra, en un formulario público. Un campo que arranca con `=`, `+`, `-` o `@` es una fórmula
+>    para Excel, no un texto. Se prefijan con `'`, que la planilla lee como "texto literal" y no
+>    muestra en la celda.
+> 3. **`eventoId` obligatorio.** Sin él, el endpoint sería un volcado de la PII de toda la base en un
+>    clic (Ley 25.326). El único punto de entrada es el botón de la pantalla de un evento.
+>
+> **La plata, desglosada.** `totalPagado` incluye el menú, y el menú es de Casa Metro. Un CSV con
+> solo el total repetiría en la planilla de la administración el error que S1b cerró en el
+> backoffice. Van las tres columnas, con la misma resta de los reportes, y el precio sale de
+> `menuUnitario` congelado en la compra. Verificado a mano: la suma de la columna cuadra con la card
+> "Recaudado" de la pantalla ($276.000 = $180.000 del SAB + $96.000 de la sede en el fixture de QA).
+>
+> **Verificado por mutación:** 6 roturas deliberadas (volver a paginar · sacar la neutralización de
+> fórmulas · offset de timezone a 0 · sacar el default de aprobadas · dejar que el default pise el
+> filtro de pantalla · sacar las guardas de PII) tumban 13, 2, 1, 2, 1 y 1 checks respectivamente.
+>
+> **4 defectos visuales corregidos mirando el render**, que ningún check veía: el botón en verde
+> competía con el "$276.000 RECAUDADO" de la misma pantalla y con el rojo de "Limpiar pendientes"
+> (el sistema ya reserva el color para lo peligroso y para la marca) · el cartel que resuelve toda la
+> ambigüedad del feature estaba en `#666`, el gris de lo desactivado, y era lo más apagado de la fila
+> · quedaba pegado al label del switch, leyéndose como una sola frase · el nombre del archivo decía
+> "aprobada" en singular, como si trajera una sola fila.
+>
+> **Un caso que se resolvió antes del click:** con la tabla vacía el botón queda apagado y su tooltip
+> dice por qué, en vez de dejar bajar un archivo con solo encabezados o disparar un aviso rojo por
+> algo que no es un error. El chequeo del servidor queda igual como red.
 
 ---
 

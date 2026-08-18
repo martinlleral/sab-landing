@@ -143,6 +143,9 @@
               <button class="btn-bo-secondary" onclick="loadCompras(currentPage); refreshStats();" title="Recargar">
                 <i class="bi bi-arrow-clockwise"></i>
               </button>
+              <button id="btn-export" class="btn-bo-secondary" title="Descargar el listado en una planilla, con los filtros que tenés puestos">
+                <i class="bi bi-file-earmark-spreadsheet me-1"></i> Bajar planilla
+              </button>
               <button class="btn-bo-secondary" style="color:#fc8181; border-color:#fc8181;" onclick="eliminarPendientes()" title="Eliminar todas las compras pendientes">
                 <i class="bi bi-trash me-1"></i> Limpiar pendientes
               </button>
@@ -180,6 +183,20 @@
                      el select afirme un orden que ya no está aplicado. -->
                 <option value="" hidden>Personalizado</option>
               </select>
+            </div>
+            <!-- Alcance de la planilla. Va acá, con los filtros, porque es un
+                 filtro más: define QUÉ filas se bajan. El texto de al lado dice
+                 en castellano lo que va a salir, que es lo único que despeja la
+                 duda entre "lo que veo" y "lo que baja". -->
+            <div style="display:flex; gap:12px; align-items:center; padding-left:12px; border-left:1px solid #2a2a2a;">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="export-todos-estados">
+                <label class="form-check-label bo-switch-label" for="export-todos-estados"
+                       style="font-size:0.8rem;">Bajar también las no aprobadas</label>
+              </div>
+              <span id="export-alcance" style="font-size:0.8rem; color:#a0aec0; white-space:nowrap;">
+                <i class="bi bi-file-earmark-spreadsheet"></i> <span id="export-alcance-texto"></span>
+              </span>
             </div>
           </div>
 
@@ -279,6 +296,14 @@
         clearTimeout(busquedaTimer);
         busquedaTimer = setTimeout(() => loadCompras(1), 350);
       });
+      // Descarga de la planilla. Los tres controles que cambian el alcance
+      // refrescan el cartelito, para que nunca haya que adivinar qué va a bajar.
+      document.getElementById('btn-export').addEventListener('click', exportarCSV);
+      document.getElementById('export-todos-estados').addEventListener('change', pintarAlcanceExport);
+      document.getElementById('filtro-estado').addEventListener('change', pintarAlcanceExport);
+      document.getElementById('filtro-validacion').addEventListener('change', pintarAlcanceExport);
+      document.getElementById('input-busqueda').addEventListener('input', pintarAlcanceExport);
+      pintarAlcanceExport();
     });
 
     async function loadEvento() {
@@ -423,6 +448,7 @@
         const etiqueta = filtro ? ` — ${ETIQUETAS[filtro]}` : '';
         const sufijoBusqueda = q ? ` · "${q}"` : '';
         document.getElementById('card-total-compras').textContent = `${etiqueta}${sufijoBusqueda} (${data.total})`;
+        pintarAlcanceExport(data.total);
 
         renderConEstadoOrden();
         // Cuando hay búsqueda activa el backend devuelve todo sin paginar; ocultamos
@@ -457,6 +483,136 @@
       select.value = enElSelect ? sortBy : '';
 
       renderTabla(todasLasCompras);
+    }
+
+    // ============================================
+    // DESCARGA A PLANILLA (ítem 42)
+    // ============================================
+
+    /**
+     * Query de la descarga. Sale de los MISMOS controles que la tabla: lo que
+     * el operador ve filtrado es lo que se baja. Lo único propio del export es
+     * `estados`, porque una planilla de administración por defecto quiere las
+     * compras que se cobraron, no las que se abandonaron a mitad del checkout.
+     */
+    function paramsExport() {
+      const filtro = document.getElementById('filtro-estado').value;
+      const validacion = document.getElementById('filtro-validacion').value;
+      const q = document.getElementById('input-busqueda').value.trim();
+      const todos = document.getElementById('export-todos-estados').checked;
+      const p = new URLSearchParams({ eventoId });
+      if (filtro) p.set('mpEstado', filtro);
+      if (validacion) p.set('validacion', validacion);
+      if (q) p.set('q', q);
+      if (todos) p.set('estados', 'todas');
+      return { p, filtro, validacion, q, todos };
+    }
+
+    /**
+     * Dice en castellano qué filas va a bajar el botón.
+     *
+     * Existe por una ambigüedad real: la planilla por defecto trae solo las
+     * aprobadas, pero el select de la pantalla arranca en "Todos". Sin este
+     * cartel, el operador que ve 33 compras y baja 24 no tiene forma de saber si
+     * el archivo salió incompleto o si el filtro hizo lo que tenía que hacer.
+     * El backend resuelve el choque dándole prioridad al filtro elegido a mano;
+     * acá se dice cuál de las dos reglas está mandando.
+     */
+    // `filasEnPantalla` llega desde loadCompras; en los cambios de control que no
+    // recargan la tabla se conserva el último valor conocido.
+    let filasEnPantalla = null;
+
+    function pintarAlcanceExport(total) {
+      if (total !== undefined) filasEnPantalla = total;
+      const { filtro, validacion, q, todos } = paramsExport();
+      const ETIQUETAS = { approved: 'aprobadas', pending: 'pendientes', rejected: 'rechazadas', cancelled: 'canceladas' };
+      const chk = document.getElementById('export-todos-estados');
+      // Con un estado elegido a mano, el switch no cambia nada: el filtro de
+      // pantalla manda. Se apaga y se aclara, en vez de mentir prendido.
+      chk.disabled = !!filtro;
+      chk.parentElement.style.opacity = filtro ? '0.45' : '1';
+
+      let alcance;
+      if (filtro) alcance = ETIQUETAS[filtro] || filtro;
+      else if (todos) alcance = 'todas, devoluciones incluidas';
+      else alcance = 'solo aprobadas';
+
+      const extras = [];
+      if (validacion) extras.push(validacion === 'pendiente' ? 'falta validar' : 'validadas');
+      if (q) extras.push(`"${q}"`);
+
+      document.getElementById('export-alcance-texto').textContent =
+        `Baja: ${alcance}${extras.length ? ' · ' + extras.join(' · ') : ''}`;
+
+      // Con la tabla vacía no hay planilla posible: se apaga el botón en vez de
+      // dejar que el operador la pida y reciba un aviso. El chequeo del lado del
+      // servidor queda igual como red —la tabla puede quedar vieja, y el export
+      // puede traer 0 filas aun con la pantalla llena (pantalla en "Todos" sin
+      // ninguna aprobada)—, pero el caso común se resuelve antes del click.
+      // El estilo va inline porque `.btn-bo-secondary` no tiene regla :disabled
+      // en bo.css: sin esto, el botón apagado se vería exactamente igual que el
+      // encendido y solo dejaría de responder, que es peor que no apagarlo.
+      const btn = document.getElementById('btn-export');
+      const vacia = filasEnPantalla === 0;
+      btn.disabled = vacia;
+      btn.style.opacity = vacia ? '0.4' : '';
+      btn.style.cursor = vacia ? 'not-allowed' : '';
+      btn.title = vacia
+        ? 'No hay compras con este filtro, así que no hay nada para bajar'
+        : 'Descargar el listado en una planilla, con los filtros que tenés puestos';
+    }
+
+    /**
+     * Baja el CSV.
+     *
+     * No usa `boFetch` porque ese helper hace `res.json()` y la respuesta es un
+     * archivo. Se pide como blob y se dispara la descarga con un <a download>
+     * temporal — así el error se puede mostrar en el alert de la página en vez
+     * de dejar al navegador renderizando un JSON de error donde debería haber
+     * una planilla.
+     */
+    async function exportarCSV() {
+      const btn = document.getElementById('btn-export');
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Preparando...';
+      try {
+        const { p } = paramsExport();
+        const res = await fetch(`/api/admin/compras/export?${p}`, { credentials: 'include' });
+        if (res.status === 401) { window.location.href = '/backoffice/login.html'; return; }
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        // Sin filas no se baja nada: un archivo con solo los encabezados parece
+        // un error del sistema, cuando en realidad el filtro no dejó a nadie.
+        const filas = parseInt(res.headers.get('X-Filas-Export') || '0', 10);
+        if (!filas) {
+          boAlert('No hay compras que cumplan ese filtro, así que no hay planilla para bajar.', 'error');
+          return;
+        }
+
+        const cd = res.headers.get('Content-Disposition') || '';
+        const nombre = (cd.match(/filename="([^"]+)"/) || [])[1] || 'compradores.csv';
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nombre;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // Sin revoke, el blob queda en memoria hasta recargar la página.
+        URL.revokeObjectURL(url);
+
+        boAlert(`Planilla lista: ${filas} ${filas === 1 ? 'compra' : 'compras'} en ${nombre}`, 'success');
+      } catch (err) {
+        boAlert(`No se pudo bajar la planilla: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
     }
 
     // Pildora de validación: cuenta entradas validadas vs total. Solo aplica

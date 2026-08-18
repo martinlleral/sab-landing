@@ -6,8 +6,9 @@ const brevoService = require('../services/brevo.service');
 const qrService = require('../services/qr.service');
 const { procesarPagoAprobado, revertirCompraAprobada } = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
-const { calcularTotalCompra, reservarCupon, validarCupon } = require('../services/precios.service');
+const { calcularTotalCompra, reservarCupon, validarCupon, OFFSET_ART_HORAS } = require('../services/precios.service');
 const { compararPorApellido } = require('../utils/orden');
+const { serializarCSV, slugArchivo } = require('../utils/csv');
 // El módulo entero, además de los destructurados: las funciones del tope de menús
 // se llaman como `precios.x()` para que los tests puedan monkey-patchear el
 // pre-chequeo y simular una lectura vieja (patrón sin jest del proyecto, el mismo
@@ -365,48 +366,78 @@ async function checkAndProcess(req, res) {
   }
 }
 
+/**
+ * Estados de MP que el listado admite como filtro explícito.
+ *
+ * `refunded` no está: las devoluciones se ven bajo "Todos" pero no tienen su
+ * propia opción en el select del backoffice. El export lo respeta igual (no
+ * inventa un filtro que la pantalla no ofrece) y las incluye por la vía del
+ * toggle "incluir todos los estados".
+ */
+const ESTADOS_VALIDOS = ['approved', 'pending', 'rejected', 'cancelled'];
+
+/**
+ * Traduce los query params de filtrado al `where` de Prisma.
+ *
+ * Vive como función propia porque la usan DOS endpoints que tienen que devolver
+ * exactamente el mismo conjunto de compras: el listado paginado que el operador
+ * ve en pantalla y el export que se baja desde esa misma pantalla. Si cada uno
+ * armara su filtro, el día que uno cambie el CSV va a traer un conjunto distinto
+ * del que la pantalla muestra — y el operador no tiene forma de saber cuál de
+ * los dos miente. Es el mismo motivo por el que el orden alfabético se extrajo a
+ * `utils/orden.js` en el ítem 44: un criterio compartido se escribe una vez.
+ *
+ * @param {object} query - `req.query`
+ * @returns {{where: object, q: string}} el filtro y el término de búsqueda ya
+ *   normalizado (el listado lo necesita aparte para decidir si pagina)
+ */
+function construirFiltroCompras(query) {
+  const where = {};
+  if (query.eventoId) where.eventoId = parseInt(query.eventoId);
+  // Filtro server-side por estado MP. Antes el filtro era client-side sobre la
+  // página de 20 visible, lo que daba conteos incoherentes ("33 aprobados en
+  // total" vs "10 visibles cuando filtro Aprobados en página 1"). Ahora la
+  // BD filtra y el total devuelto refleja el filtro.
+  if (query.mpEstado && ESTADOS_VALIDOS.includes(query.mpEstado)) {
+    where.mpEstado = query.mpEstado;
+  }
+
+  // Búsqueda libre por nombre/apellido/email del comprador. SQLite + Prisma
+  // usa LIKE, case-insensitive para ASCII por default. Para acentos exactos,
+  // un "Gomez" no matchea "Gómez" — mantenemos la solución simple porque el
+  // caso típico es búsqueda parcial de apellido.
+  const q = (query.q || '').trim();
+  if (q) {
+    where.OR = [
+      { nombre: { contains: q } },
+      { apellido: { contains: q } },
+      { email: { contains: q } },
+    ];
+  }
+
+  // Filtro de validación de entradas. Solo tiene sentido sobre compras
+  // approved (las únicas que tienen QR generado), así que forzamos approved
+  // si el filtro está activo aunque no venga mpEstado explícito.
+  const validacion = query.validacion;
+  if (validacion === 'pendiente') {
+    where.mpEstado = 'approved';
+    where.entradas = { some: { validada: false } };
+  } else if (validacion === 'validada') {
+    where.mpEstado = 'approved';
+    // every: true requiere también `some: {}` para excluir compras sin
+    // entradas generadas (every aplica vacuously sobre conjuntos vacíos).
+    where.entradas = { some: {}, every: { validada: true } };
+  }
+
+  return { where, q };
+}
+
 async function adminListar(req, res) {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
-    const where = {};
-    if (req.query.eventoId) where.eventoId = parseInt(req.query.eventoId);
-    // Filtro server-side por estado MP. Antes el filtro era client-side sobre la
-    // página de 20 visible, lo que daba conteos incoherentes ("33 aprobados en
-    // total" vs "10 visibles cuando filtro Aprobados en página 1"). Ahora la
-    // BD filtra y el total devuelto refleja el filtro.
-    const ESTADOS_VALIDOS = ['approved', 'pending', 'rejected', 'cancelled'];
-    if (req.query.mpEstado && ESTADOS_VALIDOS.includes(req.query.mpEstado)) {
-      where.mpEstado = req.query.mpEstado;
-    }
-
-    // Búsqueda libre por nombre/apellido/email del comprador. SQLite + Prisma
-    // usa LIKE, case-insensitive para ASCII por default. Para acentos exactos,
-    // un "Gomez" no matchea "Gómez" — mantenemos la solución simple porque el
-    // caso típico es búsqueda parcial de apellido.
-    const q = (req.query.q || '').trim();
-    if (q) {
-      where.OR = [
-        { nombre: { contains: q } },
-        { apellido: { contains: q } },
-        { email: { contains: q } },
-      ];
-    }
-
-    // Filtro de validación de entradas. Solo tiene sentido sobre compras
-    // approved (las únicas que tienen QR generado), así que forzamos approved
-    // si el filtro está activo aunque no venga mpEstado explícito.
-    const validacion = req.query.validacion;
-    if (validacion === 'pendiente') {
-      where.mpEstado = 'approved';
-      where.entradas = { some: { validada: false } };
-    } else if (validacion === 'validada') {
-      where.mpEstado = 'approved';
-      // every: true requiere también `some: {}` para excluir compras sin
-      // entradas generadas (every aplica vacuously sobre conjuntos vacíos).
-      where.entradas = { some: {}, every: { validada: true } };
-    }
+    const { where, q } = construirFiltroCompras(req.query);
 
     // Orden server-side de las 5 columnas ordenables de la tabla del backoffice.
     // Whitelist explícita: el nombre de columna viene del cliente y no puede
@@ -505,6 +536,217 @@ async function adminListar(req, res) {
     });
   } catch (err) {
     console.error('Error en adminListar compras:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+/**
+ * ── Export CSV de compradores (ítem 42, S5) ──
+ *
+ * El operador lo pidió así: *"no tengo la posibilidad de bajar un Excel de toda
+ * la lista de compradores"*. Figura como P1 desde la auditoría del 4/4 y estaba
+ * anunciado en `docs/FAQS.md` como pendiente del Sprint 2: es lo que se venía
+ * debiendo, no una novedad.
+ *
+ * ⚠️ ENDPOINT DEDICADO, NO EL PAGINADO. `adminListar` devuelve 20 filas por
+ * página y topea en 200 cuando hay búsqueda. Un export que reusara eso bajaría
+ * un archivo que PARECE completo y no lo está — el peor resultado posible,
+ * porque nada en la planilla avisa que faltan filas. Es el mismo patrón que el
+ * proyecto ya usa para las agregaciones del dashboard.
+ *
+ * QUÉ FILAS TRAE. Las mismas que la pantalla, vía `construirFiltroCompras`:
+ * evento, estado, validación y búsqueda salen del mismo código, así que el CSV
+ * no puede divergir del listado. Encima de eso, UNA regla propia del export:
+ *
+ *   - por defecto trae **solo aprobadas** (`estados` ausente), porque a la
+ *     administración le sirve quién pagó, no quién abandonó el checkout;
+ *   - `estados=todas` trae todo, devoluciones y pendientes incluidas;
+ *   - y si el operador eligió un estado explícito en pantalla, ese GANA sobre
+ *     las dos reglas anteriores. Un filtro elegido a mano es una decisión; el
+ *     default solo llena el vacío cuando no hubo ninguna.
+ *
+ * EN QUÉ ORDEN. Siempre alfabético por apellido, con `compararPorApellido` —el
+ * mismo criterio de la pantalla y de la hoja de la cocina, escrito una sola vez
+ * en `utils/orden.js`—. No respeta el orden de la pantalla a propósito: una
+ * planilla se reordena con un clic en Excel, y salir siempre igual hace que dos
+ * descargas del mismo evento se puedan comparar renglón contra renglón.
+ *
+ * LA PLATA, DESGLOSADA. `totalPagado` incluye el menú, y la plata del menú es de
+ * Casa Metro, no del SAB (eje E3 del sprint). Un CSV que mostrara solo el total
+ * repetiría en la planilla de la administración el mismo error que S1a encontró
+ * en el backoffice: leer la recaudación de la sede como recaudación propia. Por
+ * eso van las tres columnas —menú, SAB y total— con la misma resta que usan los
+ * reportes (`recaudadoSab = total - menús`), y por eso el precio del menú sale
+ * de `menuUnitario`, congelado en la compra: leerlo del precio global de hoy
+ * daría números viejos mal.
+ *
+ * PII. El archivo lleva mail y teléfono de gente real (Ley 25.326) y termina en
+ * la carpeta de Descargas de quien lo baja. Por eso `eventoId` es obligatorio:
+ * sin él, este endpoint sería un volcado de la base entera en un clic, y nadie
+ * pidió eso. Si algún día hace falta el consolidado, se abre a propósito.
+ */
+
+/**
+ * Fecha y hora en horario de Argentina, para leer dentro de la planilla.
+ *
+ * El servidor corre en UTC (contenedor sin `tzdata`), así que una compra de las
+ * 22:30 del sábado se guarda como 01:30 del domingo. Escribir eso en una
+ * planilla de administración corre las compras de la noche al día siguiente.
+ *
+ * Se resuelve con la aritmética que el proyecto ya usa (`OFFSET_ART_HORAS` en
+ * `precios.service.js`: UTC−3 fijo, Argentina no tiene DST desde 2009) y NO con
+ * `Intl` + nombre de zona IANA, que depende de que el contenedor traiga la base
+ * de zonas horarias — algo que no se puede verificar desde acá y que fallaría en
+ * producción, en silencio y con la fecha corrida.
+ *
+ * @param {Date} fecha
+ * @returns {string} "DD/MM/AAAA HH:MM"
+ */
+function fechaHoraArgentina(fecha) {
+  if (!fecha) return '';
+  const d = new Date(fecha);
+  if (Number.isNaN(d.getTime())) return '';
+  const art = new Date(d.getTime() - OFFSET_ART_HORAS * 60 * 60 * 1000);
+  const dd = String(art.getUTCDate()).padStart(2, '0');
+  const mm = String(art.getUTCMonth() + 1).padStart(2, '0');
+  const aaaa = art.getUTCFullYear();
+  const hh = String(art.getUTCHours()).padStart(2, '0');
+  const mi = String(art.getUTCMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${aaaa} ${hh}:${mi}`;
+}
+
+/** Estados de MP en castellano, para que la planilla no diga "refunded". */
+const ESTADO_LEGIBLE = {
+  approved: 'Aprobada',
+  pending: 'Pendiente',
+  rejected: 'Rechazada',
+  cancelled: 'Cancelada',
+  refunded: 'Devuelta',
+  charged_back: 'Contracargo',
+};
+
+/** Tipos de entrada en castellano. `aporte` es "A la Gorra" de cara al público. */
+const TIPO_ENTRADA_LEGIBLE = {
+  base: 'Base',
+  aporte: 'A la Gorra',
+};
+
+/**
+ * Los mismos estados, en plural: el nombre del archivo habla del CONJUNTO de
+ * filas, no de una. `ESTADO_LEGIBLE` no sirve acá — "compradores-…-aprobada.csv"
+ * se lee como si el archivo tuviera una sola.
+ */
+const ALCANCE_ARCHIVO = {
+  approved: 'aprobadas',
+  pending: 'pendientes',
+  rejected: 'rechazadas',
+  cancelled: 'canceladas',
+  refunded: 'devueltas',
+};
+
+const COLUMNAS_EXPORT = [
+  'ID',
+  'Apellido',
+  'Nombre',
+  'Email',
+  'Teléfono',
+  'Entradas',
+  'Tipo de entrada',
+  'Menús',
+  'Precio unitario menú',
+  'Total menús (Casa Metro)',
+  'Total SAB',
+  'Total pagado',
+  'Estado',
+  'Entradas validadas',
+  'Fecha de compra',
+  'Códigos QR',
+];
+
+async function adminExportar(req, res) {
+  try {
+    const eventoId = parseInt(req.query.eventoId);
+    if (!eventoId) return res.status(400).json({ error: 'Se requiere eventoId' });
+
+    const evento = await prisma.evento.findUnique({
+      where: { id: eventoId },
+      select: { id: true, nombre: true, fecha: true },
+    });
+    if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    const { where, q } = construirFiltroCompras(req.query);
+    // Cinturón: `construirFiltroCompras` ya puso el eventoId, pero el export no
+    // puede permitirse que un cambio futuro allá lo deje sin filtrar y baje la
+    // base entera. Lo reafirma acá, donde está la regla de PII.
+    where.eventoId = eventoId;
+
+    // El default (solo aprobadas) se aplica únicamente si nadie decidió otra
+    // cosa: un `mpEstado` explícito o el filtro de validación ya escribieron
+    // `where.mpEstado`, y esa decisión manda sobre el default.
+    const incluirTodos = req.query.estados === 'todas';
+    if (!where.mpEstado && !incluirTodos) where.mpEstado = 'approved';
+
+    const compras = await prisma.compra.findMany({
+      where,
+      select: {
+        id: true, nombre: true, apellido: true, email: true, telefono: true,
+        cantidadEntradas: true, tipoEntrada: true,
+        cantidadMenus: true, menuUnitario: true, totalPagado: true,
+        mpEstado: true, createdAt: true,
+        entradas: { select: { codigoQR: true, validada: true }, orderBy: { id: 'asc' } },
+      },
+    });
+
+    compras.sort(compararPorApellido);
+
+    const filas = compras.map((c) => {
+      const menus = c.cantidadMenus || 0;
+      const totalMenus = menus * (c.menuUnitario || 0);
+      const validadas = c.entradas.filter((e) => e.validada).length;
+      return [
+        c.id,
+        c.apellido,
+        c.nombre,
+        c.email,
+        c.telefono,
+        c.cantidadEntradas,
+        TIPO_ENTRADA_LEGIBLE[c.tipoEntrada] || c.tipoEntrada,
+        menus,
+        c.menuUnitario || 0,
+        totalMenus,
+        (c.totalPagado || 0) - totalMenus,
+        c.totalPagado || 0,
+        ESTADO_LEGIBLE[c.mpEstado] || c.mpEstado,
+        `${validadas}/${c.entradas.length}`,
+        fechaHoraArgentina(c.createdAt),
+        // Espacio como separador: los códigos son UUID (sin espacios), así que
+        // la celda se puede volver a partir si hace falta, y ningún separador
+        // de planilla se confunde.
+        c.entradas.map((e) => e.codigoQR).join(' '),
+      ];
+    });
+
+    // El nombre del archivo dice QUÉ trae. Sin eso, dos descargas del mismo
+    // evento con filtros distintos quedan en Descargas como "compradores.csv" y
+    // "compradores (1).csv", y no hay forma de saber cuál era cuál.
+    const alcance = where.mpEstado ? (ALCANCE_ARCHIVO[where.mpEstado] || slugArchivo(where.mpEstado)) : 'todos-los-estados';
+    const filtrado = (q || req.query.validacion) ? '-filtrado' : '';
+    const sello = fechaHoraArgentina(new Date()).replace(/[/ :]/g, '').slice(0, 12);
+    const nombreArchivo = `compradores-${slugArchivo(evento.nombre)}-${alcance}${filtrado}-${sello}.csv`;
+
+    const csv = serializarCSV(COLUMNAS_EXPORT, filas);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+    // Se lo damos también al navegador: `fetch` no ve `Content-Disposition` si
+    // no está expuesto, y el front necesita el nombre para nombrar la descarga.
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Filas-Export');
+    // Cuántas filas trae, para que el front lo pueda decir en pantalla sin
+    // tener que parsear el CSV que acaba de bajar.
+    res.setHeader('X-Filas-Export', String(filas.length));
+    return res.send(csv);
+  } catch (err) {
+    console.error('Error en adminExportar compras:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
@@ -668,4 +910,4 @@ async function adminDevolver(req, res) {
   }
 }
 
-module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminGetById, adminEliminar, adminEliminarPendientes, adminReenviarMail, adminDevolver };
+module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminExportar, adminGetById, adminEliminar, adminEliminarPendientes, adminReenviarMail, adminDevolver };
