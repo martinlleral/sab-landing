@@ -414,6 +414,29 @@ async function main() {
         + `total=${compraRegresion?.totalPagado} itemsExtra=${JSON.stringify(mpCalls[0]?.itemsExtra)}`,
     });
 
+    // 🔒 CANDADO (R1). El check 3f de arriba llama a `validarMenu` DIRECTO y por eso
+    // pasaba en verde aunque el camino real estuviera roto: el controller hace
+    // `parseInt('dos')` → NaN, y `calcularTotalCompra` lo convertía en 0 con `|| 0`
+    // ANTES de que el validador lo viera. Resultado: compra creada sin menús y sin
+    // error, justo el estado que este sprint declara caro (una compra sin menú no
+    // se arregla después). Los negativos sí se rechazaban, así que la validación
+    // era inconsistente según por dónde entrara el número.
+    // Estos dos checks cubren el hueco por las dos capas: la función que el
+    // controller usa de verdad, y el 400 del endpoint.
+    const errNaNTotal = await expectThrow(
+      () => calcularTotalCompra(tBase, { cantidad: 2, cantidadMenus: NaN, menuHabilitado: true, precioMenu: PRECIO_MENU }),
+      'MENUS_INVALIDO'
+    );
+    checks.push({ name: '🔒 3k) calcularTotalCompra con NaN → throw MENUS_INVALIDO (no lo pisa a 0)', ...errNaNTotal });
+
+    const resBasura = await call(datosComprador({ eventoId: evConMenu.id, cantidad: 2, cantidadMenus: 'dos' }));
+    const comprasBasura = await prisma.compra.count({ where: { eventoId: evConMenu.id } });
+    checks.push({
+      name: '🔒 3l) controller: cantidadMenus basura ("dos") → 400 MENUS_INVALIDO y NINGUNA compra creada',
+      pass: resBasura.statusCode === 400 && resBasura.body?.code === 'MENUS_INVALIDO' && comprasBasura === 0,
+      detail: `status=${resBasura.statusCode} code=${resBasura.body?.code} compras=${comprasBasura}`,
+    });
+
     // ============================================================
     // BLOQUE 4 — Persistencia real + preferencia de MP + devolución
     // ============================================================

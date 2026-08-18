@@ -267,6 +267,17 @@ async function main() {
         resAgotado.statusCode === 400 && resAgotado.body?.code === 'MENUS_AGOTADOS',
         `status=${resAgotado.statusCode} code=${resAgotado.body?.code}`);
 
+      // 🔒 CANDADO (R1). El rechazo por agotado tiene que traer su cupo igual que
+      // el 2b, aunque el número sea siempre 0. Es lo único que le permite al
+      // checkout corregir el select viejo: sin esto, la persona que abrió el modal
+      // cuando quedaban menús se quedaba con "2 menús" elegidos, el cartel le decía
+      // "podés seguir con las entradas solas" y cada reintento moría con el mismo
+      // error, porque el front solo se recupera cuando el cupo viene en la
+      // respuesta. Las dos formas de llegar a "agotado" se comportaban distinto.
+      check('🔒 2g2) el rechazo por agotado incluye menusRestantes=0 (el front recorta el select solo)',
+        resAgotado.body?.menusRestantes === 0,
+        `menusRestantes=${JSON.stringify(resAgotado.body?.menusRestantes)}`);
+
       // 🎯 El tope es del MENÚ, no del evento: quedarse sin menús no puede
       // frenar la venta de entradas. Romper esto sería perder plata del SAB por
       // un límite de la cocina.

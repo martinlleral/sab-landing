@@ -235,6 +235,13 @@ function validarMenu({
     if (menusRestantes <= 0) {
       const e = new Error('Los menús de esta fecha se agotaron');
       e.code = 'MENUS_AGOTADOS';
+      // Viaja con el cupo igual que MENUS_SIN_CUPO, aunque acá el número sea
+      // siempre 0: es lo que le permite al checkout corregir su estado viejo y
+      // dejar el pedido comprable con entradas solas. Sin esto, el select seguía
+      // mostrando los menús que la persona había elegido y cada reintento moría
+      // con el mismo error — las dos formas de llegar a "agotado" se comportaban
+      // distinto por una línea de diferencia.
+      e.menusRestantes = 0;
       throw e;
     }
     if (cantidadMenus > menusRestantes) {
@@ -277,7 +284,12 @@ function validarMenu({
  */
 async function calcularTotalCompra(tanda, opciones = {}) {
   const cantidad = opciones.cantidad;
-  const cantidadMenus = opciones.cantidadMenus || 0;
+  // `??` y no `||`: los dos mandan ausente (undefined/null) a 0 —el caso legítimo
+  // del checkout sin menú o del cliente viejo—, pero `||` también se tragaba NaN,
+  // y NaN es lo que devuelve `parseInt('dos')`. Con `|| 0` la compra se creaba
+  // sin menús y sin error, esquivando el MENUS_INVALIDO que la guarda documenta
+  // (los negativos sí se rechazaban: la validación quedaba inconsistente).
+  const cantidadMenus = opciones.cantidadMenus ?? 0;
   const precioMenu = opciones.precioMenu || 0;
 
   validarMenu({

@@ -1346,11 +1346,13 @@ async function handleComprar() {
       throw new Error('No se recibió link de pago');
     }
   } catch (err) {
-    // Si el rechazo fue por cupo, el backend manda cuántos quedan de verdad:
+    // Si el rechazo fue por cupo —quedan pocos o no queda ninguno—, el backend
+    // manda cuántos quedan de verdad:
     // se corrige el estado del front y se repuebla el select ANTES de mostrar el
     // error, para que la persona pueda arreglar el pedido en el mismo lugar donde
     // se lo rechazaron en vez de tener que recargar.
-    if (err && err.code === 'MENUS_SIN_CUPO' && Number.isFinite(err.menusRestantes)) {
+    if (err && (err.code === 'MENUS_SIN_CUPO' || err.code === 'MENUS_AGOTADOS')
+        && Number.isFinite(err.menusRestantes)) {
       const ev = getEventoSeleccionado();
       if (ev) {
         ev.menusRestantes = err.menusRestantes;
