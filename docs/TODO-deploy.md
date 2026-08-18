@@ -1174,18 +1174,20 @@ escritas:
 
 ---
 
-### 45. 🎫 Aviso de menú en el validador QR — **scope nuevo, descartable** · 1-1,5 h · depende de 43a
+### 45. ✅ 🎫 Aviso de menú en el validador QR — **hecho el 18/8** · depende de 43a
 
-**Archivos:** `src/controllers/entradas.controller.js` · `public/backoffice/lector-qr.html` · **Sesión:** S6
+**Archivos:** `src/controllers/entradas.controller.js` · `public/backoffice/lector-qr.html` · **`public/validar/index.html`** (el validador público, que el plan no listaba) · **Sesión:** S6
 
 **No hace falta un segundo QR**, y con la decisión 1 tampoco tendría sentido: los menús no están atados a entradas puntuales, así que ninguna entrada individual "incluye menú". El validador **no controla la entrega** — eso lo hace la lista impresa del 44. Acá solo **avisa**, para que en la puerta manden a la persona al mostrador. `_validarQRCore` (`entradas.controller.js:43`) ya trae la compra entera: es mostrar un dato que ya está.
 
-- [ ] Agregar el dato a lo que devuelve `_validarQRCore`
-- [ ] Agregarlo **también** a `entradaReducida()` — es la versión recortada que ve **Casa Metro** con su token público (`ValidationAccessToken`), y es justo quien necesita saberlo
-- [ ] Mostrarlo grande y en color en `lector-qr.html`: en la puerta se mira de reojo
-- [ ] Verificar en el validador **público con token**, no solo en el admin
+- [x] Agregar el dato a lo que devuelve `_validarQRCore` — **ya lo devolvía**: el `include` sobre la compra no lleva `select`, así que trae todos sus escalares desde la migración del 43a. En vez de código, un check que lo ata y un comentario que dice por qué tiene que seguir estando
+- [x] Agregarlo **también** a `entradaReducida()` — es la versión recortada que ve **Casa Metro** con su token público (`ValidationAccessToken`), y es justo quien necesita saberlo. Viajan **dos** campos y no uno: los menús son de la *compra* y el QR es de *una entrada*, así que sin `cantidadEntradas` a la vista una compra de 3 entradas con 2 menús se puede leer como seis
+- [x] Mostrarlo grande y en color: en la puerta se mira de reojo — franja carmín con el número, a quién mandar al mostrador (en formato `Apellido, Nombre`, igual que la hoja del 44) y la aclaración de que el cartel se repite en cada QR del grupo. Y el resultado ahora **se trae a la vista al aparecer**: estaba grande y en color, pero abajo de todo y fuera de la pantalla
+- [x] Verificar en el validador **público con token**, no solo en el admin — los dos, en viewport de celular, con 5 escenarios cada uno (con menús · entrada hermana de la misma compra · sin menús · pendiente · ya validada)
 
-> **Se puede dejar afuera del sprint sin romper nada.** Si el tiempo aprieta, es el primero que sale: la operación funciona con 43a + 43b/43c + 44.
+**No controla la entrega: avisa.** El control sigue siendo la hoja impresa del 44. Y se calla en "compra no pagada", aunque el dato viaje: anunciar menús sobre una compra que nadie cobró es prometer comida que no está paga.
+
+**Tests:** 8 checks nuevos en `validacion-token.test.js` (27 en total), verificados por mutación sobre las dos guardas independientes. Suite 19/19.
 
 ---
 

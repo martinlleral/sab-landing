@@ -10,6 +10,11 @@
  *     (un mismo token valida QR de eventos distintos).
  *   - Admin: generar (201 + url) / listar / toggle activo / validación de body.
  *   - Regresión: validarPorQR (admin) sigue devolviendo la entrada COMPLETA (con email).
+ *   - Menús de Casa Metro en el validador (ítem 45 / Sprint 7 / S6): la respuesta
+ *     PÚBLICA trae cantidadMenus + cantidadEntradas (Casa Metro es quien cocina),
+ *     la ADMIN los sigue trayendo dentro de compra (candado contra convertir el
+ *     include de _validarQRCore en un select), y el agregado NO abrió la puerta a
+ *     los datos de contacto.
  *
  * Controllers/servicios directos con req/res mock. Uso local (dev.db):
  *   node tests/integration/validacion-token.test.js
@@ -57,11 +62,15 @@ async function cleanup() {
   await prisma.validationAccessToken.deleteMany({ where: { descripcion: { startsWith: TEST_PREFIX } } });
 }
 
-async function crearEventoConEntrada({ sufijo, mpEstado = 'approved', nombreComprador = 'Juan', qr }) {
+async function crearEventoConEntrada({
+  sufijo, mpEstado = 'approved', nombreComprador = 'Juan', qr,
+  cantidadEntradas = 1, cantidadMenus = 0, qrExtra = [],
+}) {
   const evento = await prisma.evento.create({
     data: {
       nombre: `${TEST_PREFIX}${sufijo}`, descripcion: 'test',
       fecha: new Date(Date.now() + 10 * 864e5), hora: '21:00', estaPublicado: true,
+      menuHabilitado: cantidadMenus > 0,
       tandas: { create: [{ nombre: 'General', precio: 1000, orden: 1, activa: true }] },
     },
   });
@@ -69,12 +78,21 @@ async function crearEventoConEntrada({ sufijo, mpEstado = 'approved', nombreComp
     data: {
       eventoId: evento.id, email: `${TEST_PREFIX}${sufijo}@test.invalid`,
       nombre: nombreComprador, apellido: 'Pérez', telefono: '1122334455',
-      cantidadEntradas: 1, precioUnitario: 1000, totalPagado: 1000, mpEstado,
+      cantidadEntradas, precioUnitario: 1000,
+      totalPagado: 1000 * cantidadEntradas + 15000 * cantidadMenus, mpEstado,
+      cantidadMenus, menuUnitario: cantidadMenus > 0 ? 15000 : 0,
     },
   });
   const entrada = await prisma.entrada.create({
     data: { compraId: compra.id, codigoQR: qr, qrImageUrl: `/assets/img/uploads/qr/${qr}.png` },
   });
+  // Entradas hermanas de la MISMA compra: el aviso de menús se repite en cada
+  // una, que es justo lo que hay que poder ver en un test.
+  for (const q of qrExtra) {
+    await prisma.entrada.create({
+      data: { compraId: compra.id, codigoQR: q, qrImageUrl: `/assets/img/uploads/qr/${q}.png` },
+    });
+  }
   return { evento, compra, entrada };
 }
 
@@ -90,11 +108,25 @@ async function main() {
     const qrA2 = `${TEST_PREFIX}A2-${ts}`;
     const qrB1 = `${TEST_PREFIX}B1-${ts}`;
     const qrP1 = `${TEST_PREFIX}P1-${ts}`;
+    // Ítem 45: una compra de 3 entradas con 2 menús (M1/M2/M3 son la misma
+    // compra), una sin menús y una pendiente CON menús cargados.
+    const qrM1 = `${TEST_PREFIX}M1-${ts}`;
+    const qrM2 = `${TEST_PREFIX}M2-${ts}`;
+    const qrM3 = `${TEST_PREFIX}M3-${ts}`;
+    const qrPM1 = `${TEST_PREFIX}PM1-${ts}`;
     await crearEventoConEntrada({ sufijo: `A-${ts}`, qr: qrA1, nombreComprador: 'Ana' });
     // A2 vive en el mismo evento A (otra compra) — para la regresión admin
     const evA2 = await crearEventoConEntrada({ sufijo: `A2-${ts}`, qr: qrA2, nombreComprador: 'Carlos' });
     await crearEventoConEntrada({ sufijo: `B-${ts}`, qr: qrB1, nombreComprador: 'Beatriz' });
     await crearEventoConEntrada({ sufijo: `P-${ts}`, qr: qrP1, mpEstado: 'pending', nombreComprador: 'Pedro' });
+    await crearEventoConEntrada({
+      sufijo: `M-${ts}`, qr: qrM1, qrExtra: [qrM2, qrM3], nombreComprador: 'Marta',
+      cantidadEntradas: 3, cantidadMenus: 2,
+    });
+    await crearEventoConEntrada({
+      sufijo: `PM-${ts}`, qr: qrPM1, mpEstado: 'pending', nombreComprador: 'Paula',
+      cantidadEntradas: 2, cantidadMenus: 2,
+    });
 
     // ── Service ───────────────────────────────────────────────────────────────
     const tok = await service.generarToken({ descripcion: `${TEST_PREFIX}Casa Metro`, creadoPor: 'admin@test' });
@@ -150,6 +182,56 @@ async function main() {
 
     res = await call(entradasController.validarPorQRPublico, mockReq({ body: { codigoQR: qrP1 } }));
     add('público: QR de compra pending → 400 NOT_PAID', res.statusCode === 400 && res.body.codigo === 'NOT_PAID');
+
+    // ── Menús de Casa Metro en el validador (ítem 45) ───────────────────────────
+    // Casa Metro mira esta pantalla con el token público y es quien cocina: si el
+    // dato no viaja en la respuesta REDUCIDA, no hay aviso posible en la puerta.
+    res = await call(entradasController.validarPorQRPublico, mockReq({ body: { codigoQR: qrM1 } }));
+    const m1 = res.body.entrada || {};
+    add('45 · público: la respuesta reducida trae cantidadMenus',
+      res.statusCode === 200 && m1.cantidadMenus === 2, `cantidadMenus=${m1.cantidadMenus}`);
+    add('45 · público: trae también cantidadEntradas (el denominador que evita contar de más)',
+      m1.cantidadEntradas === 3, `cantidadEntradas=${m1.cantidadEntradas}`);
+    add('45 · público: sumar los menús NO abrió la puerta a los datos de contacto',
+      m1.email === undefined && m1.telefono === undefined && m1.compra === undefined,
+      `keys=${Object.keys(m1).join(',')}`);
+
+    // Los menús son de la COMPRA y el QR es de UNA entrada: las tres hermanas
+    // muestran los mismos 2 menús. Es la conducta correcta y la que obliga a que
+    // el cartel diga de quién son los menús (si no, la puerta lee seis).
+    res = await call(entradasController.validarPorQRPublico, mockReq({ body: { codigoQR: qrM2 } }));
+    const m2 = res.body.entrada || {};
+    add('45 · público: otra entrada de la MISMA compra repite los mismos 2 menús',
+      res.statusCode === 200 && m2.cantidadMenus === 2 && m2.cantidadEntradas === 3,
+      `menus=${m2.cantidadMenus} entradas=${m2.cantidadEntradas}`);
+
+    // Ya validada: el aviso tiene que seguir estando. En la puerta se re-escanea
+    // cuando hay dudas, y ahí la pregunta "¿tenía menú?" sigue viva.
+    res = await call(entradasController.validarPorQRPublico, mockReq({ body: { codigoQR: qrM1 } }));
+    add('45 · público: ALREADY_USED también trae los menús',
+      res.statusCode === 409 && res.body.entrada && res.body.entrada.cantidadMenus === 2,
+      `status=${res.statusCode} menus=${res.body?.entrada?.cantidadMenus}`);
+
+    // Compra sin menús: el dato viaja en 0 y no en undefined, para que la UI
+    // pueda decidir NO mostrar nada (un "0 menús" en la puerta es ruido).
+    res = await call(entradasController.validarPorQRPublico, mockReq({ body: { codigoQR: qrB1 } }));
+    add('45 · público: compra sin menús → cantidadMenus 0 (no undefined)',
+      res.body.entrada && res.body.entrada.cantidadMenus === 0,
+      `valor=${JSON.stringify(res.body?.entrada?.cantidadMenus)}`);
+
+    res = await call(entradasController.validarPorQRPublico, mockReq({ body: { codigoQR: qrPM1 } }));
+    add('45 · público: NOT_PAID con menús cargados devuelve el dato (callarlo es decisión de la UI)',
+      res.statusCode === 400 && res.body.entrada && res.body.entrada.cantidadMenus === 2,
+      `status=${res.statusCode} menus=${res.body?.entrada?.cantidadMenus}`);
+
+    // Candado del lado admin: ahí el dato viaja porque _validarQRCore incluye la
+    // compra ENTERA. Nadie lo agregó a mano, así que nadie lo va a extrañar si un
+    // día ese include se "optimiza" a un select — este check es quien avisa.
+    res = await call(entradasController.validarPorQR, mockReq({ body: { codigoQR: qrM3 } }));
+    const cM3 = res.body?.entrada?.compra || {};
+    add('45 · admin: validarPorQR trae cantidadMenus y cantidadEntradas en la compra',
+      res.statusCode === 200 && cM3.cantidadMenus === 2 && cM3.cantidadEntradas === 3,
+      `menus=${cM3.cantidadMenus} entradas=${cM3.cantidadEntradas}`);
 
     // ── Admin CRUD ──────────────────────────────────────────────────────────────
     res = await call(validacionController.adminGenerar, mockReq({ body: { descripcion: `${TEST_PREFIX}Niceto` }, session: { usuario: { email: 'admin@test' } } }));

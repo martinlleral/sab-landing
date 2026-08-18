@@ -60,6 +60,15 @@
     .ref-banner .fecha { color: var(--muted); font-size: 0.85rem; }
     /* Aviso cuando el QR pertenece a OTRO evento distinto al de la noche */
     #resultado .evento.otro { color: #fbbf24; font-weight: 700; }
+    /* Menús de Casa Metro (ítem 45). No es un estado más: verde/amarillo/rojo
+       contestan "¿pasa?", esto contesta "¿le tengo que dar de comer?". Va en su
+       propia franja, en el carmín de marca — el mismo de la hoja de la cocina. */
+    #resultado .menus { display: none; margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+                        background: rgba(230,57,70,.14); border: 1px solid var(--accent); text-align: left; }
+    #resultado .menus.show { display: block; }
+    #resultado .menus .m-num { font-size: 1.5rem; font-weight: 800; color: #ff8f98; letter-spacing: 1px; }
+    #resultado .menus .m-accion { font-size: 1rem; font-weight: 700; color: #fff; margin-top: 2px; }
+    #resultado .menus .m-sub { color: #c9a9ac; font-size: 0.78rem; margin-top: 6px; line-height: 1.4; }
   </style>
 </head>
 <body>
@@ -102,6 +111,11 @@
         <div class="nombre" id="r-nombre"></div>
         <div class="evento" id="r-evento"></div>
         <div class="detalle" id="r-detalle"></div>
+        <div class="menus" id="r-menus">
+          <div class="m-num" id="r-menus-num"></div>
+          <div class="m-accion" id="r-menus-accion"></div>
+          <div class="m-sub" id="r-menus-sub"></div>
+        </div>
       </div>
 
       <div class="contador">Validadas en esta sesión: <b id="cnt">0</b></div>
@@ -256,7 +270,48 @@
       evEl.textContent = esOtro ? `⚠️ Otro evento: ${evNombre}` : evNombre;
       evEl.classList.toggle('otro', esOtro);
       document.getElementById('r-detalle').textContent = detalle || '';
-      agregarHist(tipo, nombre || estado);
+      renderMenus(tipo, entrada);
+      // Con la cámara encendida el resultado puede quedar debajo del borde de la
+      // pantalla. `nearest` scrollea lo mínimo: si ya se veía, no se mueve nada.
+      try { box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) { }
+      agregarHist(tipo, nombre || estado, tipo === 'err' ? 0 : menusDe(entrada));
+    }
+
+    function menusDe(entrada) { return Number(entrada && entrada.cantidadMenus) || 0; }
+
+    // Menús de Casa Metro (ítem 45). Este cartel AVISA, no controla la entrega:
+    // el control es la hoja impresa que se tilda en el mostrador.
+    //
+    // Solo se muestra cuando la entrada es válida o ya fue usada. En "No pagada"
+    // se calla a propósito: la compra existe y tiene menús cargados, pero nadie
+    // cobró — anunciar "2 menús" ahí es prometer comida que no está paga. Es el
+    // mismo criterio con el que la hoja de la cocina deja los pendientes afuera
+    // del total.
+    //
+    // Y el texto dice DE QUIÉN son los menús antes de decir cuántos: son de la
+    // COMPRA, y el QR es de UNA entrada, así que una compra de 3 entradas con
+    // 2 menús va a mostrar este cartel tres veces.
+    function renderMenus(tipo, entrada) {
+      const box = document.getElementById('r-menus');
+      const menus = (tipo === 'ok' || tipo === 'warn') ? menusDe(entrada) : 0;
+      if (menus <= 0) { box.classList.remove('show'); return; }
+      const entradas = Number(entrada && entrada.cantidadEntradas) || 0;
+      // "Apellido, Nombre": es literalmente la primera columna de la hoja de
+      // menús impresa (ítem 44), así que buscar ahí es copiar lo que se lee acá.
+      const quien = [(entrada && entrada.apellido) || '', (entrada && entrada.nombre) || '']
+        .filter(Boolean).join(', ');
+      // Tres renglones con jerarquía deliberada: de reojo se leen los dos
+      // primeros (cuántos y qué hacer); el tercero está para quien duda.
+      document.getElementById('r-menus-num').textContent =
+        `🍽️ ${menus} ${menus === 1 ? 'MENÚ' : 'MENÚS'}`;
+      document.getElementById('r-menus-accion').textContent =
+        quien ? `Mandalos al mostrador — ${quien}` : 'Mandalos al mostrador';
+      document.getElementById('r-menus-sub').textContent =
+        (entradas > 1
+          ? `Son de la compra entera (${entradas} entradas), no de esta entrada: este cartel se repite en cada QR del grupo. `
+          : 'Son de la compra. ')
+        + 'Se tildan en la hoja de menús impresa.';
+      box.classList.add('show');
     }
 
     function validadaHace(entrada) {
@@ -266,14 +321,15 @@
       return `Validada a las ${hh}:${mm}`;
     }
 
-    function agregarHist(tipo, texto) {
+    function agregarHist(tipo, texto, menus) {
       const list = document.getElementById('hist-list');
       const now = new Date();
       const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       const item = document.createElement('div');
       item.className = 'hist-item ' + tipo;
       const dot = document.createElement('span'); dot.className = 'dot';
-      const name = document.createElement('span'); name.className = 'h-name'; name.textContent = texto;
+      const name = document.createElement('span'); name.className = 'h-name';
+      name.textContent = menus > 0 ? `${texto} · 🍽️ ${menus}` : texto;
       const time = document.createElement('span'); time.className = 'h-time'; time.textContent = hhmm;
       item.append(dot, name, time);
       list.prepend(item);
