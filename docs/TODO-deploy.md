@@ -989,13 +989,51 @@ Notas de implementación, por si hay que volver:
 
 #### 43b. Tope de menús · 2-3 h · depende de 43a
 
-**Archivos:** `src/services/precios.service.js` · `src/services/pagos.service.js` · `src/controllers/compras.controller.js` · `evento-detalle.html` · **Sesión:** S2
+**Archivos:** `src/services/precios.service.js` · `src/controllers/compras.controller.js` · `src/controllers/eventos.controller.js` · `evento-detalle.html` · `app.js` · `index.html` · `app.css` · **Sesión:** S2
+*(`pagos.service.js` estaba en la lista del plan y **no se tocó**: la liberación del cupo no necesita código — ver el hallazgo abajo.)*
 
-- [ ] `Evento.topeMenus` (`Int?`, null = sin tope) + campo en `evento-detalle.html` *(el campo ya lo crea la migración de 43a)*
-- [ ] **Reserva atómica** copiando el patrón de `reservarCupon()` (`precios.service.js:154`): increment dentro de la transacción y verificar el tope **después**, con rollback si se pasó. **No** replicar el contador desnormalizado de `Tanda.cantidadVendida`: ahí vive la race de stock que es deuda preexistente del proyecto
-- [ ] UI: menús restantes visibles, "menús agotados" cuando llega a 0, y qué pasa si quedan 3 y pide 5 (mensaje claro, no un error genérico)
-- [ ] Liberar la reserva en los **3 puntos** de `pagos.service.js`, igual que hace hoy `liberarCupon()`
-- [ ] Test de race: 2 compras simultáneas del último menú → una falla con rollback limpio
+- [x] `Evento.topeMenus` (`Int?`, null = sin tope) + campo en `evento-detalle.html`, dentro de la card "Menú de la sede" que ya existía, con el cupo vivo a la vista *(el campo lo creó la migración de 43a)*
+- [x] **Reserva atómica** con la forma de `reservarCupon()`: mutar y verificar **después**, con rollback si se pasó. **No** se replicó el contador desnormalizado de `Tanda.cantidadVendida`
+- [x] UI: menús restantes visibles, "menús agotados" en 0, y el caso "quedan 3 y pide 5" resuelto con el número concreto
+- [x] Liberación de la reserva verificada en los **3 puntos** de `pagos.service.js` — **con un test, no con código**: ver el hallazgo de abajo
+- [x] Test de race: 2 compras simultáneas del último menú → una falla con rollback limpio — `tests/integration/menu-tope.test.js`, 36 checks
+
+> ### ✅ 43b COMPLETO (S2, 17/8)
+>
+> **La liberación no era código: era un test.** El plan mandaba a escribir decrementos en los 3
+> puntos de `pagos.service.js`. No hay nada que decrementar — **no existe contador de menús
+> vendidos**: la cantidad ocupada se deriva sumando `Compra.cantidadMenus` de las compras
+> `approved` + `pending`, así que cuando una compra sale de esos estados (autocancel → `cancelled`,
+> devolución → `refunded`) **deja de contar sola**. Lo que sí hacía falta era *demostrarlo*, y eso
+> son 6 checks: la pendiente ocupa, el autocancel libera, la devolución libera y reporta cuántos
+> menús soltó, la compra cancelada conserva su `cantidadMenus` (es historia contable) y el ciclo
+> comprar → cancelar → devolver → comprar no pierde cupo.
+>
+> **La reserva atómica, traducida.** El molde de `reservarCupon` es "mutar y verificar después con
+> rollback". Sin contador, el *mutar* es el propio `INSERT` de la Compra y el *verificar* es un
+> aggregate dentro de la misma transacción: si la suma pasó el tope → `MENUS_AGOTADO_RACE` y
+> rollback. Es atómico por el mismo motivo que `reservarCupon`: el INSERT toma el lock de escritura
+> antes del conteo y SQLite admite un solo escritor. Encima va un pre-chequeo de cortesía que da el
+> número exacto ("quedan 3 y pediste 5") antes de crear nada, igual que `validarCupon` respecto de
+> `reservarCupon`.
+>
+> **Una definición única de "cupo tomado".** `ESTADOS_MENU_OCUPADO` = aprobadas + pendientes, en un
+> solo lugar, y la usan la reserva, el checkout y el backoffice. Sin eso, el número que ve el
+> comprador y el que aplica el backend podían divergir. Ojo con la trampa: `menus.cantidad` de los
+> reportes filtra `totalPagado > 0` porque mide **plata**; el cupo mide **platos** y no puede
+> derivarse de ahí.
+>
+> **Verificado también en el navegador** (16 checks): los tres estados del select —sin tope, "quedan
+> N", agotado—, que el techo sea el menor entre entradas y cupo, y que el rechazo por cupo recorte
+> el selector solo. Y **4 mutaciones deliberadas** al código para probar que los tests muerden: sin
+> la guarda de la transacción caen 7 checks; sin los pendientes en el cupo, 15.
+>
+> **Dos defectos visuales que ningún check podía ver, encontrados mirando el render:** el `<select>`
+> deshabilitado caía al fondo claro de Bootstrap y el control **inactivo** quedaba siendo lo más
+> brillante del modal oscuro (con el texto casi ilegible por su `opacity: .65`); y el aviso de cupo
+> usaba el celeste que en ese modal es el color del único link de texto, así que un dato no
+> clickeable parecía clickeable. Los dos apagados, en la misma línea que el tratamiento "AGOTADO"
+> de las cards de evento, que desatura en vez de resaltar.
 
 #### 43c. Corte a las 18:00 del día del evento · 2-3 h · depende de 43a
 

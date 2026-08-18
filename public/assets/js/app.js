@@ -49,6 +49,15 @@ function eventoOfreceMenu(ev) {
   return getPrecioMenu() > 0;
 }
 
+// Cupo de menús que queda en el evento (Sprint 7, S2). null = SIN TOPE, que no
+// es lo mismo que 0 = agotado; confundirlos deja de vender o vende de más. Lo
+// calcula el backend con la misma definición que usa la reserva atómica
+// (compras aprobadas + pendientes de pago).
+function getMenusRestantes(ev) {
+  const r = ev && ev.menusRestantes;
+  return Number.isFinite(r) ? r : null;
+}
+
 // Cantidad de menús elegida. Lee del select; 0 si la sección está oculta.
 function getCantidadMenus() {
   const section = document.getElementById('menu-section');
@@ -989,25 +998,80 @@ function renderMenuSection() {
     section.style.display = 'none';
     sel.innerHTML = '<option value="0">Sin menú</option>';
     sel.value = '0';
+    sel.disabled = false;
     return;
   }
 
   const precioMenu = getPrecioMenu();
   const cantEntradas = parseInt(document.getElementById('modal-cantidad')?.value, 10) || 1;
   const previo = parseInt(sel.value, 10) || 0;
-  const elegido = Math.min(previo, cantEntradas);
 
-  const opciones = ['<option value="0">Sin menú</option>'];
-  for (let i = 1; i <= cantEntradas; i++) {
-    opciones.push(`<option value="${i}">${i} menú${i > 1 ? 's' : ''} — $ ${formatPrecio(precioMenu * i)}</option>`);
-  }
-  sel.innerHTML = opciones.join('');
-  sel.value = String(elegido);
+  // Cupo de la cocina (S2). `menusRestantes` null = sin tope, que NO es lo mismo
+  // que 0 (agotado). Puede quedar viejo si alguien compró mientras el modal
+  // estaba abierto: el backend lo revalida y responde MENUS_SIN_CUPO /
+  // MENUS_AGOTADO_RACE, que el checkout traduce a un mensaje humano.
+  const restantes = getMenusRestantes(ev);
+  const cupoNota = document.getElementById('menu-cupo-nota');
+  const retiroNota = document.getElementById('menu-retiro-nota');
 
   const labelEl = document.getElementById('menu-label');
   if (labelEl) labelEl.textContent = nombreMenu();
   const precioLabelEl = document.getElementById('menu-precio-unit-label');
   if (precioLabelEl) precioLabelEl.textContent = ` — $ ${formatPrecio(precioMenu)} por persona`;
+
+  // Agotado: la sección se muestra igual (que exista el menú es información útil,
+  // y su ausencia se leería como que esta fecha no tiene), pero sin nada que elegir.
+  if (restantes === 0) {
+    sel.innerHTML = '<option value="0">Menús agotados</option>';
+    sel.value = '0';
+    sel.disabled = true;
+    if (cupoNota) {
+      // Agotarse no es un error de la persona: es un estado. Va en el gris de las
+      // notas, no en el rojo que este modal reserva para "algo salió mal" — y el
+      // propio select ya dice "Menús agotados", así que esta línea solo agrega la
+      // parte que tranquiliza.
+      cupoNota.innerHTML = '<i class="bi bi-info-circle me-1"></i>'
+        + 'Los menús de esta fecha <strong>se agotaron</strong>. Las entradas siguen disponibles.';
+      cupoNota.style.color = '#a0aec0';
+      cupoNota.style.display = 'block';
+    }
+    if (retiroNota) retiroNota.style.display = 'none';
+    section.style.display = 'block';
+    return;
+  }
+
+  // Techo del select: no más menús que entradas (regla dura) y no más que los que
+  // quedan por vender. Se elige el menor de los dos.
+  const techo = restantes === null ? cantEntradas : Math.min(cantEntradas, restantes);
+  const elegido = Math.min(previo, techo);
+
+  const opciones = ['<option value="0">Sin menú</option>'];
+  for (let i = 1; i <= techo; i++) {
+    opciones.push(`<option value="${i}">${i} menú${i > 1 ? 's' : ''} — $ ${formatPrecio(precioMenu * i)}</option>`);
+  }
+  sel.innerHTML = opciones.join('');
+  sel.value = String(elegido);
+  sel.disabled = false;
+
+  if (retiroNota) retiroNota.style.display = 'block';
+  if (cupoNota) {
+    // El aviso solo aparece cuando el cupo es lo que limita la elección. Si
+    // quedan 40 menús y pediste 2 entradas, el número no aporta nada y ensucia.
+    if (restantes !== null && restantes <= cantEntradas) {
+      cupoNota.innerHTML = '<i class="bi bi-info-circle me-1"></i>'
+        + (restantes === 1
+          ? 'Queda <strong>1</strong> menú para esta fecha.'
+          : `Quedan <strong>${restantes}</strong> menús para esta fecha.`);
+      // El gris de las notas, no el celeste: ese color es el del único link de
+      // texto del modal (el de "¿Tenés un código de descuento?"), y usarlo acá
+      // haría parecer clickeable algo que no lo es. La urgencia la lleva el
+      // número en negrita, que es el dato que importa.
+      cupoNota.style.color = '#a0aec0';
+      cupoNota.style.display = 'block';
+    } else {
+      cupoNota.style.display = 'none';
+    }
+  }
 
   section.style.display = 'block';
 }
@@ -1282,6 +1346,18 @@ async function handleComprar() {
       throw new Error('No se recibió link de pago');
     }
   } catch (err) {
+    // Si el rechazo fue por cupo, el backend manda cuántos quedan de verdad:
+    // se corrige el estado del front y se repuebla el select ANTES de mostrar el
+    // error, para que la persona pueda arreglar el pedido en el mismo lugar donde
+    // se lo rechazaron en vez de tener que recargar.
+    if (err && err.code === 'MENUS_SIN_CUPO' && Number.isFinite(err.menusRestantes)) {
+      const ev = getEventoSeleccionado();
+      if (ev) {
+        ev.menusRestantes = err.menusRestantes;
+        renderMenuSection();
+        updateTotal();
+      }
+    }
     showModalError(mensajeErrorCompra(err));
     btn.disabled = false;
     if (spinner) spinner.style.display = 'none';
@@ -1299,9 +1375,28 @@ const MENSAJES_ERROR_COMPRA = {
   CANTIDAD_INVALIDA: 'Elegí al menos 1 entrada.',
   MENU_PRECIO_NO_CONFIGURADO: 'El menú no está disponible en este momento. Escribinos por WhatsApp y lo resolvemos.',
   MENUS_INVALIDO: 'La cantidad de menús no es válida. Elegila de nuevo.',
+  MENUS_AGOTADOS: 'Los menús de esta fecha se agotaron. Podés seguir con las entradas solas.',
+  // El race es el único caso donde el front NO sabe cuántos quedan (otra compra
+  // tomó el cupo mientras esta se estaba creando), así que se pide recargar en vez
+  // de arriesgar un número inventado.
+  MENUS_AGOTADO_RACE: 'Alguien tomó los últimos menús mientras completabas la compra. '
+    + 'Recargá la página para ver cuántos quedan; no se te cobró nada.',
 };
 
 function mensajeErrorCompra(err) {
+  // Caso con número propio: el mensaje útil es el que dice cuántos quedan, y ese
+  // dato solo lo tiene la respuesta. El select ya se recortó a ese máximo.
+  if (err && err.code === 'MENUS_SIN_CUPO' && Number.isFinite(err.menusRestantes)) {
+    const n = err.menusRestantes;
+    if (n === 0) return MENSAJES_ERROR_COMPRA.MENUS_AGOTADOS;
+    // El verbo también concuerda: "Queda 1 menú", no "Quedan 1 menú".
+    // Y no se pide "ajustá la cantidad": el selector ya se recortó solo al máximo
+    // real, y queda fuera de pantalla desde donde se lee este cartel. Mandar a
+    // arreglar algo que ya está arreglado, y que además no se ve, es peor que no
+    // decir nada.
+    return `${n === 1 ? 'Queda 1 menú' : `Quedan ${n} menús`} para esta fecha. `
+      + 'Ya ajustamos tu pedido: tocá Pagar de nuevo para confirmarlo.';
+  }
   if (err && err.code && MENSAJES_ERROR_COMPRA[err.code]) return MENSAJES_ERROR_COMPRA[err.code];
   return (err && err.message) || 'Error al procesar el pago. Intentá de nuevo.';
 }
@@ -1483,6 +1578,9 @@ async function fetchJSON(url, options = {}) {
     // texto del backend, así que los callers que no miran el code no cambian.
     const err = new Error(data.error || `HTTP ${res.status}`);
     if (data.code) err.code = data.code;
+    // Cupo de menús que devuelve el backend al rechazar por tope (S2): permite
+    // corregir el select con el número real sin volver a pedir el evento.
+    if (Number.isFinite(data.menusRestantes)) err.menusRestantes = data.menusRestantes;
     throw err;
   }
   return data;

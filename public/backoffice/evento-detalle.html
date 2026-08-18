@@ -281,6 +281,15 @@
                       <label class="form-check-label bo-switch-label" for="menuHabilitado">Ofrecer menú en esta fecha</label>
                     </div>
                   </div>
+                  <div class="mb-3">
+                    <label class="bo-form-label" for="topeMenus">Tope de menús</label>
+                    <input type="number" class="bo-form-control" id="topeMenus" name="topeMenus"
+                           min="0" step="1" placeholder="Sin tope" style="max-width:220px;">
+                    <p class="small mb-0 mt-2" id="menu-tope-hint" style="color:#888;">
+                      Cuántos menús puede cocinar la sede. Dejalo <strong>vacío</strong> si no hay límite.
+                      Al llegar al tope, el checkout deja de ofrecerlo.
+                    </p>
+                  </div>
                   <p class="small mb-0" style="color:#666;">
                     Al activarlo, en el checkout aparece un segundo selector para sumar menús a la compra.
                     Es una <strong>cantidad aparte</strong> de la entrada (no más menús que entradas) y
@@ -1036,6 +1045,24 @@
       document.getElementById('estaAgotado').checked = ev.estaAgotado;
       document.getElementById('esExterno').checked = ev.esExterno;
       document.getElementById('menuHabilitado').checked = !!ev.menuHabilitado;
+      // Tope de menús: vacío = sin tope. Ojo con `||`: un tope de 0 es válido
+      // ("no vender más menús") y con `||` se vería como "sin tope", que es lo
+      // contrario.
+      const inTope = document.getElementById('topeMenus');
+      if (inTope) inTope.value = (ev.topeMenus === null || ev.topeMenus === undefined) ? '' : ev.topeMenus;
+      // Cupo vivo. `menusRestantes` viene calculado por el backend con la misma
+      // definición que usa la reserva (aprobadas + pendientes), así que el número
+      // que ve el operador es el mismo que aplica el checkout.
+      const topeHint = document.getElementById('menu-tope-hint');
+      if (topeHint && ev.topeMenus !== null && ev.topeMenus !== undefined && ev.menusRestantes !== null) {
+        const ocupados = ev.topeMenus - ev.menusRestantes;
+        const estado = ev.menusRestantes === 0
+          ? '<span style="color:#e0a800;"><i class="bi bi-exclamation-triangle me-1"></i><strong>Menús agotados</strong> — el checkout ya no los ofrece.</span>'
+          : `Quedan <strong>${ev.menusRestantes}</strong> por vender.`;
+        topeHint.innerHTML = `Tomados hoy: <strong>${ocupados}</strong> de ${ev.topeMenus} `
+          + '<span style="color:#aaa;">(compras pagas + pendientes de pago)</span>. ' + estado
+          + '<br>Dejá el campo vacío si no hay límite.';
+      }
 
       if (ev.esExterno) {
         document.getElementById('link-externo-wrap').style.display = 'block';

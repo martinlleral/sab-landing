@@ -29,6 +29,16 @@
  *  - El menú es una CANTIDAD propia, ortogonal a `tipoEntrada`: las 4
  *    combinaciones (base/aporte × con/sin menú) se calculan sin tocar nada de la
  *    semántica del Sprint 3.
+ *
+ * Tope de menús por evento (Sprint 7, S2):
+ *  - `Evento.topeMenus` (null = sin tope) es cuántos menús puede cocinar la sede.
+ *  - NO hay contador desnormalizado de menús vendidos, a propósito: la cantidad
+ *    ocupada se DERIVA sumando `Compra.cantidadMenus` por estado. El proyecto ya
+ *    tiene un contador desnormalizado (`Tanda.cantidadVendida`) con una race
+ *    conocida; sumar un segundo sería repetir el error.
+ *  - Consecuencia buena: la liberación del cupo es AUTOMÁTICA. Cuando una compra
+ *    sale de pending/approved (autocancel → 'cancelled', devolución →
+ *    'refunded'), deja de contar sola. No hay decremento que olvidarse.
  */
 
 const prisma = require('../utils/prisma');
@@ -169,13 +179,23 @@ async function calcularPrecioFinal(tanda, opciones = {}) {
  * "menú suelto" sea imposible por construcción. Antes de esto, una compra con
  * `cantidad: 0` llegaba hasta Prisma y explotaba con un 500.
  *
+ * La cuarta regla (S2) es el TOPE: `menusRestantes` es cuántos quedan según el
+ * cupo del evento. Llega ya calculado (el conteo es una lectura a la base, y este
+ * helper es puro) y null significa "sin tope". Es un chequeo de cortesía: da un
+ * mensaje concreto ANTES de crear nada, igual que `validarCupon` respecto de
+ * `reservarCupon`. La garantía real la da `reservarMenus` dentro de la
+ * transacción — este número puede quedar viejo entre que se lee y se compra.
+ *
  * @param {Object} params
  * @param {number} params.cantidad - entradas pedidas (ya parseado a Int)
  * @param {number} [params.cantidadMenus=0] - menús pedidos (ya parseado a Int)
  * @param {boolean} [params.menuHabilitado=false] - `Evento.menuHabilitado`
  * @param {number} [params.precioMenu=0] - `Home.precioMenu` vigente
+ * @param {number|null} [params.menusRestantes=null] - cupo libre; null = sin tope
  */
-function validarMenu({ cantidad, cantidadMenus = 0, menuHabilitado = false, precioMenu = 0 }) {
+function validarMenu({
+  cantidad, cantidadMenus = 0, menuHabilitado = false, precioMenu = 0, menusRestantes = null,
+}) {
   if (!Number.isInteger(cantidad) || cantidad < 1) {
     const e = new Error('La cantidad de entradas debe ser al menos 1');
     e.code = 'CANTIDAD_INVALIDA';
@@ -207,6 +227,25 @@ function validarMenu({ cantidad, cantidadMenus = 0, menuHabilitado = false, prec
     e.code = 'MENU_PRECIO_NO_CONFIGURADO';
     throw e;
   }
+
+  // Tope del evento. Se separan los dos casos porque la persona necesita cosas
+  // distintas: con 0 no hay nada que ajustar (se cierra el menú), con 3 y pidió 5
+  // el pedido se arregla cambiando un número — y para eso hay que decirle cuál.
+  if (menusRestantes !== null && menusRestantes !== undefined) {
+    if (menusRestantes <= 0) {
+      const e = new Error('Los menús de esta fecha se agotaron');
+      e.code = 'MENUS_AGOTADOS';
+      throw e;
+    }
+    if (cantidadMenus > menusRestantes) {
+      const e = new Error(
+        `Quedan ${menusRestantes} menú(s) disponibles y pediste ${cantidadMenus}`
+      );
+      e.code = 'MENUS_SIN_CUPO';
+      e.menusRestantes = menusRestantes;
+      throw e;
+    }
+  }
 }
 
 /**
@@ -231,6 +270,7 @@ function validarMenu({ cantidad, cantidadMenus = 0, menuHabilitado = false, prec
  * @param {number} [opciones.cantidadMenus=0]
  * @param {boolean} [opciones.menuHabilitado=false] - `Evento.menuHabilitado`
  * @param {number} [opciones.precioMenu=0] - `Home.precioMenu` vigente
+ * @param {number|null} [opciones.menusRestantes=null] - cupo libre; null = sin tope
  * @returns {Promise<Object>} lo mismo que `calcularPrecioFinal` (por entrada) más
  *   `cantidad`, `cantidadMenus`, `menuUnitario`, `totalPagado` y el desglose
  *   `totales: { entradas, menus, total }`.
@@ -245,6 +285,7 @@ async function calcularTotalCompra(tanda, opciones = {}) {
     cantidadMenus,
     menuHabilitado: opciones.menuHabilitado,
     precioMenu,
+    menusRestantes: opciones.menusRestantes ?? null,
   });
 
   const precioCalc = await calcularPrecioFinal(tanda, opciones);
@@ -310,9 +351,87 @@ async function liberarCupon(prismaClient, cuponId) {
   });
 }
 
+/**
+ * Estados de compra que OCUPAN cupo de menú. Un pendiente todavía puede pagarse
+ * (la ventana de autocancel llega a 72 h por Rapipago), así que reservar su menú
+ * es lo correcto: si no se paga, el autocancel lo libera solo.
+ *
+ * Es la definición ÚNICA de "cupo tomado". Cualquier lugar que muestre menús
+ * restantes tiene que usarla, o el backoffice y el checkout dirían números
+ * distintos sobre la misma sede.
+ */
+const ESTADOS_MENU_OCUPADO = Object.freeze(['approved', 'pending']);
+
+/**
+ * Cuenta los menús que hoy ocupan cupo en un evento. Se DERIVA de las compras:
+ * no hay contador desnormalizado (ver la nota de la cabecera).
+ *
+ * @param {Object} prismaClient - cliente Prisma o transacción
+ * @param {number} eventoId
+ * @returns {Promise<number>}
+ */
+async function contarMenusOcupados(prismaClient, eventoId) {
+  const agg = await prismaClient.compra.aggregate({
+    where: { eventoId, mpEstado: { in: ESTADOS_MENU_OCUPADO } },
+    _sum: { cantidadMenus: true },
+  });
+  return agg._sum.cantidadMenus || 0;
+}
+
+/**
+ * Cuántos menús quedan por vender. null = sin tope (no es lo mismo que 0).
+ *
+ * @param {number|null} topeMenus - `Evento.topeMenus`
+ * @param {number} ocupados
+ * @returns {number|null}
+ */
+function calcularMenusRestantes(topeMenus, ocupados) {
+  if (topeMenus === null || topeMenus === undefined) return null;
+  return Math.max(0, topeMenus - (ocupados || 0));
+}
+
+/**
+ * Reserva atómicamente el cupo de menús dentro de una transacción Prisma. Es el
+ * gemelo de `reservarCupon` con una diferencia de forma que importa: acá no hay
+ * contador que incrementar — el "increment" es el INSERT de la Compra, que ya
+ * ocurrió cuando esto se llama.
+ *
+ * Debe invocarse DESPUÉS de `tx.compra.create(...)` y dentro de la misma
+ * transacción: recién ahí el aggregate incluye la compra nueva. Si el total pasó
+ * el tope, tira MENUS_AGOTADO_RACE y el rollback deshace la compra entera (y la
+ * reserva del cupón, si había).
+ *
+ * Por qué esto es atómico en SQLite: el INSERT toma el lock de escritura antes
+ * del aggregate, y SQLite admite un solo escritor a la vez. Ninguna otra
+ * transacción puede colar un INSERT entre nuestro create y nuestro conteo. Es
+ * exactamente la garantía en la que se apoya `reservarCupon`.
+ *
+ * Llama a `contarMenusOcupados` de forma interna (no por referencia al módulo) a
+ * propósito: los tests monkey-patchean `precios.contarMenusOcupados` para simular
+ * un pre-chequeo con datos viejos, y esta guarda tiene que seguir viendo la
+ * realidad.
+ *
+ * @param {Object} tx - cliente Prisma de la transacción
+ * @param {number} eventoId
+ * @param {number|null} topeMenus - null = sin tope, no hay nada que reservar
+ * @returns {Promise<number|null>} menús ocupados tras la compra, o null si no hay tope
+ */
+async function reservarMenus(tx, eventoId, topeMenus) {
+  if (topeMenus === null || topeMenus === undefined) return null;
+
+  const ocupados = await contarMenusOcupados(tx, eventoId);
+  if (ocupados > topeMenus) {
+    const e = new Error('Los menús de esta fecha se agotaron mientras completabas la compra');
+    e.code = 'MENUS_AGOTADO_RACE';
+    throw e;
+  }
+  return ocupados;
+}
+
 module.exports = {
   TIPO_ENTRADA,
   TIPO_CUPON,
+  ESTADOS_MENU_OCUPADO,
   normalizarCodigo,
   validarCupon,
   validarMenu,
@@ -320,4 +439,7 @@ module.exports = {
   calcularTotalCompra,
   reservarCupon,
   liberarCupon,
+  contarMenusOcupados,
+  calcularMenusRestantes,
+  reservarMenus,
 };

@@ -3,6 +3,9 @@ const prisma = require('../utils/prisma');
 const qrService = require('../services/qr.service');
 const brevoService = require('../services/brevo.service');
 const { getTandaVigente } = require('../services/tandas.service');
+const {
+  ESTADOS_MENU_OCUPADO, contarMenusOcupados, calcularMenusRestantes,
+} = require('../services/precios.service');
 
 // Adjunta al evento la tandaVigente calculada + precio/stock derivados para el
 // frontend público. No reemplaza los campos legacy del evento (ese cleanup es
@@ -11,6 +14,42 @@ const { getTandaVigente } = require('../services/tandas.service');
 function adjuntarTandaVigente(evento) {
   const vigente = getTandaVigente(evento.tandas);
   return { ...evento, tandaVigente: vigente };
+}
+
+/**
+ * Adjunta `menusRestantes` a una lista de eventos (Sprint 7, S2). null = sin
+ * tope, que NO es lo mismo que 0 (agotado); el checkout distingue los dos casos.
+ *
+ * Se resuelve en UNA query para toda la lista, no una por evento: la portada
+ * puede traer hasta 50 eventos y un aggregate por cada uno serían 50 viajes a la
+ * base en el endpoint más caliente del sitio.
+ *
+ * El conteo usa `ESTADOS_MENU_OCUPADO` — la misma definición de "cupo tomado"
+ * que la reserva atómica, para que el número que ve el comprador y el que aplica
+ * el backend no puedan divergir.
+ */
+async function adjuntarMenusRestantes(eventos) {
+  const conTope = eventos.filter((e) => e.menuHabilitado && e.topeMenus !== null);
+  if (conTope.length === 0) {
+    return eventos.map((e) => ({ ...e, menusRestantes: null }));
+  }
+
+  const filas = await prisma.compra.groupBy({
+    by: ['eventoId'],
+    where: {
+      eventoId: { in: conTope.map((e) => e.id) },
+      mpEstado: { in: ESTADOS_MENU_OCUPADO },
+    },
+    _sum: { cantidadMenus: true },
+  });
+  const ocupados = new Map(filas.map((f) => [f.eventoId, f._sum.cantidadMenus || 0]));
+
+  return eventos.map((e) => ({
+    ...e,
+    menusRestantes: (e.menuHabilitado && e.topeMenus !== null)
+      ? calcularMenusRestantes(e.topeMenus, ocupados.get(e.id) || 0)
+      : null,
+  }));
 }
 
 // Threshold mínimo de `fecha` para que un evento siga visible en la portada:
@@ -38,7 +77,8 @@ async function getDestacado(req, res) {
       include: { tandas: { orderBy: { orden: 'asc' } } },
     });
     if (!evento) return res.status(404).json({ error: 'No hay evento destacado' });
-    return res.json(adjuntarTandaVigente(evento));
+    const [conMenus] = await adjuntarMenusRestantes([adjuntarTandaVigente(evento)]);
+    return res.json(conMenus);
   } catch (err) {
     console.error('Error en getDestacado:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -59,7 +99,7 @@ async function getProximos(req, res) {
       take: 50,
       include: { tandas: { orderBy: { orden: 'asc' } } },
     });
-    return res.json(eventos.map(adjuntarTandaVigente));
+    return res.json(await adjuntarMenusRestantes(eventos.map(adjuntarTandaVigente)));
   } catch (err) {
     console.error('Error en getProximos:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -135,7 +175,8 @@ async function adminGetById(req, res) {
       },
     });
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
-    return res.json(adjuntarTandaVigente(evento));
+    const [conMenus] = await adjuntarMenusRestantes([adjuntarTandaVigente(evento)]);
+    return res.json(conMenus);
   } catch (err) {
     console.error('Error en adminGetById evento:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -159,13 +200,33 @@ const BOX_OVERRIDE_FIELDS = [
   'boxPrecioOverride', 'boxEtiquetaEntradaOverride',
 ];
 
+/**
+ * Parsea el tope de menús del FormData del backoffice (Sprint 7, S2).
+ *
+ *   undefined  → el request no manda el campo: NO tocar lo guardado
+ *   ''         → el operador lo vació: sin tope (null)
+ *   entero ≥ 0 → ese tope
+ *   basura     → NO tocar lo guardado (misma guarda que precioMenu en updateHome:
+ *                un valor inválido no debe pisar un tope válido en silencio)
+ *
+ * Un tope de 0 es legítimo y distinto de null: "este evento no vende más menús".
+ */
+function parseTopeMenus(raw) {
+  if (raw === undefined || raw === null) return undefined;
+  const s = String(raw).trim();
+  if (s === '') return null;
+  if (!/^\d+$/.test(s)) return undefined;
+  const n = parseInt(s, 10);
+  return Number.isInteger(n) ? n : undefined;
+}
+
 async function adminCrear(req, res) {
   try {
     const {
       nombre, descripcion, fecha, hora, invitado,
       precioEntrada, cantidadDisponible,
       esDestacado, estaPublicado, estaAgotado, esExterno, linkExterno,
-      menuHabilitado,
+      menuHabilitado, topeMenus,
     } = req.body;
 
     if (!nombre || !descripcion || !fecha || !hora || !precioEntrada || !cantidadDisponible) {
@@ -206,6 +267,11 @@ async function adminCrear(req, res) {
         }],
       },
     };
+    // Tope de menús: mismo motivo que menuHabilitado — el form de "Nuevo evento"
+    // trae el campo, y sin leerlo acá el tope cargado al crear se perdía.
+    const topeCrear = parseTopeMenus(topeMenus);
+    if (topeCrear !== undefined) dataEvento.topeMenus = topeCrear;
+
     for (const f of BOX_OVERRIDE_FIELDS) {
       if (req.body[f] !== undefined) dataEvento[f] = String(req.body[f]).trim();
     }
@@ -231,7 +297,7 @@ async function adminEditar(req, res) {
     const {
       nombre, descripcion, fecha, hora, invitado,
       esDestacado, estaPublicado, estaAgotado, esExterno, linkExterno,
-      menuHabilitado,
+      menuHabilitado, topeMenus,
     } = req.body;
 
     const data = {};
@@ -251,6 +317,10 @@ async function adminEditar(req, res) {
     if (menuHabilitado !== undefined) {
       data.menuHabilitado = menuHabilitado === 'true' || menuHabilitado === true;
     }
+    // Tope de menús (S2). Bajarlo por debajo de lo ya vendido no rompe nada: el
+    // cupo restante se calcula con Math.max(0, ...) y simplemente queda en 0.
+    const topeEditar = parseTopeMenus(topeMenus);
+    if (topeEditar !== undefined) data.topeMenus = topeEditar;
     if (req.file) data.flyerUrl = `/assets/img/uploads/eventos/${req.file.filename}`;
     for (const f of BOX_OVERRIDE_FIELDS) {
       if (req.body[f] !== undefined) data[f] = String(req.body[f]).trim();
@@ -422,6 +492,15 @@ async function adminEventoStats(req, res) {
     `;
     const menusPendientes = Number(menusPendientesRow[0]?.cantidadMenus || 0);
 
+    // Cupo del menú (S2). OJO: `menusCantidad` de arriba filtra `totalPagado > 0`
+    // (deja afuera las invitaciones) porque sirve para la PLATA. El cupo es otra
+    // pregunta — cuántos platos hay que cocinar — y se cuenta con la definición
+    // única de `contarMenusOcupados`: aprobadas + pendientes, valgan lo que valgan.
+    // Calcular el restante restando los números de arriba daría un cupo inflado.
+    const menusOcupados = evento.topeMenus === null
+      ? null
+      : await contarMenusOcupados(prisma, eventoId);
+
     // Capacidad del evento: suma de capacidades de todas las tandas. Si alguna
     // tanda tiene capacidad null (sin límite), el total del evento es null (∞).
     const tandas = evento.tandas;
@@ -469,6 +548,10 @@ async function adminEventoStats(req, res) {
         cantidad: menusCantidad,
         total: menusTotal,
         pendientes: menusPendientes,
+        // Cupo: null en los tres cuando el evento no tiene tope.
+        tope: evento.topeMenus,
+        ocupados: menusOcupados,
+        restantes: calcularMenusRestantes(evento.topeMenus, menusOcupados),
       },
       capacidad: {
         evento: capacidadInfinita ? null : capacidadEvento,

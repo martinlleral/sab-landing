@@ -7,6 +7,11 @@ const qrService = require('../services/qr.service');
 const { procesarPagoAprobado, revertirCompraAprobada } = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
 const { calcularTotalCompra, reservarCupon, validarCupon } = require('../services/precios.service');
+// El módulo entero, además de los destructurados: las funciones del tope de menús
+// se llaman como `precios.x()` para que los tests puedan monkey-patchear el
+// pre-chequeo y simular una lectura vieja (patrón sin jest del proyecto, el mismo
+// que usa pagos.service.js con `precios.liberarCupon`).
+const precios = require('../services/precios.service');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -88,9 +93,19 @@ async function crearPreferencia(req, res) {
       ? 0
       : parseInt(cantidadMenus);
     let precioMenu = 0;
+    let menusRestantes = null;
     if (Number.isInteger(menusPedidos) && menusPedidos > 0) {
       const home = await prisma.home.findFirst({ select: { precioMenu: true } });
       precioMenu = home?.precioMenu ?? 0;
+
+      // Cupo de menús (S2). Pre-chequeo de cortesía: da un mensaje concreto
+      // ("quedan 3 y pediste 5") antes de crear nada. Puede quedar viejo entre
+      // esta lectura y la compra — la garantía real la da `reservarMenus` dentro
+      // de la transacción, igual que validarCupon respecto de reservarCupon.
+      if (evento.topeMenus !== null && evento.topeMenus !== undefined) {
+        const ocupados = await precios.contarMenusOcupados(prisma, evento.id);
+        menusRestantes = precios.calcularMenusRestantes(evento.topeMenus, ocupados);
+      }
     }
 
     // Cálculo del total (aplica tipoEntrada, valida cupón si vino, valida las
@@ -105,9 +120,16 @@ async function crearPreferencia(req, res) {
         cantidadMenus: menusPedidos,
         menuHabilitado: evento.menuHabilitado,
         precioMenu,
+        menusRestantes,
       });
     } catch (err) {
-      if (err.code) return res.status(400).json({ error: err.message, code: err.code });
+      if (err.code) {
+        const payload = { error: err.message, code: err.code };
+        // El cupo viaja en el body para que el checkout pueda recortar el select
+        // al número real sin pedir el evento de nuevo.
+        if (err.menusRestantes !== undefined) payload.menusRestantes = err.menusRestantes;
+        return res.status(400).json(payload);
+      }
       throw err;
     }
 
@@ -143,6 +165,14 @@ async function crearPreferencia(req, res) {
             mpEstado: 'pending',
           },
         });
+
+        // Reserva atómica del cupo de menús (S2). Va DESPUÉS del create a
+        // propósito: el aggregate de `reservarMenus` cuenta la compra recién
+        // insertada, así que es "mutar y verificar después con rollback si se
+        // pasó" — la misma forma que reservarCupon, sin contador que mantener.
+        if (precioCalc.cantidadMenus > 0) {
+          await precios.reservarMenus(tx, evento.id, evento.topeMenus);
+        }
 
         if (precioCalc.cupon) {
           await tx.cuponUso.create({
