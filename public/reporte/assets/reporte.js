@@ -94,6 +94,24 @@ async function cargarResumen() {
   document.getElementById('r-aporte').textContent = fmtPesos(data.recaudado.aporteExtra);
   document.getElementById('r-con-aporte').textContent = data.compras.conAporte;
   document.getElementById('r-asistencia').textContent = fmtPct(data.asistenciaPct);
+
+  // Menú de la sede (Sprint 7). "Recaudado total" es todo lo cobrado por MP e
+  // incluye el menú, que la cooperativa le paga a la sede. Este reporte se comparte
+  // con la coop: el neto propio tiene que estar a la vista, no calculado a mano.
+  const totalMenus = data.recaudado.menus || 0;
+  const card = document.getElementById('r-menus-card');
+  const desc = document.getElementById('r-recaudado-desc');
+  if (totalMenus > 0) {
+    if (card) card.style.display = '';
+    document.getElementById('r-menus').textContent = fmtPesos(totalMenus);
+    const cant = data.menus?.cantidad || 0;
+    const menusDesc = document.getElementById('r-menus-desc');
+    if (menusDesc) menusDesc.textContent = `${cant} menú${cant === 1 ? '' : 's'} vendido${cant === 1 ? '' : 's'} · se le paga a la sede`;
+    if (desc) desc.textContent = `Cobrado, incluye el menú. Del SAB: ${fmtPesos(data.recaudado.sab)}`;
+  } else {
+    if (card) card.style.display = 'none';
+    if (desc) desc.textContent = 'Base + aporte extra';
+  }
 }
 
 // ============================================
@@ -105,6 +123,10 @@ async function cargarTimeline() {
   destroyChart('timeline');
   if (!data.data.length) { empty.style.display = 'block'; return; }
   empty.style.display = 'none';
+
+  // La curva de plata es el neto del SAB: el menú de la sede no es recaudación
+  // propia. Sin menús vendidos las dos series coinciden y el label queda como antes.
+  const hayMenus = data.data.some((r) => (r.menus || 0) > 0);
 
   charts.timeline = new Chart(document.getElementById('chart-timeline'), {
     type: 'line',
@@ -120,14 +142,22 @@ async function cargarTimeline() {
           tension: 0.2,
         },
         {
-          label: 'Recaudado acumulado',
-          data: data.data.map((r) => r.recaudadoAcumulado),
+          label: hayMenus ? 'Recaudado acumulado (del SAB, sin menú)' : 'Recaudado acumulado',
+          data: data.data.map((r) => r.recaudadoSabAcumulado ?? r.recaudadoAcumulado),
           borderColor: COLOR.recaudado,
           backgroundColor: COLOR.recaudado + '22',
           yAxisID: 'y1',
           tension: 0.2,
           borderDash: [4, 4],
         },
+        ...(hayMenus ? [{
+          label: 'Menú de la sede (por período)',
+          data: data.data.map((r) => r.menus || 0),
+          borderColor: '#c4384b',
+          backgroundColor: '#c4384b22',
+          yAxisID: 'y1',
+          tension: 0.2,
+        }] : []),
       ],
     },
     options: {
@@ -189,7 +219,11 @@ async function cargarTandas() {
               const t = data.tandas[items[0].dataIndex];
               const cap = t.capacidad === null ? '∞' : t.capacidad;
               const ocup = t.pctOcupacion === null ? '—' : fmtPct(t.pctOcupacion);
-              return `Recaudado: ${fmtPesos(t.recaudado)} · Capacidad: ${cap} · Ocup: ${ocup}`;
+              // Con menús, la plata se declara partida: neto del SAB y menú de la sede.
+              const plata = (t.menus || 0) > 0
+                ? `SAB: ${fmtPesos(t.recaudadoSab)} · Menú sede: ${fmtPesos(t.menus)}`
+                : `Recaudado: ${fmtPesos(t.recaudado)}`;
+              return `${plata} · Capacidad: ${cap} · Ocup: ${ocup}`;
             },
           },
         },

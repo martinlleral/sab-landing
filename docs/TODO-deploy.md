@@ -883,9 +883,317 @@ Notas de implementación, por si hay que volver:
 
 ---
 
+## 🍽️ Sprint 7 — Entrada + menú de Casa Metro (aprobado 16/8, cargado 17/8)
+
+**Scope nuevo, ninguno es defecto.** Origen: 3 audios del operador del backoffice, del 10/8 → ficha interna del backlog (15/8) → adenda aprobada el 16/8. Se cargan acá recién ahora porque se dejaron afuera a propósito hasta que el alcance estuviera acordado por escrito.
+
+**Qué es.** Vender el menú de Casa Metro **en el mismo checkout que la entrada**, con la plata del menú identificable por separado y con la cocina sabiendo cuántos platos hacer y a quién entregárselos.
+
+> **La numeración de cara al cliente no es esta.** En la adenda los puntos van del 1 al 6 (1·Venta del menú=43a, 2·Lista para la cocina=44, 3·Tope=43b, 4·Cierre 18h=43c, 5·Aviso validador=45, 6·Descarga a planilla=42), para que el bloque acordado quede contiguo.
+
+**Cinco reglas que gobiernan los cuatro ítems** (del kickoff del 17/8):
+
+1. **No tocar `tipoEntrada`.** El menú es ortogonal a base/aporte — 87 líneas en 11 archivos usan esa semántica y ninguna se toca.
+2. **Cero dependencias npm nuevas.** El proyecto tiene 16 y ya cerró 6 CVEs borrando un import. CSV con BOM para el 42, `@media print` para el 44.
+3. **El cupón nunca descuenta el menú.** Es la regla más cara de romper (ver 43a).
+4. **No replicar el contador desnormalizado de `Tanda.cantidadVendida`** — esa race es deuda preexistente, no se le suma una segunda.
+5. **Congelar el precio en la compra.** Subirlo después no reescribe la historia contable.
+
+---
+
+### 43. 🍽️ Entrada con menú — **scope nuevo** · 13-18 h
+
+**El pedido literal era "una segunda tanda" y no se hace así.** Las tandas son secuenciales por diseño (`@@unique([eventoId, orden])`) y lo que se pide es que **convivan**; además partiría el aforo (dos `capacidad` que suman mal) y rompería el precio al agotarse. Se resuelve como **cantidad independiente**, al lado del *A la Gorra* — con la diferencia de que la gorra es un **atributo** de la entrada y el menú es una **cantidad aparte**.
+
+#### 43a. Núcleo del menú · 9-12 h · **el cuello: todo lo demás depende de esto**
+
+**Archivos:** `prisma/schema.prisma` · `src/services/precios.service.js` · `src/controllers/compras.controller.js` · `src/services/pagos.service.js` · `public/assets/js/app.js` · `home-cms.html` · `evento-detalle.html` · `src/services/brevo.service.js` · `src/controllers/dashboard.controller.js` · **Sesiones:** S1a (backend) + S1b (UI)
+
+**Modelo — migración ÚNICA con los 6 campos** (el kickoff del 17/8 unificó los 4 de la ficha con los de 43b y 43c, para no correr una segunda migración sobre una base con ventas vivas). Aditiva y con defaults, así que los eventos existentes quedan sin menú habilitado:
+
+| Campo | Tipo | Para |
+|---|---|---|
+| `Home.precioMenu` | `Int @default(15000)` | Precio global editable |
+| `Home.menuCorteHora` | `String @default("18:00")` | Lo usa 43c, se crea ahora |
+| `Evento.menuHabilitado` | `Boolean @default(false)` | Toggle por evento |
+| `Evento.topeMenus` | `Int?` | Lo usa 43b, se crea ahora |
+| `Compra.cantidadMenus` | `Int @default(0)` | La cantidad comprada |
+| `Compra.menuUnitario` | `Int @default(0)` | **Congela el precio al comprar** |
+
+**⚠️ El cupón NO puede descontar el menú.** Regla vigente en `precios.service.js:9`: *"el cupón se aplica SOLO sobre el precio base […] el excedente del aporte nunca se descuenta"*. El menú necesita la misma protección **y es más grave**: el aporte descontado es plata que la coop no recibe, pero el menú descontado es plata que la coop **le paga igual a Casa Metro**. Con `AMIGOS25` y 10 entradas con menú son **$37.500** del bolsillo del SAB — y los cupones ya se aplican × cantidad de entradas. Es checklist obligatorio, no nice-to-have.
+
+- [x] Migración Prisma con los 6 campos + backfill en 0/false (los eventos existentes no ofrecen menú) — `20260817163938_sprint7_menu_casa_metro`
+- [x] `precios.service.js`: el menú suma **después** del descuento, con test de que el cupón no lo toca
+- [x] Checkout público (`app.js`): **segundo selector de cantidad**, no un checkbox — con su subtotal y el total actualizado. Es el cambio de UI más visible del ítem
+- [x] Validaciones (confirmadas por el operador el 17/8, son reglas duras): mínimo 1 entrada · `cantidadMenus <= cantidadEntradas` · no vender menú si `menuHabilitado` es false
+- [x] Backoffice `home-cms.html`: campo de precio global · `evento-detalle.html`: toggle por evento
+- [x] Mail de confirmación (`brevo.service.js`): "incluye N menús"
+- [x] Reportes y dashboard: el menú como línea separada, igual que el aporte extra — **es el "diferenciado" que el operador pidió explícitamente**
+- [x] Tests: las 4 combinaciones (base/aporte × con/sin menú), cupón, y devolución — `tests/integration/menu-checkout.test.js`, 26 checks
+- [x] Tests de la capa visible: los 6 endpoints de recaudación restan el menú, el precio congelado no se mueve al cambiar el global, y las dos whitelists persisten — `tests/integration/menu-reportes.test.js`, 55 checks
+
+> ### ✅ 43a COMPLETO (S1a backend + S1b UI, 17/8)
+>
+> **La capa visible (S1b, 17/8).** Checkout, backoffice, mail y reportes:
+> - **Checkout:** segundo selector de cantidad `0..cantidadEntradas`, así la regla
+>   "menús ≤ entradas" no se puede romper desde la UI (el backend igual la valida). El breakdown
+>   pasó a 3 líneas — Entradas / Descuento / Menú — con una nota que aparece **solo** cuando hay
+>   cupón y menú a la vez: sin ella, alguien con cupón cree que le cobraron mal.
+> - **Backoffice:** card "Menú de la sede" en `home-cms.html` (el precio global, con aviso de que
+>   en 0 no se vende en ningún evento) y toggle por evento en `evento-detalle.html`, que muestra el
+>   precio vigente para no activarlo a ciegas. Las **dos whitelists** que heredaba S1b quedaron
+>   cerradas, y también la de `adminCrear` — el form de "Nuevo evento" trae el mismo toggle, así que
+>   sin eso marcarlo al crear el evento se perdía en silencio.
+> - **Mail:** bloque con la cantidad, el monto y **qué hacer en la puerta** — el menú no va en el QR
+>   y se retira dando el nombre en el mostrador, que es el control de entrega vigente (44).
+> - **Reportes:** ver el hallazgo de abajo. Eran **6** lugares, no 4.
+>
+> **🔺 El hallazgo de S1a, cerrado en S1b: la plata de la sede se leía como recaudación propia.**
+> `Compra.totalPagado` incluye el menú (tiene que incluirlo: es lo que el comprador paga y lo que el
+> webhook cruza contra MP), y **toda** la recaudación del backoffice se calculaba sumando
+> `totalPagado`. S1a listó 4 lugares; contra el código eran **6** — faltaban
+> `dashboard.distribucionTandas` y `dashboard.comparativaEventos`, y el que S1a señaló como "el que
+> se comparte por token" no era ese: **el reporte público reusa los controllers del dashboard**
+> (`reporte.routes.js`), así que los que viajan al link de la coop son `resumen`, `ventasTimeline` y
+> `distribucionTandas`. Los 6 ahora devuelven `menus` y el neto (`recaudadoSab`), y las 5 vistas lo
+> muestran: el KPI grande sigue siendo el cobrado por MP —es el que concilia— pero su etiqueta
+> declara el neto, y al lado va "Menú de la sede" en carmín. La plata del menú se lee de
+> `Compra.menuUnitario` (congelado), **nunca** del precio global: hay un test que se pone en rojo si
+> alguien lo cambia por el global.
+>
+> **Verificado en el navegador, no solo con tests:** 35 checks sobre el checkout real (incluido
+> cupón 25 % + 2 menús → $52.500, con el menú entero sin descontar) y 21 sobre las 5 vistas del
+> backoffice y el reporte por token.
+>
+> **Backend (S1a, 17/8).** Lo hecho:
+> - Migración **escrita a mano** como 6 `ALTER TABLE ADD COLUMN`. `prisma migrate dev` generaba un
+>   `RedefineTables` (create + copy + `DROP TABLE` + rename) de `Home`, `Evento` y **`Compra`**, y esa
+>   tabla nunca fue reescrita en producción (la migración del 5/7 sumó los campos de devolución con
+>   `ALTER TABLE`). Verificado con `prisma migrate dev` post-aplicación: **sin drift**. ⚠️ El archivo
+>   `migration.sql` **no se toca más**: Prisma guarda su checksum y editarlo bloquea el deploy.
+> - El cupón no puede tocar el menú **por construcción**, no por una guarda: el menú no entra a
+>   `calcularPrecioFinal` (donde vive el descuento) sino que se suma en `calcularTotalCompra`.
+>   Verificado por mutación: al hacer que el descuento alcance al menú, **5 checks se ponen en rojo**.
+> - El menú viaja como **ítem aparte** en la preferencia de MP, no sumado al precio de la entrada: la
+>   plata de la sede queda diferenciada hasta el reporte de MP. La suma de los ítems tiene que dar
+>   `Compra.totalPagado` — es lo que el webhook cruza contra `transaction_amount`.
+> - `revertirCompraAprobada` ahora reporta `menus_devueltos`.
+>
+> ~~**Deuda que hereda S1b (2 líneas, backend):** los dos endpoints de edición tienen whitelist
+> explícita de campos, así que los toggles no se van a guardar hasta agregarlos —
+> `home.controller.js:19` (`precioMenu`) y `eventos.controller.js:226` (`menuHabilitado`).~~
+> ✅ **Cerrada en S1b**, más una tercera que no estaba en la lista: `adminCrear`. Lo que **no** hizo
+> falta tocar, como decía S1a: los endpoints de lectura devuelven la fila entera.
+
+> **Corrección del kickoff (17/8) a la ficha:** la reversión de compras **no vive en el controller**. Vive en `pagos.service.js` y son **3 puntos de toque**, no 1 — `procesarPagoAprobado` (incrementa), `procesarPagoCancelado` (el autocancel de pendientes, 72 h) y `revertirCompraAprobada` (la devolución del backoffice, US-A). Tocar solo uno deja el estado desangrándose en silencio.
+
+#### 43b. Tope de menús · 2-3 h · depende de 43a
+
+**Archivos:** `src/services/precios.service.js` · `src/controllers/compras.controller.js` · `src/controllers/eventos.controller.js` · `evento-detalle.html` · `app.js` · `index.html` · `app.css` · **Sesión:** S2
+*(`pagos.service.js` estaba en la lista del plan y **no se tocó**: la liberación del cupo no necesita código — ver el hallazgo abajo.)*
+
+- [x] `Evento.topeMenus` (`Int?`, null = sin tope) + campo en `evento-detalle.html`, dentro de la card "Menú de la sede" que ya existía, con el cupo vivo a la vista *(el campo lo creó la migración de 43a)*
+- [x] **Reserva atómica** con la forma de `reservarCupon()`: mutar y verificar **después**, con rollback si se pasó. **No** se replicó el contador desnormalizado de `Tanda.cantidadVendida`
+- [x] UI: menús restantes visibles, "menús agotados" en 0, y el caso "quedan 3 y pide 5" resuelto con el número concreto
+- [x] Liberación de la reserva verificada en los **3 puntos** de `pagos.service.js` — **con un test, no con código**: ver el hallazgo de abajo
+- [x] Test de race: 2 compras simultáneas del último menú → una falla con rollback limpio — `tests/integration/menu-tope.test.js`, 36 checks
+
+> ### ✅ 43b COMPLETO (S2, 17/8)
+>
+> **La liberación no era código: era un test.** El plan mandaba a escribir decrementos en los 3
+> puntos de `pagos.service.js`. No hay nada que decrementar — **no existe contador de menús
+> vendidos**: la cantidad ocupada se deriva sumando `Compra.cantidadMenus` de las compras
+> `approved` + `pending`, así que cuando una compra sale de esos estados (autocancel → `cancelled`,
+> devolución → `refunded`) **deja de contar sola**. Lo que sí hacía falta era *demostrarlo*, y eso
+> son 6 checks: la pendiente ocupa, el autocancel libera, la devolución libera y reporta cuántos
+> menús soltó, la compra cancelada conserva su `cantidadMenus` (es historia contable) y el ciclo
+> comprar → cancelar → devolver → comprar no pierde cupo.
+>
+> **La reserva atómica, traducida.** El molde de `reservarCupon` es "mutar y verificar después con
+> rollback". Sin contador, el *mutar* es el propio `INSERT` de la Compra y el *verificar* es un
+> aggregate dentro de la misma transacción: si la suma pasó el tope → `MENUS_AGOTADO_RACE` y
+> rollback. Es atómico por el mismo motivo que `reservarCupon`: el INSERT toma el lock de escritura
+> antes del conteo y SQLite admite un solo escritor. Encima va un pre-chequeo de cortesía que da el
+> número exacto ("quedan 3 y pediste 5") antes de crear nada, igual que `validarCupon` respecto de
+> `reservarCupon`.
+>
+> **Una definición única de "cupo tomado".** `ESTADOS_MENU_OCUPADO` = aprobadas + pendientes, en un
+> solo lugar, y la usan la reserva, el checkout y el backoffice. Sin eso, el número que ve el
+> comprador y el que aplica el backend podían divergir. Ojo con la trampa: `menus.cantidad` de los
+> reportes filtra `totalPagado > 0` porque mide **plata**; el cupo mide **platos** y no puede
+> derivarse de ahí.
+>
+> **Verificado también en el navegador** (16 checks): los tres estados del select —sin tope, "quedan
+> N", agotado—, que el techo sea el menor entre entradas y cupo, y que el rechazo por cupo recorte
+> el selector solo. Y **4 mutaciones deliberadas** al código para probar que los tests muerden: sin
+> la guarda de la transacción caen 7 checks; sin los pendientes en el cupo, 15.
+>
+> **Dos defectos visuales que ningún check podía ver, encontrados mirando el render:** el `<select>`
+> deshabilitado caía al fondo claro de Bootstrap y el control **inactivo** quedaba siendo lo más
+> brillante del modal oscuro (con el texto casi ilegible por su `opacity: .65`); y el aviso de cupo
+> usaba el celeste que en ese modal es el color del único link de texto, así que un dato no
+> clickeable parecía clickeable. Los dos apagados, en la misma línea que el tratamiento "AGOTADO"
+> de las cards de evento, que desatura en vez de resaltar.
+
+> ### 🔍 Code review del núcleo (43a + 43b), 17/8
+>
+> Con el 43b cerrado, los tres archivos que tocan la plata quedaron quietos por primera vez y se
+> revisó el bloque entero antes de que el resto se apoye encima. **Cuatro hallazgos: tres fixeados
+> con test, uno documentado sin código.**
+>
+> - 🟠 **El rechazo por "menús agotados" dejaba el checkout sin salida.** El error no traía el cupo,
+>   y el front solo se recupera cuando ese dato viene en la respuesta: quien tenía el modal abierto
+>   desde antes de que se agotaran veía el cartel *"podés seguir con las entradas solas"* con el
+>   selector todavía en "2 menús", y cada reintento moría igual. El camino gemelo sí se
+>   autocorregía — dos formas de llegar al mismo estado con comportamientos distintos.
+> - 🟠 **Un `cantidadMenus` no numérico creaba la compra sin menús y sin error.** `parseInt('dos')`
+>   da `NaN`, y un `|| 0` lo convertía en 0 **antes** de que la validación lo viera: HTTP 200 en vez
+>   del 400 que el propio código documenta. Los negativos sí se rechazaban, así que la regla valía
+>   distinto según por dónde entrara el número. No hay pérdida de plata, pero produce justo el
+>   estado caro de este sprint: **una compra sin menú no se arregla después**.
+> - ⚪ `colspan` desalineado en la fila "Cargando..." de la comparativa de eventos.
+> - 📋 **Sin fix, porque no es código:** el mail promete una lista que todavía no existe. Ver el
+>   ítem 44, que por esto dejó de ser recortable.
+>
+> **Lo que el review verificó y está sano:** la regla del cupón sigue blindada por composición (el
+> 43b no abrió ninguna vía nueva) · el invariante de la preferencia de pago (suma de ítems ===
+> total de la compra, que es contra lo que cruza el webhook) · las 6 restas de recaudación, que
+> leen el precio congelado de la compra y no el global · la atomicidad de la reserva del tope · las
+> 3 whitelists, sin una cuarta escondida.
+
+#### 43c. Corte a las 18:00 del día del evento · 2-3 h · depende de 43a
+
+**Archivos:** helper estilo `src/services/tandas.service.js` · `src/controllers/compras.controller.js` · `public/assets/js/app.js` · `home-cms.html` · **Sesión:** S3
+
+- [x] `Home.menuCorteHora` (`String`, default `"18:00"`) editable desde el CMS — cuesta casi nada y evita tocar código si la sede cambia el horario *(el campo ya lo creó la migración de 43a: **43c no agrega migración**)*. Whitelist de `updateHome` con la forma de `parseTopeMenus`: ausente = no tocar · basura = no pisar lo guardado. El vacío **tampoco** borra (el campo es `NOT NULL`; para vender hasta el final del día se carga `23:59`)
+- [x] Derivar el límite de `Evento.fecha` + esa hora. **⚠️ Timezone:** el día calendario sale de los componentes **UTC crudos** de la fecha (la convención del proyecto: se guarda como mediodía UTC y se lee forzando UTC) y el offset −3 se suma al construir el instante → 18:00 del 23/8 = `2026-08-23T21:00:00Z`. Restarle 3 h a la fecha guardada movería al día anterior cualquier fecha entre 00:00 y 03:00 UTC. Helper con la forma de `estaDisponible()`, con checks de 17:59 / 18:00 / 18:01 y uno de regresión del timezone
+- [x] **Doble capa:** el evento viaja con `menuCerrado` calculado en el **backend** (reloj del servidor, no el del navegador) y el front muestra la sección con el select deshabilitado; `crearPreferencia` rechaza igual con 400 `MENU_CORTE_PASADO`, con check que verifica que **no quede ninguna compra creada**. El rechazo deja salida: el checkout se autocorrige y la compra se puede terminar con entradas solas
+- [x] **Config imposible = fail-closed:** una hora inválida cargada a mano en la base corta la venta de **menú** con 400 explícito (no un 500) y deja las **entradas** a la venta. La portada muestra el menú cerrado en vez de caerse
+- [x] **Caso borde real — criterio definido:** el corte se evalúa al **crear la preferencia**, no al acreditar. Quien compró 17:55 con Rapipago compró en horario y su cupo ya quedó reservado; el sistema **no** revalida en el webhook. La hoja de cocina del 44 lleva el total de lo **aprobado** y **advierte aparte** los pendientes con menú (compras y platos). Un pago que acredite después del evento se resuelve devolviendo la compra (US-A), no en la vista
+
+---
+
+### 42. 📊 Exportar compradores a planilla — **scope nuevo, pero es lo que se venía debiendo** · 2-3 h
+
+**Archivos:** `src/controllers/compras.controller.js` · `public/backoffice/evento-compras.html` · **Independiente de todo lo demás** · **Sesión:** S5
+
+El operador lo dijo así: *"no tengo la posibilidad de bajar un Excel de toda la lista de compradores"*. Figura como P1 desde la auditoría del 4/4 y está anunciado en `docs/FAQS.md:44` como *"feature pendiente (Sprint 2)"* — nunca llegó a entregarse.
+
+**⚠️ Endpoint dedicado, no reusar el paginado.** El listado pagina de a 20 y topea en 200 cuando hay búsqueda (recién arreglado en el ítem 40): el export necesita el conjunto **completo**. Es el patrón ya documentado en el proyecto para agregaciones.
+
+**CSV, no `.xlsx`.** Sumar una librería de planillas trae superficie de CVEs a un proyecto que ya limpió 6 borrando un import. **CSV con BOM UTF-8** abre en Excel de doble clic con los acentos bien. Si hiciera falta `.xlsx` de verdad, se trata como alcance aparte.
+
+- [x] `GET /api/admin/compras/export` con los mismos filtros que el listado (evento, validación, búsqueda) — **y también el de estado**, que la ficha no listaba
+- [x] BOM UTF-8 al inicio + `Content-Disposition: attachment` con nombre fechado
+- [x] Columnas: nombre, apellido, email, teléfono, cantidad, tipo de entrada, **cantidad de menús**, total, estado, fecha, códigos QR — **más el desglose de la plata** (precio del menú, total de Casa Metro, total del SAB) y las entradas validadas
+- [x] Decidir si incluye devueltas y pendientes → **por defecto solo aprobadas**, con un switch para sumar el resto, y el filtro elegido a mano en pantalla gana sobre las dos reglas
+- [x] Botón en `evento-compras.html` que respete los filtros activos en pantalla, con un cartel que dice qué va a bajar
+
+> La columna "cantidad de menús" era lo único que dependía de 43a — y 43a ya estaba hecha, así que entró en la misma sesión sin quedar anotada.
+
+> ### ✅ 42 COMPLETO (S5, 18/8)
+>
+> **Endpoint** `GET /api/admin/compras/export` ([compras.controller.js](../src/controllers/compras.controller.js)),
+> **serializador** en [`src/utils/csv.js`](../src/utils/csv.js) (nuevo, sin dependencias) y **botón +
+> switch de alcance** en `evento-compras.html`. `npm test` → **19/19 suites**, con
+> `compras-export.test.js` nuevo (**23 checks**), más **14 checks en el navegador** con sesión real.
+>
+> **Lo que el filtro y el listado comparten.** Los dos endpoints arman su `where` con la misma
+> función (`construirFiltroCompras`), así que el CSV no puede traer un conjunto distinto del que la
+> pantalla muestra. Hay un check que lo ata: misma búsqueda → mismos IDs en los dos.
+>
+> **Tres decisiones que no estaban en la ficha:**
+>
+> 1. **Separador `;`, no `,`.** Excel no usa una coma fija: usa el separador de listas del locale, y
+>    en es-AR es `;`. Con comas, un doble clic en un Excel en español mete las 16 columnas dentro de
+>    la columna A — justo el criterio de éxito que se buscaba. Google Sheets detecta el delimitador
+>    solo, así que no se pierde nada del otro lado. Se cambia en una línea de `csv.js` si hiciera falta.
+> 2. **Neutralización de fórmulas (CSV injection).** Nombres, mails y teléfonos los escribe quien
+>    compra, en un formulario público. Un campo que arranca con `=`, `+`, `-` o `@` es una fórmula
+>    para Excel, no un texto. Se prefijan con `'`, que la planilla lee como "texto literal" y no
+>    muestra en la celda.
+> 3. **`eventoId` obligatorio.** Sin él, el endpoint sería un volcado de la PII de toda la base en un
+>    clic (Ley 25.326). El único punto de entrada es el botón de la pantalla de un evento.
+>
+> **La plata, desglosada.** `totalPagado` incluye el menú, y el menú es de Casa Metro. Un CSV con
+> solo el total repetiría en la planilla de la administración el error que S1b cerró en el
+> backoffice. Van las tres columnas, con la misma resta de los reportes, y el precio sale de
+> `menuUnitario` congelado en la compra. Verificado a mano: la suma de la columna cuadra con la card
+> "Recaudado" de la pantalla ($276.000 = $180.000 del SAB + $96.000 de la sede en el fixture de QA).
+>
+> **Verificado por mutación:** 6 roturas deliberadas (volver a paginar · sacar la neutralización de
+> fórmulas · offset de timezone a 0 · sacar el default de aprobadas · dejar que el default pise el
+> filtro de pantalla · sacar las guardas de PII) tumban 13, 2, 1, 2, 1 y 1 checks respectivamente.
+>
+> **4 defectos visuales corregidos mirando el render**, que ningún check veía: el botón en verde
+> competía con el "$276.000 RECAUDADO" de la misma pantalla y con el rojo de "Limpiar pendientes"
+> (el sistema ya reserva el color para lo peligroso y para la marca) · el cartel que resuelve toda la
+> ambigüedad del feature estaba en `#666`, el gris de lo desactivado, y era lo más apagado de la fila
+> · quedaba pegado al label del switch, leyéndose como una sola frase · el nombre del archivo decía
+> "aprobada" en singular, como si trajera una sola fila.
+>
+> **Un caso que se resolvió antes del click:** con la tabla vacía el botón queda apagado y su tooltip
+> dice por qué, en vez de dejar bajar un archivo con solo encabezados o disparar un aviso rojo por
+> algo que no es un error. El chequeo del servidor queda igual como red.
+
+---
+
+### 44. 🧾 Lista de menús para la cocina — **scope nuevo** · 3-4 h · depende de 43a
+
+**Archivos:** vista nueva `public/backoffice/evento-menus.html` · `src/routes/backoffice.routes.js` · endpoint admin · **Sesión:** S4
+
+Es el *"exportar un PDF de la gente que compró el menú"*. Lista **operativa**, distinta del 42: va a la cocina y a la puerta, no a la administración. Sin emails ni teléfonos.
+
+**Subió de prioridad.** Por la decisión de producto del 16/8 no hay segundo QR: **este documento ES el control de entrega**. En la puerta se tilda esta hoja impresa, y es lo que se lleva Casa Metro.
+
+> **⚠️ Y dejó de ser recortable (hallazgo del code review del núcleo, 17/8).** El mail de confirmación del 43a ya dice *"acercate al mostrador y dá tu nombre — ya estás en la lista"*, y esa lista es **esta**. El mail sale con cada compra aprobada apenas se deployee el 43a, así que si este ítem se cayera no quedaría una funcionalidad faltante: quedaría **una promesa escrita a gente que pagó**. Sigue siendo diferible respecto del día de la venta (la cocina lo imprime el día del evento), pero **antes del evento no es negociable** — y si por lo que sea no llegara, la salida barata es sacarle esa frase al mail **antes** del deploy, no después.
+
+**Sin librería de PDF:** vista HTML con `@media print` → *Imprimir → Guardar como PDF*. El navegador ya trae el motor, y encima le sirve impresa, que es exactamente lo que va a usar.
+
+- [x] Vista `/backoffice/evento-menus.html` filtrada por evento
+- [x] **Total de menús** bien visible arriba — es el número que Casa Metro necesita para cocinar
+- [x] Una fila por compra con **la cantidad** ("Pérez, Juan — 2 menús") y **un casillero por menú**, no uno por persona: con la decisión 1 puede retirar 2 y hay que poder tildar de a uno
+- [x] Ordenada alfabéticamente por apellido, con la colación `es` ya resuelta en el ítem 40 — reusarla, no reimplementarla
+- [x] CSS de impresión: sin sidebar, nombre y fecha del evento en el encabezado, y la **hora de emisión** del listado (para saber si es anterior o posterior al corte de las 18)
+- [x] Marcar visualmente las compras **pendientes de pago** si las hubiera, o excluirlas, según el criterio que defina 43c
+
+**✅ Cerrado el 18/8.** `GET /api/admin/eventos/:id/menus` + la vista imprimible, con 31 checks nuevos
+(`menu-cocina.test.js`) y verificación en el navegador con sesión real. Tres cosas que conviene tener
+escritas:
+
+1. **El total de la hoja cuenta PLATOS, no plata.** No sale de `adminEventoStats.menus.cantidad`
+   (que filtra `totalPagado > 0`): se suma de las mismas filas que la hoja imprime, así que el
+   número de arriba no puede divergir de la lista de abajo. Hay un check con un fixture sintético
+   que se pone en rojo si alguien lo "simplifica".
+2. **Los pendientes van advertidos aparte, con nombre**, ni ocultos ni sumados — el criterio que
+   cerró el 43c. La hoja trae su hora de emisión y dice si es anterior o posterior al corte.
+3. ⚠️ **El deploy suma DOS archivos nuevos**: `public/backoffice/evento-menus.html` y
+   `src/utils/orden.js`. El segundo lo requiere `compras.controller.js`, así que un deploy que
+   copie solo los archivos modificados **no arranca**: `Cannot find module '../utils/orden'` corta
+   la cadena de rutas y el server no levanta. Verificado a propósito, no supuesto.
+
+---
+
+### 45. ✅ 🎫 Aviso de menú en el validador QR — **hecho el 18/8** · depende de 43a
+
+**Archivos:** `src/controllers/entradas.controller.js` · `public/backoffice/lector-qr.html` · **`public/validar/index.html`** (el validador público, que el plan no listaba) · **Sesión:** S6
+
+**No hace falta un segundo QR**, y con la decisión 1 tampoco tendría sentido: los menús no están atados a entradas puntuales, así que ninguna entrada individual "incluye menú". El validador **no controla la entrega** — eso lo hace la lista impresa del 44. Acá solo **avisa**, para que en la puerta manden a la persona al mostrador. `_validarQRCore` (`entradas.controller.js:43`) ya trae la compra entera: es mostrar un dato que ya está.
+
+- [x] Agregar el dato a lo que devuelve `_validarQRCore` — **ya lo devolvía**: el `include` sobre la compra no lleva `select`, así que trae todos sus escalares desde la migración del 43a. En vez de código, un check que lo ata y un comentario que dice por qué tiene que seguir estando
+- [x] Agregarlo **también** a `entradaReducida()` — es la versión recortada que ve **Casa Metro** con su token público (`ValidationAccessToken`), y es justo quien necesita saberlo. Viajan **dos** campos y no uno: los menús son de la *compra* y el QR es de *una entrada*, así que sin `cantidadEntradas` a la vista una compra de 3 entradas con 2 menús se puede leer como seis
+- [x] Mostrarlo grande y en color: en la puerta se mira de reojo — franja carmín con el número, a quién mandar al mostrador (en formato `Apellido, Nombre`, igual que la hoja del 44) y la aclaración de que el cartel se repite en cada QR del grupo. Y el resultado ahora **se trae a la vista al aparecer**: estaba grande y en color, pero abajo de todo y fuera de la pantalla
+- [x] Verificar en el validador **público con token**, no solo en el admin — los dos, en viewport de celular, con 5 escenarios cada uno (con menús · entrada hermana de la misma compra · sin menús · pendiente · ya validada)
+
+**No controla la entrega: avisa.** El control sigue siendo la hoja impresa del 44. Y se calla en "compra no pagada", aunque el dato viaje: anunciar menús sobre una compra que nadie cobró es prometer comida que no está paga.
+
+**Tests:** 8 checks nuevos en `validacion-token.test.js` (27 en total), verificados por mutación sobre las dos guardas independientes. Suite 19/19.
+
+---
+
 ## 🆕 Hallazgo del 17/8 — landing (detectado por la coordinadora usando el sitio)
 
-Los números 42-45 quedan reservados para los ítems del Sprint 7 (ficha `docs/backlog-menu-export-20260815.md`), así que este arranca en 46.
+Este arranca en 46 porque los números 42-45 estaban reservados para los ítems del Sprint 7 (cargados arriba el 17/8).
 
 ### 46. 🔧 El Instagram de la sede no es un campo del CMS — **defecto de diseño, no de código**
 
@@ -902,6 +1210,61 @@ Los números 42-45 quedan reservados para los ítems del Sprint 7 (ficha `docs/b
 - [ ] Al hacerlo, revisar de paso los defaults que todavía nombran la sede vieja como fallback de CMS vacío (`app.js` 432-433 y 720, `brevo.service.js` 171, y los `@default` del schema). Hoy no se ven porque el CMS tiene valor, pero son la misma clase de resto
 
 > **El patrón, para la próxima:** cuando un dato se vuelve editable desde el CMS, hay que mudar **todo el bloque**, no los campos que se piden. El que queda hardcodeado no falla el día del cambio: falla callado, semanas después, cuando ya nadie se acuerda de que era código.
+
+---
+
+## 🆕 Hallazgo del 18/8 — repo (detectado al sanear los archivos sin trackear)
+
+### 47. 🔤 Las fuentes se piden a Google en cada visita — **mejora, no defecto** · 1-2 h
+
+**Archivos:** `public/assets/css/app.css` (línea 4) · **Severidad:** baja (funciona bien; se gana privacidad y tiempo de render)
+
+**Cómo apareció.** Saneando el repo después del code review del núcleo apareció un
+`public/assets/fonts/` **sin trackear** con Open Sans y Oswald ya descargadas (120 KB, `.woff2` +
+sus licencias OFL), del 6/8. Ningún CSS, HTML ni JS las referenciaba: alguien empezó a
+auto-hospedarlas y quedó a mitad. El directorio se borró —tenerlo suelto hacía parecer que el sitio
+ya lo hacía— y el trabajo real queda acá, anotado, que es donde se puede decidir.
+
+**Cómo entran hoy, que es la parte que importa.** No hay ningún `<link>` en el HTML: las fuentes se
+piden desde un **`@import` en la línea 4 de `app.css`**. Es la peor de las formas de cargarlas, y es
+un dato que conviene tener escrito antes de estimar:
+
+```css
+@import url('https://fonts.googleapis.com/css2?family=Oswald:...&family=Open+Sans:...&display=swap');
+```
+
+Un `@import` dentro de un CSS **serializa** dos viajes: el navegador baja `app.css`, recién ahí
+descubre el import, y sale a buscar el CSS de Google — y después, las fuentes. Con un `<link>` en el
+`<head>` los dos arrancan juntos. O sea que auto-hospedarlas no ahorra una request: **desarma una
+cadena de tres saltos en el camino crítico del render.**
+
+**Qué se gana.**
+
+- **Velocidad.** Se cae la cadena serializada de arriba. Encima Cloudflare ya cachea `/assets/*`, así
+  que auto-hospedadas viajan por el mismo CDN que el resto del sitio.
+- **Privacidad.** Cada visitante le informa su IP y su user-agent a un tercero para leer la página de
+  una cooperativa. Es evitable, y es coherente con el resto del proyecto, que ya trata los datos de
+  los compradores con criterio de Ley 25.326.
+- **Robustez.** Un tercero menos entre el visitante y la portada.
+
+**Alcance real: solo la landing.** El backoffice **no** pide fuentes a Google (se verificó con
+`git grep`), así que el cambio es de un archivo.
+
+**Qué cuesta.** Bajar los `.woff2` de nuevo (dos minutos), sumar los `@font-face` con
+`font-display: swap`, precargar la de titulares, sacar el `<link>` a Google y **comparar el render
+antes y después** — las métricas de las dos familias no son idénticas a sus fallback, y un cambio
+mal hecho se nota en los titulares. Las licencias OFL permiten el auto-hospedaje: hay que conservar
+el archivo de licencia junto a las fuentes.
+
+- [ ] Bajar `opensans-latin.woff2` y `oswald-latin.woff2` (subset latin) + sus `OFL.txt` a `public/assets/fonts/`
+- [ ] `@font-face` en `app.css` con `font-display: swap`, y `<link rel="preload">` para la de titulares
+- [ ] Borrar el `@import` de `app.css:4` (es el único lugar; el backoffice no lo tiene)
+- [ ] Verificar en el navegador que no queda **ninguna** request a dominios de Google, y comparar el render contra el actual (titulares sobre todo)
+- [ ] Purgar la caché de Cloudflare de `/assets/*` al deployar, o esperar las 4 h de TTL
+
+> **No entra en el Sprint 7** — no tiene nada que ver con el menú y el sprint tiene fecha dura.
+> Es candidato natural para un hueco entre sprints: no toca la base, no toca la plata y se revierte
+> con un `git revert`.
 
 ---
 

@@ -34,6 +34,16 @@ model Home {
   // Default true = comportamiento histórico (siempre visible).
   mostrarCicloMiercoles Boolean @default(true)
   updatedAt      DateTime @updatedAt
+  // Menú de Casa Metro (Sprint 7). El precio es GLOBAL y editable desde el
+  // backoffice, pero cada Compra congela el suyo en `Compra.menuUnitario`: subirlo
+  // acá NO reescribe la contabilidad de lo ya vendido.
+  // `menuCorteHora` es la hora del día del evento después de la cual ya no se
+  // vende menú (la cocina necesita cerrar la cuenta). Se crea acá y la consume
+  // el corte horario — hoy no tiene lógica asociada.
+  // ⚠️ Campos AL FINAL del modelo a propósito: así Prisma genera
+  // `ALTER TABLE ADD COLUMN` en vez de reescribir la tabla entera.
+  precioMenu     Int      @default(15000)
+  menuCorteHora  String   @default("18:00")
 }
 
 model Evento {
@@ -62,6 +72,14 @@ model Evento {
   boxEtiquetaEntradaOverride String @default("")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+  // Menú de Casa Metro (Sprint 7). Eje ORTOGONAL a `Compra.tipoEntrada`: el menú
+  // es una cantidad propia, no un tipo de entrada ni un flag de la compra.
+  // `menuHabilitado` false = el evento no ofrece menú (default: los eventos
+  // preexistentes quedan como estaban). `topeMenus` null = sin tope; se crea acá
+  // y lo consume la reserva atómica del tope — hoy no tiene lógica asociada.
+  // ⚠️ Al final del modelo a propósito (ver nota en Home).
+  menuHabilitado Boolean @default(false)
+  topeMenus      Int?
   compras       Compra[]
   tandas        Tanda[]
   cupones       CuponDescuento[]
@@ -113,6 +131,15 @@ model Compra {
   devueltaMotivo     String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
+  // Menú de Casa Metro (Sprint 7). `cantidadMenus` es INDEPENDIENTE de
+  // `cantidadEntradas` (con dos reglas duras: mínimo 1 entrada, y menús ≤
+  // entradas). `menuUnitario` congela el `Home.precioMenu` vigente al comprar —
+  // por eso la plata del menú se lee de la compra y no del precio global, que
+  // puede haber cambiado después.
+  // ⚠️ Al final del modelo a propósito (ver nota en Home): `Compra` es la tabla
+  // de la plata y nunca fue reescrita en producción.
+  cantidadMenus      Int         @default(0)
+  menuUnitario       Int         @default(0)
   entradas           Entrada[]
   cuponUsos          CuponUso[]
 }

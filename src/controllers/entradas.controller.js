@@ -41,6 +41,11 @@ async function validar(req, res) {
 // público con token (validarPorQRPublico) para no duplicar la lógica de negocio.
 // Devuelve { code: NOT_FOUND|NOT_PAID|ALREADY_USED|OK, entrada }.
 async function _validarQRCore(codigoQR) {
+  // `include` (y NO `select`) sobre la compra: trae todos sus escalares, y de ahí
+  // salen `cantidadMenus` / `cantidadEntradas` que el validador usa para avisar
+  // los menús de Casa Metro (ítem 45). Si algún día esto se convierte en un
+  // `select` "para traer menos", el aviso de menús desaparece sin romper nada
+  // visible — hay un check que lo ata en validacion-token.test.js.
   const incluirCompra = {
     compra: {
       include: { evento: { select: { id: true, nombre: true, fecha: true, hora: true } } },
@@ -91,6 +96,17 @@ async function validarPorQR(req, res) {
 // nombre del comprador y el evento (para cotejar en la puerta), sin datos de
 // contacto (email/teléfono). El cliente lo pidió "sin demasiada restricción"
 // pero no hay motivo para exponer contacto a un tercero solo para validar.
+//
+// Los menús (ítem 45) se agregan acá A PROPÓSITO, aunque esta sea la vista
+// recortada: quien mira esta pantalla con el token público ES Casa Metro, que
+// cocina y entrega los menús. Son dos enteros de la compra, no datos de
+// contacto, y son los mismos números que la sede ya tiene impresos en la hoja
+// de control de entrega (ítem 44).
+//
+// `cantidadEntradas` viaja junto a `cantidadMenus` por una razón operativa, no
+// decorativa: los menús son de la COMPRA y el QR es de UNA entrada, así que una
+// compra de 3 entradas con 2 menús muestra "2 menús" tres veces. Sin el
+// denominador a la vista, la puerta puede leer seis.
 function entradaReducida(entrada) {
   if (!entrada) return null;
   const compra = entrada.compra || {};
@@ -101,6 +117,8 @@ function entradaReducida(entrada) {
     validadaAt: entrada.validadaAt,
     nombre: compra.nombre || '',
     apellido: compra.apellido || '',
+    cantidadMenus: compra.cantidadMenus || 0,
+    cantidadEntradas: compra.cantidadEntradas || 0,
     evento: evento ? { nombre: evento.nombre, fecha: evento.fecha, hora: evento.hora } : null,
   };
 }

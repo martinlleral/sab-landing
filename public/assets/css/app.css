@@ -855,6 +855,20 @@ footer {
   color: var(--color-text);
 }
 
+/* Estado deshabilitado. Bootstrap cae a su fondo claro por defecto: dentro de un
+   modal oscuro eso convierte al control INACTIVO en lo más brillante de la
+   pantalla, y encima con el texto casi ilegible por su opacity .65. Se apaga, en
+   la misma línea que el tratamiento "AGOTADO" de las cards de evento, que
+   desatura en vez de resaltar. */
+.form-control:disabled,
+.form-select:disabled {
+  background: var(--color-surface2);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
 .evento-info-modal {
   background: var(--color-surface2);
   border: 1px solid var(--color-border);

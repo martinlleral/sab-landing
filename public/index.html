@@ -881,7 +881,7 @@
             </div>
             <div class="col-12">
               <label class="form-label" for="modal-cantidad">Cantidad de entradas *</label>
-              <select class="form-select" id="modal-cantidad" onchange="updateTotal()">
+              <select class="form-select" id="modal-cantidad" onchange="onCantidadEntradasChange()">
                 <option value="1">1 entrada</option>
                 <option value="2">2 entradas</option>
                 <option value="3">3 entradas</option>
@@ -893,6 +893,37 @@
                 <option value="9">9 entradas</option>
                 <option value="10">10 entradas</option>
               </select>
+            </div>
+            <!-- Menú de la sede (Sprint 7). Visible solo si el evento lo ofrece
+                 (Evento.menuHabilitado). Es una CANTIDAD propia, independiente del
+                 tipo de entrada: las opciones van de 0 a la cantidad de entradas
+                 elegida arriba, así la regla "menús <= entradas" no se puede
+                 romper desde la UI (el backend igual la valida). -->
+            <div class="col-12" id="menu-section" style="display:none;">
+              <label class="form-label" for="modal-cantidad-menus">
+                <span id="menu-label">Menú de Casa Metro</span>
+                <span id="menu-precio-unit-label" style="color:#a0aec0;font-weight:400;"></span>
+              </label>
+              <select class="form-select" id="modal-cantidad-menus" onchange="updateTotal()">
+                <option value="0">Sin menú</option>
+              </select>
+              <!-- Cupo de la cocina (S2): "quedan N" / "agotados". Va acá, pegado
+                   al select que acota, y no en un cartel aparte. -->
+              <div class="form-text" id="menu-cupo-nota" style="font-size:.8rem;margin-top:6px;display:none;"></div>
+              <div class="form-text" id="menu-retiro-nota" style="font-size:.8rem;color:#a0aec0;margin-top:6px;">
+                <i class="bi bi-cup-hot me-1"></i>Se retira en el lugar la noche del evento, presentando tu nombre en el mostrador.<!--
+                     Hasta cuándo se puede sumar (S3). Lo completa el JS con la hora
+                     del CMS: acá no se hardcodea "18:00" porque la cocina la puede
+                     cambiar desde el backoffice. --><span id="menu-corte-nota"></span><!--
+                     El menú se elige ACÁ o no se elige nunca: por las reglas del
+                     producto (mínimo 1 entrada, menús ≤ entradas) no existe la
+                     compra de menú suelto, así que quien ya compró su entrada no
+                     puede volver a sumarlo — ni por el sitio ni con ayuda del
+                     operador, que tampoco tiene con qué. Decirlo antes cuesta un
+                     renglón; no decirlo lo paga la persona, que se entera cuando
+                     ya no tiene salida. -->
+                <br><strong style="color:#cbd5e0;">Se suma únicamente en esta compra:</strong> después no se puede agregar a una entrada ya comprada.
+              </div>
             </div>
           </div>
 
@@ -927,15 +958,27 @@
             </div>
           </div>
 
-          <!-- Breakdown (solo cuando hay descuento) -->
+          <!-- Breakdown (visible cuando hay descuento, aporte o menú).
+               El orden refleja la aritmética real: el descuento se aplica sobre las
+               entradas y el menú se suma DESPUÉS, sin descontar. Sin esa línea
+               explícita, alguien con cupón cree que le cobraron mal. -->
           <div id="modal-breakdown" style="display:none;font-size:.85rem;color:#a0aec0;margin-top:12px;">
             <div class="d-flex justify-content-between" style="margin-bottom:4px;">
-              <span>Subtotal</span>
+              <span id="modal-subtotal-label">Subtotal</span>
               <span id="modal-subtotal">$ 0</span>
             </div>
             <div class="d-flex justify-content-between" style="color:#48bb78;">
               <span>Descuento</span>
               <span id="modal-descuento">- $ 0</span>
+            </div>
+            <!-- Sin color propio: el menú es una línea del mismo rango que las
+                 entradas y destacarla la haría leer como la más importante. -->
+            <div class="d-none justify-content-between" id="modal-menu-row" style="margin-top:4px;">
+              <span id="modal-menu-label">Menú</span>
+              <span id="modal-menu-total">$ 0</span>
+            </div>
+            <div id="modal-menu-nota" style="display:none;font-size:.75rem;color:#8a8a8a;margin-top:4px;">
+              El descuento se aplica solo a las entradas: el menú lo cobra la sede.
             </div>
           </div>
 

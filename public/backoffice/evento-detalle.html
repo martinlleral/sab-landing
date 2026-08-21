@@ -269,6 +269,36 @@
                 </div>
               </div>
 
+              <!-- Menú de la sede (Sprint 7): se vende junto con la entrada -->
+              <div class="bo-card mb-4">
+                <div class="bo-card-header">
+                  <h5 class="bo-card-title"><i class="bi bi-cup-hot me-2"></i>Menú de la sede</h5>
+                </div>
+                <div class="bo-card-body">
+                  <div class="bo-switch-group mb-3">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="menuHabilitado" name="menuHabilitado">
+                      <label class="form-check-label bo-switch-label" for="menuHabilitado">Ofrecer menú en esta fecha</label>
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="bo-form-label" for="topeMenus">Tope de menús</label>
+                    <input type="number" class="bo-form-control" id="topeMenus" name="topeMenus"
+                           min="0" step="1" placeholder="Sin tope" style="max-width:220px;">
+                    <p class="small mb-0 mt-2" id="menu-tope-hint" style="color:#888;">
+                      Cuántos menús puede cocinar la sede. Dejalo <strong>vacío</strong> si no hay límite.
+                      Al llegar al tope, el checkout deja de ofrecerlo.
+                    </p>
+                  </div>
+                  <p class="small mb-0" style="color:#666;">
+                    Al activarlo, en el checkout aparece un segundo selector para sumar menús a la compra.
+                    Es una <strong>cantidad aparte</strong> de la entrada (no más menús que entradas) y
+                    <strong>no la descuentan los cupones</strong>: esa plata es de la sede.
+                  </p>
+                  <p class="small mb-0 mt-2" id="menu-precio-hint" style="color:#888;"></p>
+                </div>
+              </div>
+
               <!-- Link de venta (US-2): compartir la compra directa de esta fecha -->
               <div class="bo-card mb-4" id="card-link-venta" style="display:none;">
                 <div class="bo-card-header">
@@ -294,6 +324,11 @@
                   <button type="submit" class="btn-bo-primary w-100 mb-2" id="btn-guardar">
                     <i class="bi bi-floppy me-1"></i> Guardar Evento
                   </button>
+                  <!-- Ver la nota gemela en home-cms.html: el aviso va pegado al
+                       botón, que es donde mira quien está por guardar. -->
+                  <div id="dirty-hint" style="display:none; color:#e0a800; font-size:0.85rem;" class="mb-2 text-center">
+                    <i class="bi bi-exclamation-circle me-1"></i>Tenés cambios sin guardar
+                  </div>
                   <a href="/backoffice/eventos-lista.html" class="btn-bo-secondary w-100 mb-2">
                     <i class="bi bi-arrow-left me-1"></i> Volver a lista
                   </a>
@@ -596,6 +631,10 @@
     const modo = params.get('modo');
     const isNuevo = modo === 'nuevo' || !eventoId;
 
+    // Ver la nota gemela en home-cms.html: el watcher arranca después de que el
+    // formulario quedó poblado, si no `fillForm` lo ensucia solo.
+    let dirty = { limpiar: () => {} };
+
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('page-title').textContent = isNuevo ? 'Nuevo Evento' : 'Editar Evento';
       cargarSedeDefault();
@@ -617,7 +656,13 @@
         document.getElementById('precioEntrada').required = false;
         document.getElementById('cantidadDisponible').required = false;
 
-        loadEvento(eventoId);
+        loadEvento(eventoId).then(() => {
+          dirty = boWatchDirty('eventoForm');
+          // El hint acompaña el tipeo, marcado como "(sin guardar)" hasta que se
+          // guarde de verdad (ver pintarHintTope).
+          const inTope = document.getElementById('topeMenus');
+          if (inTope) inTope.addEventListener('input', () => pintarHintTope(inTope.value, true));
+        });
         cargarTandas();
         cargarInvitaciones();
         initCupones(parseInt(eventoId, 10));
@@ -683,6 +728,15 @@
           hint.innerHTML = '<i class="bi bi-info-circle me-1" style="color:#667eea;"></i> '
             + `Si los dejás vacíos, se publica la sede por defecto del sitio: <strong>${sedeDefault}</strong> `
             + '(se configura en Home CMS). Completalos solo si este evento es en otra locación.';
+        }
+        // El precio del menú es global: mostrarlo acá evita activar el toggle sin
+        // saber cuánto se va a cobrar, y avisa si está en 0 (no vendería nada).
+        const menuHint = document.getElementById('menu-precio-hint');
+        if (menuHint) {
+          const precio = Number(home.precioMenu || 0);
+          menuHint.innerHTML = precio > 0
+            ? `Precio actual del menú: <strong>$ ${precio.toLocaleString('es-AR')}</strong> por persona (se cambia en Home CMS).`
+            : '<span style="color:#e0a800;"><i class="bi bi-exclamation-triangle me-1"></i>El precio del menú está en <strong>0</strong>: cargalo en Home CMS o no se va a poder vender.</span>';
         }
       } catch (e) {
         /* si /api/home falla, queda el texto genérico del hint */
@@ -993,6 +1047,41 @@
       }
     }
 
+    // Menús ya tomados (pagas + pendientes). Lo fija el servidor al cargar; el
+    // tope se puede tipear, los ocupados no.
+    let menuOcupados = null;
+
+    /**
+     * Pinta la ayuda del tope de menús.
+     *
+     * `provisional` es la parte importante: mientras se tipea, el número nuevo
+     * TODAVÍA NO ESTÁ GUARDADO, y la pantalla tiene que decirlo. Acompañar el
+     * tipeo mostrando "8 de 14" a secas sería volver a caer en lo mismo que esta
+     * misma sesión vino a arreglar —la pantalla afirmando un estado que no es el
+     * del sistema—, solo que del otro lado. Acompaña, y declara qué está viendo.
+     */
+    function pintarHintTope(tope, provisional = false) {
+      const topeHint = document.getElementById('menu-tope-hint');
+      if (!topeHint || menuOcupados === null) return;
+      const t = Number(tope);
+      if (!Number.isInteger(t) || t < 0) {
+        topeHint.innerHTML = `Tomados hoy: <strong>${menuOcupados}</strong> `
+          + '<span style="color:#aaa;">(compras pagas + pendientes de pago)</span>.'
+          + '<br>Dejá el campo vacío si no hay límite.';
+        return;
+      }
+      const restantes = Math.max(0, t - menuOcupados);
+      const estado = restantes === 0
+        ? '<span style="color:#e0a800;"><i class="bi bi-exclamation-triangle me-1"></i><strong>Menús agotados</strong> — el checkout ya no los ofrece.</span>'
+        : `Quedan <strong>${restantes}</strong> por vender.`;
+      const marca = provisional
+        ? ' <span style="color:#e0a800;">(sin guardar)</span>'
+        : '';
+      topeHint.innerHTML = `Tomados hoy: <strong>${menuOcupados}</strong> de ${t}${marca} `
+        + '<span style="color:#aaa;">(compras pagas + pendientes de pago)</span>. ' + estado
+        + '<br>Dejá el campo vacío si no hay límite.';
+    }
+
     function fillForm(ev) {
       document.getElementById('nombre').value = ev.nombre || '';
       document.getElementById('descripcion').value = ev.descripcion || '';
@@ -1005,6 +1094,23 @@
       document.getElementById('esDestacado').checked = ev.esDestacado;
       document.getElementById('estaAgotado').checked = ev.estaAgotado;
       document.getElementById('esExterno').checked = ev.esExterno;
+      document.getElementById('menuHabilitado').checked = !!ev.menuHabilitado;
+      // Tope de menús: vacío = sin tope. Ojo con `||`: un tope de 0 es válido
+      // ("no vender más menús") y con `||` se vería como "sin tope", que es lo
+      // contrario.
+      const inTope = document.getElementById('topeMenus');
+      if (inTope) inTope.value = (ev.topeMenus === null || ev.topeMenus === undefined) ? '' : ev.topeMenus;
+      // Cupo vivo. `menusRestantes` viene calculado por el backend con la misma
+      // definición que usa la reserva (aprobadas + pendientes), así que el número
+      // que ve el operador es el mismo que aplica el checkout.
+      if (ev.topeMenus !== null && ev.topeMenus !== undefined && ev.menusRestantes !== null) {
+        // Los ocupados no dependen del tope: son las compras vivas. Se guardan
+        // para poder recalcular el hint mientras se tipea, sin ir al servidor.
+        menuOcupados = ev.topeMenus - ev.menusRestantes;
+        pintarHintTope(ev.topeMenus);
+      } else {
+        menuOcupados = null;
+      }
 
       if (ev.esExterno) {
         document.getElementById('link-externo-wrap').style.display = 'block';
@@ -1091,6 +1197,9 @@
         formData.set('esDestacado', document.getElementById('esDestacado').checked);
         formData.set('estaAgotado', document.getElementById('estaAgotado').checked);
         formData.set('esExterno', document.getElementById('esExterno').checked);
+        // Los checkbox desmarcados no viajan en el FormData: seteados explícitos
+        // para que apagar el toggle se persista de verdad, no solo encenderlo.
+        formData.set('menuHabilitado', document.getElementById('menuHabilitado').checked);
 
         const url = isNuevo ? '/api/admin/eventos' : `/api/admin/eventos/${eventoId}`;
         const method = isNuevo ? 'POST' : 'PUT';
@@ -1102,11 +1211,21 @@
         if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
         boAlert('✅ Evento guardado correctamente', 'success');
+        dirty.limpiar();
 
         if (isNuevo && data.id) {
           setTimeout(() => {
             window.location.href = `/backoffice/evento-detalle.html?id=${data.id}`;
           }, 1200);
+        } else {
+          // Releer del servidor después de guardar. Sin esto, la ayuda del tope
+          // sigue mostrando el número VIEJO ("Tomados hoy: 8 de 12" con el tope
+          // ya en 14): la pantalla no se queda callada, afirma un dato que dejó
+          // de ser cierto, y el operador concluye que no se guardó. El número
+          // que después le pasa a la cocina sale de esa lectura.
+          // `menusRestantes` lo recalcula el backend (adjuntarEstadoMenu), así
+          // que el cupo también queda al día si alguien compró mientras tanto.
+          await loadEvento(eventoId);
         }
       } catch (err) {
         boAlert('Error: ' + err.message);

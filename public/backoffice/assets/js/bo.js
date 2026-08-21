@@ -151,9 +151,52 @@ function boAlert(msg, type = 'error', elId = 'bo-alert') {
   el.textContent = msg;
   el.className = `bo-alert show ${type}`;
   el.style.display = 'block';
+  // El contenedor del aviso vive arriba de todo, y los botones que lo disparan
+  // están al final de formularios largos (home-cms, evento-detalle): quien
+  // aprieta "Guardar" mira el pie de la página y el cartel aparece, vive sus 4
+  // segundos y se apaga fuera de su vista. El elemento estaba —con su color y
+  // su tamaño—, pero "se ve" es propiedad de la pantalla, no del elemento.
+  // `nearest` scrollea lo mínimo: si ya se veía, no se mueve nada. Mismo
+  // movimiento que S6 le puso a los dos validadores por la misma razón.
+  try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) { }
   if (type === 'success') {
     setTimeout(() => { el.style.display = 'none'; }, 4000);
   }
+}
+
+// ============================================
+// CAMBIOS SIN GUARDAR
+// ============================================
+// Marca un formulario como "sucio" en cuanto se toca algo y lo limpia al
+// guardar. Dos avisos, no uno: el cartelito pegado al botón (que se ve mientras
+// se trabaja) y el diálogo del navegador al intentar salir (que es la red que
+// evita perder el cambio). Sin esto se puede cambiar el precio del menú, irse
+// de la pantalla y no enterarse nunca de que no se guardó.
+function boWatchDirty(formId, hintId = 'dirty-hint') {
+  const form = document.getElementById(formId);
+  if (!form) return { limpiar: () => {} };
+  const hint = document.getElementById(hintId);
+  let sucio = false;
+
+  function marcar() {
+    if (sucio) return;
+    sucio = true;
+    if (hint) hint.style.display = '';
+  }
+  function limpiar() {
+    sucio = false;
+    if (hint) hint.style.display = 'none';
+  }
+
+  form.addEventListener('input', marcar);
+  form.addEventListener('change', marcar);
+  window.addEventListener('beforeunload', (e) => {
+    if (!sucio) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  return { limpiar, estaSucio: () => sucio };
 }
 
 // ============================================

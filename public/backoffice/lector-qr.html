@@ -55,6 +55,23 @@
     .scan-meta { color: #888; font-size: 0.78rem; }
     .scan-time { color: #666; font-size: 0.75rem; flex-shrink: 0; }
 
+    /* Aviso de menús de Casa Metro (ítem 45). No es un estado más del semáforo:
+       el verde/amarillo/rojo contesta "¿pasa?", esto contesta "¿le tengo que dar
+       de comer?". Por eso va en su propia franja, debajo, y en el carmín de marca
+       — el mismo color con el que se imprime la hoja de la cocina. */
+    .menu-aviso {
+      background: rgba(230, 57, 70, .14);
+      border: 1px solid #e63946;
+      border-left: 4px solid #e63946;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 12px 0 4px;
+    }
+    .menu-aviso-num { font-size: 1.35rem; font-weight: 800; color: #ff8f98; letter-spacing: 1px; }
+    .menu-aviso-accion { font-size: .95rem; font-weight: 700; color: #fff; margin-top: 2px; }
+    .menu-aviso-sub { color: #c9a9ac; font-size: .78rem; margin-top: 6px; line-height: 1.4; }
+    .scan-menus { color: #ff8f98; font-weight: 700; }
+
     .flash-ok    { animation: flashGreen .5s ease; }
     .flash-error { animation: flashRed .5s ease; }
     @keyframes flashGreen { 0%,100% { background:transparent; } 40% { background: rgba(72,187,120,.25); } }
@@ -391,6 +408,38 @@
     }
 
     // ─── UI Resultado ─────────────────────────────────
+    function esc(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Franja de menús de Casa Metro (ítem 45). Devuelve '' cuando no hay menús:
+    // en la puerta, un "0 menús" es ruido que hay que leer para descartar.
+    //
+    // Los menús son de la COMPRA, no de la entrada — así se decidió el producto
+    // (no hay menú sin entrada, pero ninguna entrada "trae" un menú). Un QR es
+    // una entrada, así que una compra de 3 entradas con 2 menús muestra este
+    // cartel tres veces: por eso el texto dice de quién son los menús antes de
+    // decir cuántos son, y manda al papel, que es el control de entrega real.
+    function franjaMenus(c) {
+      const menus = Number(c && c.cantidadMenus) || 0;
+      if (menus <= 0) return '';
+      const entradas = Number(c && c.cantidadEntradas) || 0;
+      const quien = `${esc(c.apellido)}, ${esc(c.nombre)}`.trim();
+      const deLaCompra = entradas > 1
+        ? `Son de la compra entera (${entradas} entradas), no de esta entrada: este cartel se repite en cada QR del grupo.`
+        : 'Son de la compra.';
+      // Tres renglones con jerarquía deliberada: de reojo se leen los dos
+      // primeros (cuántos y qué hacer); el tercero está para quien duda.
+      return `
+        <div class="menu-aviso">
+          <div class="menu-aviso-num">🍽️ ${menus} ${menus === 1 ? 'MENÚ' : 'MENÚS'}</div>
+          <div class="menu-aviso-accion">Mandalos al mostrador — ${quien}</div>
+          <div class="menu-aviso-sub">${deLaCompra} Se tildan en la hoja de menús impresa.</div>
+        </div>`;
+    }
+
     function mostrarResultado(tipo, entrada, msgExtra) {
       const c = entrada.compra;
       const ev = c.evento;
@@ -403,22 +452,35 @@
       const color = tipo === 'ok' ? '#48bb78' : '#f6c90e';
       const bg = tipo === 'ok' ? '#0d2b1a' : '#2b1e0d';
       const border = tipo === 'ok' ? '#2d5a27' : '#6b4c00';
+      const menus = franjaMenus(c);
 
       wrap.innerHTML = `
         <div style="background:${bg};border:1px solid ${border};border-radius:10px;padding:18px 20px;" class="${tipo === 'ok' ? 'flash-ok' : 'flash-error'}">
           <div style="font-size:1.5rem;font-weight:800;color:${color};letter-spacing:2px;margin-bottom:8px;">${icono} ${titulo}</div>
-          ${msgExtra ? `<div style="color:#f6c90e;font-size:.85rem;margin-bottom:8px;">${msgExtra}</div>` : ''}
-          <div style="font-size:1rem;font-weight:600;">${c.nombre} ${c.apellido}</div>
-          <div style="color:#888;font-size:.85rem;">${c.email}</div>
-          <div style="color:#aaa;font-size:.82rem;margin-top:6px;">📅 ${ev.nombre}</div>
+          ${msgExtra ? `<div style="color:#f6c90e;font-size:.85rem;margin-bottom:8px;">${esc(msgExtra)}</div>` : ''}
+          <div style="font-size:1rem;font-weight:600;">${esc(c.nombre)} ${esc(c.apellido)}</div>
+          <div style="color:#888;font-size:.85rem;">${esc(c.email)}</div>
+          <div style="color:#aaa;font-size:.82rem;margin-top:6px;">📅 ${esc(ev.nombre)}</div>
+          ${menus}
           <div style="color:#666;font-size:.78rem;margin-top:4px;">
-            Compra #${c.id} · Entrada #${entrada.id}
-            ${entrada.validadaAt ? `· Validada ${boFechaHora(entrada.validadaAt)}` : ''}
+            Compra #${esc(c.id)} · Entrada #${esc(entrada.id)}
+            ${entrada.validadaAt ? `· Validada ${esc(boFechaHora(entrada.validadaAt))}` : ''}
           </div>
         </div>`;
 
-      // Auto-limpiar después de 6s si fue ok
-      if (tipo === 'ok') setTimeout(() => { wrap.style.display = 'none'; }, 6000);
+      traerALaVista(wrap);
+
+      // Auto-limpiar si fue ok. Con menús se queda al doble de tiempo: hay algo
+      // más que hacer que dejar pasar, y son dos frases más para leer.
+      if (tipo === 'ok') setTimeout(() => { wrap.style.display = 'none'; }, menus ? 12000 : 6000);
+    }
+
+    // El resultado vive al final de la columna izquierda, debajo de la cámara y
+    // del ingreso manual: en un celular —y también en una notebook— queda fuera
+    // de la pantalla justo cuando aparece. Con `nearest` el scroll es el mínimo
+    // necesario, así que no se mueve nada si ya se estaba viendo.
+    function traerALaVista(el) {
+      try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) { }
     }
 
     function mostrarResultadoError(msg) {
@@ -427,8 +489,9 @@
       wrap.innerHTML = `
         <div style="background:#2b0d0d;border:1px solid #6b0d0d;border-radius:10px;padding:18px 20px;" class="flash-error">
           <div style="font-size:1.3rem;font-weight:800;color:#fc8181;letter-spacing:2px;">❌ INVÁLIDO</div>
-          <div style="color:#fc8181;font-size:.9rem;margin-top:6px;">${msg}</div>
+          <div style="color:#fc8181;font-size:.9rem;margin-top:6px;">${esc(msg)}</div>
         </div>`;
+      traerALaVista(wrap);
       setTimeout(() => { wrap.style.display = 'none'; }, 5000);
     }
 
@@ -441,6 +504,7 @@
         email: c.email,
         compraId: c.id,
         entradaId: entrada.id,
+        menus: Number(c.cantidadMenus) || 0,
         hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       };
       historial.unshift(item);
@@ -473,13 +537,16 @@
         <div class="scan-row">
           <div class="scan-icon">${iconos[item.tipo] || '•'}</div>
           <div class="scan-info">
-            <div class="scan-name">${item.nombre}</div>
+            <div class="scan-name">
+              ${esc(item.nombre)}
+              ${item.menus ? `<span class="scan-menus">· 🍽️ ${item.menus}</span>` : ''}
+            </div>
             <div class="scan-meta">
-              ${item.email ? item.email + ' · ' : ''}
-              ${item.entradaId ? `Entrada #${item.entradaId} · Compra #${item.compraId}` : ''}
+              ${item.email ? esc(item.email) + ' · ' : ''}
+              ${item.entradaId ? `Entrada #${esc(item.entradaId)} · Compra #${esc(item.compraId)}` : ''}
             </div>
           </div>
-          <div class="scan-time">${item.hora}</div>
+          <div class="scan-time">${esc(item.hora)}</div>
         </div>`
       ).join('');
     }

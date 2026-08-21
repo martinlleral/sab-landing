@@ -33,6 +33,10 @@ router.get('/evento-compras.html', requireAdmin, (_req, res) => {
   res.sendFile(path.join(BACKOFFICE_DIR, 'evento-compras.html'));
 });
 
+router.get('/evento-menus.html', requireAdmin, (_req, res) => {
+  res.sendFile(path.join(BACKOFFICE_DIR, 'evento-menus.html'));
+});
+
 router.get('/lector-qr.html', requireAdmin, (_req, res) => {
   res.sendFile(path.join(BACKOFFICE_DIR, 'lector-qr.html'));
 });

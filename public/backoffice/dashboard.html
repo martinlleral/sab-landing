@@ -76,7 +76,13 @@
           <div class="bo-stat" style="border-left:3px solid #48bb78;">
             <div class="bo-stat-value" style="color:#48bb78;" id="stat-recaudado">—</div>
             <div class="bo-stat-label">Recaudado</div>
-            <div class="bo-stat-desc">Total cobrado por compras aprobadas</div>
+            <div class="bo-stat-desc" id="stat-recaudado-desc">Total cobrado por compras aprobadas</div>
+          </div>
+          <!-- Menú de la sede: aparece solo cuando hay menús vendidos. -->
+          <div class="bo-stat" style="border-left:3px solid #c4384b; display:none;" id="stat-menus-card">
+            <div class="bo-stat-value" style="color:#c4384b;" id="stat-menus">—</div>
+            <div class="bo-stat-label">Menú de la sede</div>
+            <div class="bo-stat-desc" id="stat-menus-desc">A pagarle a la sede — no es recaudación del SAB</div>
           </div>
         </div>
 
@@ -137,6 +143,35 @@
         document.getElementById('stat-vendidas').textContent = stats.entradasVendidas;
         document.getElementById('stat-invitaciones').textContent = stats.entradasInvitaciones;
         document.getElementById('stat-recaudado').textContent = `$ ${stats.recaudado.toLocaleString('es-AR')}`;
+
+        // Menú de la sede (Sprint 7): `stats.recaudado` es todo lo cobrado por MP e
+        // incluye el menú, que la coop le paga a la sede. Cuando hay menús vendidos
+        // se declara aparte y la descripción del recaudado dice el neto propio, para
+        // que el KPI grande no se lea como plata disponible del SAB.
+        const menusTotal = stats.menus?.total || 0;
+        const menusCard = document.getElementById('stat-menus-card');
+        const recDesc = document.getElementById('stat-recaudado-desc');
+        if (menusTotal > 0) {
+          if (menusCard) menusCard.style.display = '';
+          document.getElementById('stat-menus').textContent = `$ ${menusTotal.toLocaleString('es-AR')}`;
+          const cant = stats.menus?.cantidad || 0;
+          document.getElementById('stat-menus-desc').textContent =
+            `${cant} menú${cant === 1 ? '' : 's'} · a pagarle a la sede, no es recaudación del SAB`;
+          // El número del SAB va destacado dentro de la descripción, no en texto
+          // corrido: es el que el tesorero necesita para cerrar caja, y salía en el
+          // mismo gris que el resto. Ojo con el diagnóstico —que el KPI GRANDE siga
+          // siendo el cobrado por MP es deliberado y correcto (es el que concilia
+          // contra el reporte de MP)—; lo que nunca se decidió fue que el neto
+          // quedara sin ninguna jerarquía. Es innerHTML con números ya formateados
+          // por el propio código, no con dato de usuario.
+          if (recDesc) {
+            recDesc.innerHTML =
+              `Incluye el menú de la sede. <strong style="color:#cbd5e0;">Del SAB: $ ${(stats.recaudadoSab ?? stats.recaudado).toLocaleString('es-AR')}</strong>`;
+          }
+        } else {
+          if (menusCard) menusCard.style.display = 'none';
+          if (recDesc) recDesc.textContent = 'Total cobrado por compras aprobadas';
+        }
 
         const tbody = document.getElementById('compras-body');
         if (!comprasRes.compras || !comprasRes.compras.length) {

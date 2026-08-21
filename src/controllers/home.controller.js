@@ -1,5 +1,28 @@
 const prisma = require('../utils/prisma');
 
+/**
+ * Parsea la hora de corte de la venta de menús (Sprint 7, S3). Misma forma que
+ * `parseTopeMenus` de eventos.controller.js, con los tres casos que importan:
+ *
+ *   undefined/ausente → el request no manda el campo: NO tocar lo guardado
+ *   basura            → no pisar lo guardado (un "25:00" dejaría el corte en una
+ *                       hora que no existe, y el checkout entero del menú se
+ *                       caería con MENU_CORTE_INVALIDO)
+ *   "HH:MM" válido    → ese horario
+ *
+ * La diferencia con `parseTopeMenus` está en el vacío: allá `''` significa "sin
+ * tope" (el campo es nullable), acá NO hay un "sin corte" representable —
+ * `menuCorteHora` es String NOT NULL con default. Y no hace falta: para vender
+ * hasta el final del día se carga 23:59. Un `<input type="time">` se vacía de
+ * más fácil de lo que se completa, así que vaciarlo no borra nada.
+ */
+function parseHoraCorte(raw) {
+  if (raw === undefined || raw === null) return undefined;
+  const s = String(raw).trim();
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(s)) return undefined;
+  return s;
+}
+
 async function getHome(req, res) {
   try {
     const home = await prisma.home.findFirst();
@@ -20,6 +43,7 @@ async function updateHome(req, res) {
       textoEvento, youtubeUrl, totalEdiciones, totalShows, totalPersonas,
       boxLugar, boxDireccion, boxCiudad, boxEtiquetaEntrada,
       eventosVisiblesPortada, mostrarCicloMiercoles,
+      precioMenu, menuCorteHora,
     } = req.body;
     const data = {};
 
@@ -52,6 +76,20 @@ async function updateHome(req, res) {
       const v = parseStat(eventosVisiblesPortada);
       if (v !== null && v >= 1) data.eventosVisiblesPortada = v;
     }
+    // Precio global del menú de la sede (Sprint 7). Se persiste tal cual venga
+    // (incluido 0, que apaga la venta de menú vía MENU_PRECIO_NO_CONFIGURADO —
+    // es la forma de desactivarlo globalmente sin tocar cada evento). Cada Compra
+    // congela su propio `menuUnitario`, así que cambiarlo acá NO reescribe las
+    // compras ya hechas ni los reportes históricos.
+    if (precioMenu !== undefined) {
+      const v = parseStat(precioMenu);
+      if (v !== null) data.precioMenu = v;
+    }
+    // Hora de cierre de la venta de menús (Sprint 7, S3). Es global como el
+    // precio: Casa Metro cierra la cuenta a la misma hora todas las fechas. Que
+    // sea editable evita tocar código si la cocina cambia el horario.
+    const corte = parseHoraCorte(menuCorteHora);
+    if (corte !== undefined) data.menuCorteHora = corte;
     // Toggle de la sección del ciclo Amor de Miércoles. Llega como string desde
     // el FormData del backoffice ('true'/'false'); aceptamos también booleano.
     if (mostrarCicloMiercoles !== undefined) {

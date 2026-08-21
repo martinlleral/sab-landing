@@ -3,6 +3,11 @@ const prisma = require('../utils/prisma');
 const qrService = require('../services/qr.service');
 const brevoService = require('../services/brevo.service');
 const { getTandaVigente } = require('../services/tandas.service');
+const {
+  ESTADOS_MENU_OCUPADO, contarMenusOcupados, calcularMenusRestantes, menuVentaCerrada,
+  calcularCorteMenu,
+} = require('../services/precios.service');
+const { compararPorApellido } = require('../utils/orden');
 
 // Adjunta al evento la tandaVigente calculada + precio/stock derivados para el
 // frontend público. No reemplaza los campos legacy del evento (ese cleanup es
@@ -11,6 +16,75 @@ const { getTandaVigente } = require('../services/tandas.service');
 function adjuntarTandaVigente(evento) {
   const vigente = getTandaVigente(evento.tandas);
   return { ...evento, tandaVigente: vigente };
+}
+
+/**
+ * Adjunta a cada evento el estado de su menú para el checkout público:
+ *
+ *   `menusRestantes` (S2) — cuántos menús quedan. null = SIN TOPE, que no es lo
+ *      mismo que 0 (agotado); el checkout distingue los dos casos.
+ *   `menuCerrado` (S3) — si ya pasó el corte horario del día del evento.
+ *
+ * Los dos se resuelven acá y no en el front a propósito: con el RELOJ DEL
+ * SERVIDOR y con una sola definición de la regla. Que el navegador tenga la hora
+ * mal es común; que la tenga mal el servidor que además valida la compra, no.
+ * Igual es información que puede envejecer con el modal abierto — la garantía la
+ * da el backend al crear la preferencia (`MENU_CORTE_PASADO`), esto es lo que
+ * evita que la persona llegue hasta el botón de pagar.
+ *
+ * El cupo se resuelve en UNA query para toda la lista, no una por evento: la
+ * portada puede traer hasta 50 eventos y un aggregate por cada uno serían 50
+ * viajes a la base en el endpoint más caliente del sitio.
+ *
+ * El conteo usa `ESTADOS_MENU_OCUPADO` — la misma definición de "cupo tomado"
+ * que la reserva atómica, para que el número que ve el comprador y el que aplica
+ * el backend no puedan divergir.
+ */
+async function adjuntarEstadoMenu(eventos) {
+  const conMenu = eventos.filter((e) => e.menuHabilitado);
+  if (conMenu.length === 0) {
+    return eventos.map((e) => ({ ...e, menusRestantes: null, menuCerrado: false }));
+  }
+
+  // La hora de corte es global (Home.menuCorteHora): una lectura para toda la lista.
+  const home = await prisma.home.findFirst({ select: { menuCorteHora: true } });
+  const corteHora = home?.menuCorteHora ?? null;
+  const ahora = new Date();
+  const estaCerrado = (ev) => {
+    if (!ev.menuHabilitado) return false;
+    try {
+      return menuVentaCerrada(ev.fecha, corteHora, ahora);
+    } catch (err) {
+      // MENU_CORTE_INVALIDO: la config quedó rota (solo se llega editando la base
+      // a mano, la whitelist del CMS no deja persistir basura). Se muestra cerrado
+      // en vez de tumbar la portada entera: el checkout aplica el mismo criterio
+      // y responde 400 con el motivo, así que las dos capas dicen lo mismo.
+      console.error('[menu] menuCorteHora inválido en Home:', corteHora, err.code || err.message);
+      return true;
+    }
+  };
+
+  const conTope = conMenu.filter((e) => e.topeMenus !== null);
+  let ocupados = new Map();
+  if (conTope.length > 0) {
+    const filas = await prisma.compra.groupBy({
+      by: ['eventoId'],
+      where: {
+        eventoId: { in: conTope.map((e) => e.id) },
+        mpEstado: { in: ESTADOS_MENU_OCUPADO },
+      },
+      _sum: { cantidadMenus: true },
+    });
+    ocupados = new Map(filas.map((f) => [f.eventoId, f._sum.cantidadMenus || 0]));
+  }
+
+  return eventos.map((e) => ({
+    ...e,
+    menusRestantes: (e.menuHabilitado && e.topeMenus !== null)
+      ? calcularMenusRestantes(e.topeMenus, ocupados.get(e.id) || 0)
+      : null,
+    menuCerrado: estaCerrado(e),
+  }));
 }
 
 // Threshold mínimo de `fecha` para que un evento siga visible en la portada:
@@ -38,7 +112,8 @@ async function getDestacado(req, res) {
       include: { tandas: { orderBy: { orden: 'asc' } } },
     });
     if (!evento) return res.status(404).json({ error: 'No hay evento destacado' });
-    return res.json(adjuntarTandaVigente(evento));
+    const [conMenus] = await adjuntarEstadoMenu([adjuntarTandaVigente(evento)]);
+    return res.json(conMenus);
   } catch (err) {
     console.error('Error en getDestacado:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -59,7 +134,7 @@ async function getProximos(req, res) {
       take: 50,
       include: { tandas: { orderBy: { orden: 'asc' } } },
     });
-    return res.json(eventos.map(adjuntarTandaVigente));
+    return res.json(await adjuntarEstadoMenu(eventos.map(adjuntarTandaVigente)));
   } catch (err) {
     console.error('Error en getProximos:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -135,7 +210,8 @@ async function adminGetById(req, res) {
       },
     });
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
-    return res.json(adjuntarTandaVigente(evento));
+    const [conMenus] = await adjuntarEstadoMenu([adjuntarTandaVigente(evento)]);
+    return res.json(conMenus);
   } catch (err) {
     console.error('Error en adminGetById evento:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -159,12 +235,33 @@ const BOX_OVERRIDE_FIELDS = [
   'boxPrecioOverride', 'boxEtiquetaEntradaOverride',
 ];
 
+/**
+ * Parsea el tope de menús del FormData del backoffice (Sprint 7, S2).
+ *
+ *   undefined  → el request no manda el campo: NO tocar lo guardado
+ *   ''         → el operador lo vació: sin tope (null)
+ *   entero ≥ 0 → ese tope
+ *   basura     → NO tocar lo guardado (misma guarda que precioMenu en updateHome:
+ *                un valor inválido no debe pisar un tope válido en silencio)
+ *
+ * Un tope de 0 es legítimo y distinto de null: "este evento no vende más menús".
+ */
+function parseTopeMenus(raw) {
+  if (raw === undefined || raw === null) return undefined;
+  const s = String(raw).trim();
+  if (s === '') return null;
+  if (!/^\d+$/.test(s)) return undefined;
+  const n = parseInt(s, 10);
+  return Number.isInteger(n) ? n : undefined;
+}
+
 async function adminCrear(req, res) {
   try {
     const {
       nombre, descripcion, fecha, hora, invitado,
       precioEntrada, cantidadDisponible,
       esDestacado, estaPublicado, estaAgotado, esExterno, linkExterno,
+      menuHabilitado, topeMenus,
     } = req.body;
 
     if (!nombre || !descripcion || !fecha || !hora || !precioEntrada || !cantidadDisponible) {
@@ -190,6 +287,10 @@ async function adminCrear(req, res) {
       estaAgotado: estaAgotado === 'true' || estaAgotado === true,
       esExterno: esExterno === 'true' || esExterno === true,
       linkExterno: linkExterno || null,
+      // Menú de la sede: el form de "Nuevo evento" trae el mismo toggle que el de
+      // edición, así que se lee también acá. Sin esto, marcarlo al crear el evento
+      // se perdía en silencio y había que volver a entrar a editarlo.
+      menuHabilitado: menuHabilitado === 'true' || menuHabilitado === true,
       tandas: {
         create: [{
           nombre: 'General',
@@ -201,6 +302,11 @@ async function adminCrear(req, res) {
         }],
       },
     };
+    // Tope de menús: mismo motivo que menuHabilitado — el form de "Nuevo evento"
+    // trae el campo, y sin leerlo acá el tope cargado al crear se perdía.
+    const topeCrear = parseTopeMenus(topeMenus);
+    if (topeCrear !== undefined) dataEvento.topeMenus = topeCrear;
+
     for (const f of BOX_OVERRIDE_FIELDS) {
       if (req.body[f] !== undefined) dataEvento[f] = String(req.body[f]).trim();
     }
@@ -226,6 +332,7 @@ async function adminEditar(req, res) {
     const {
       nombre, descripcion, fecha, hora, invitado,
       esDestacado, estaPublicado, estaAgotado, esExterno, linkExterno,
+      menuHabilitado, topeMenus,
     } = req.body;
 
     const data = {};
@@ -239,6 +346,16 @@ async function adminEditar(req, res) {
     if (estaAgotado !== undefined) data.estaAgotado = estaAgotado === 'true' || estaAgotado === true;
     if (esExterno !== undefined) data.esExterno = esExterno === 'true' || esExterno === true;
     if (linkExterno !== undefined) data.linkExterno = linkExterno || null;
+    // Menú de la sede (Sprint 7): toggle por evento. Llega como string desde el
+    // FormData del backoffice. El precio es global (Home.precioMenu); acá solo se
+    // decide si ESTE evento lo ofrece. Apagarlo no toca las compras ya hechas.
+    if (menuHabilitado !== undefined) {
+      data.menuHabilitado = menuHabilitado === 'true' || menuHabilitado === true;
+    }
+    // Tope de menús (S2). Bajarlo por debajo de lo ya vendido no rompe nada: el
+    // cupo restante se calcula con Math.max(0, ...) y simplemente queda en 0.
+    const topeEditar = parseTopeMenus(topeMenus);
+    if (topeEditar !== undefined) data.topeMenus = topeEditar;
     if (req.file) data.flyerUrl = `/assets/img/uploads/eventos/${req.file.filename}`;
     for (const f of BOX_OVERRIDE_FIELDS) {
       if (req.body[f] !== undefined) data[f] = String(req.body[f]).trim();
@@ -388,6 +505,37 @@ async function adminEventoStats(req, res) {
     const entradasPendientes = pendientesAgg._sum.cantidadEntradas || 0;
     const recaudado = vendidasAgg._sum.totalPagado || 0;
 
+    // Menú de la sede (Sprint 7). `totalPagado` incluye el menú, así que
+    // `recaudado` viene inflado con plata que la coop le debe pagar a la sede. Se
+    // lee de la compra (menuUnitario está congelado por compra) con los mismos
+    // filtros que `vendidasAgg`, para que `recaudadoSab` cierre exacto.
+    const menusRow = await prisma.$queryRaw`
+      SELECT COALESCE(SUM(cantidadMenus * menuUnitario), 0) AS totalMenus,
+             COALESCE(SUM(cantidadMenus), 0) AS cantidadMenus
+      FROM Compra
+      WHERE eventoId = ${eventoId} AND mpEstado = 'approved' AND totalPagado > 0
+    `;
+    const menusTotal = Number(menusRow[0]?.totalMenus || 0);
+    const menusCantidad = Number(menusRow[0]?.cantidadMenus || 0);
+
+    // Menús pendientes de pago: no están cocinados ni cobrados, pero la cocina
+    // necesita saber que existen (el reporte de las 18 sale con lo aprobado).
+    const menusPendientesRow = await prisma.$queryRaw`
+      SELECT COALESCE(SUM(cantidadMenus), 0) AS cantidadMenus
+      FROM Compra
+      WHERE eventoId = ${eventoId} AND mpEstado = 'pending'
+    `;
+    const menusPendientes = Number(menusPendientesRow[0]?.cantidadMenus || 0);
+
+    // Cupo del menú (S2). OJO: `menusCantidad` de arriba filtra `totalPagado > 0`
+    // (deja afuera las invitaciones) porque sirve para la PLATA. El cupo es otra
+    // pregunta — cuántos platos hay que cocinar — y se cuenta con la definición
+    // única de `contarMenusOcupados`: aprobadas + pendientes, valgan lo que valgan.
+    // Calcular el restante restando los números de arriba daría un cupo inflado.
+    const menusOcupados = evento.topeMenus === null
+      ? null
+      : await contarMenusOcupados(prisma, eventoId);
+
     // Capacidad del evento: suma de capacidades de todas las tandas. Si alguna
     // tanda tiene capacidad null (sin límite), el total del evento es null (∞).
     const tandas = evento.tandas;
@@ -427,7 +575,19 @@ async function adminEventoStats(req, res) {
         pendientes: entradasPendientes,
         aprobadas: entradasVendidas + entradasInvitaciones,
       },
+      // `recaudado` es todo lo cobrado por MP (incluye el menú de la sede, que es
+      // lo que concilia contra MP). `recaudadoSab` es lo que le queda a la coop.
       recaudado,
+      recaudadoSab: recaudado - menusTotal,
+      menus: {
+        cantidad: menusCantidad,
+        total: menusTotal,
+        pendientes: menusPendientes,
+        // Cupo: null en los tres cuando el evento no tiene tope.
+        tope: evento.topeMenus,
+        ocupados: menusOcupados,
+        restantes: calcularMenusRestantes(evento.topeMenus, menusOcupados),
+      },
       capacidad: {
         evento: capacidadInfinita ? null : capacidadEvento,
         vendidaEvento,
@@ -437,6 +597,119 @@ async function adminEventoStats(req, res) {
     });
   } catch (err) {
     console.error('Error en adminEventoStats:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+/**
+ * Lista de menús para la cocina de la sede (ítem 44, Sprint 7 · S4).
+ *
+ * ESTE ENDPOINT ALIMENTA EL CONTROL DE ENTREGA REAL. Por decisión de producto
+ * del 16/8 no hay segundo QR: en la puerta se tilda la hoja impresa. Y desde el
+ * hallazgo 📋 de R1, además, es lo único que hace verdadero al mail de
+ * confirmación, que le promete al comprador "dá tu nombre y apellido — ya estás
+ * en la lista". Por eso devuelve NOMBRES, no solo agregados: sin nombres, la
+ * lista que el mail promete no existe.
+ *
+ * ⚠️ QUÉ CUENTA CADA NÚMERO. Hay tres conteos de menús en el sistema y NO son
+ * intercambiables (es el desvío 3 de S2, que ya casi hace cocinar de menos):
+ *
+ *   - `adminEventoStats.menus.cantidad` mide **plata**: filtra `totalPagado > 0`,
+ *     o sea deja afuera las invitaciones. Sirve para la contabilidad.
+ *   - `adminEventoStats.menus.ocupados` mide **cupo**: aprobadas + pendientes,
+ *     valga lo que valga la compra. Es lo que corta la venta en el checkout.
+ *   - lo que devuelve ESTE endpoint mide **platos aprobados**: lo que hay que
+ *     cocinar. Es la suma de las filas que se imprimen, y se calcula sumando
+ *     esas mismas filas a propósito — así el total de la hoja no puede
+ *     divergir de lo que la hoja lista, que es el criterio de éxito de S4.
+ *
+ * Hoy los tres coinciden casi siempre (una invitación no lleva menús y una
+ * compra con menú tiene total > 0 porque el cupón no toca el menú), pero son
+ * definiciones distintas. La que le importa a la cocina es la de los platos.
+ *
+ * PENDIENTES (criterio cerrado por S3, §5 del documento madre): no se ocultan
+ * ni se suman al total. El corte de las 18:00 se evalúa al CREAR la compra, así
+ * que quien pagó por Rapipago a las 17:55 compró en horario y su cupo ya está
+ * reservado — pero nadie cobró todavía. Van advertidos aparte, con nombre, y
+ * quien decide cocinar de más es la sede, no el software.
+ */
+async function adminEventoMenus(req, res) {
+  try {
+    const eventoId = parseInt(req.params.id);
+    if (!eventoId) return res.status(400).json({ error: 'ID inválido' });
+
+    const evento = await prisma.evento.findUnique({
+      where: { id: eventoId },
+      select: {
+        id: true, nombre: true, fecha: true, hora: true,
+        menuHabilitado: true, topeMenus: true,
+      },
+    });
+    if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    // Una sola query para las dos listas: `ESTADOS_MENU_OCUPADO` es la misma
+    // definición de "compra viva" que usa la reserva del cupo. Reusarla es lo
+    // que hace que valga el invariante `aprobados + pendientes === ocupados`:
+    // la hoja de la cocina y el contador que corta la venta miran lo mismo.
+    // Sin email ni teléfono: esta hoja va a la cocina y a la puerta, no a la
+    // administración, y sale impresa de un sistema que guarda PII.
+    const filas = await prisma.compra.findMany({
+      where: {
+        eventoId,
+        cantidadMenus: { gt: 0 },
+        mpEstado: { in: ESTADOS_MENU_OCUPADO },
+      },
+      select: {
+        id: true, nombre: true, apellido: true,
+        cantidadMenus: true, cantidadEntradas: true, mpEstado: true,
+      },
+    });
+
+    const aprobadas = filas.filter((c) => c.mpEstado === 'approved').sort(compararPorApellido);
+    const pendientes = filas.filter((c) => c.mpEstado === 'pending').sort(compararPorApellido);
+    const sumarMenus = (arr) => arr.reduce((s, c) => s + (c.cantidadMenus || 0), 0);
+
+    // Hora de emisión: la del SERVIDOR, no la del navegador que imprime. Es el
+    // dato que le dice a la cocina si esta hoja es anterior o posterior al
+    // corte, y comparar el corte contra un reloj que puede estar corrido sería
+    // el mismo error que S3 sacó del front.
+    const emitidoEn = new Date();
+    const home = await prisma.home.findFirst({ select: { menuCorteHora: true } });
+    const corteHora = home?.menuCorteHora ?? null;
+    let corte = null;
+    try {
+      corte = corteHora && evento.menuHabilitado
+        ? {
+          hora: corteHora,
+          instante: calcularCorteMenu(evento.fecha, corteHora).toISOString(),
+          pasado: menuVentaCerrada(evento.fecha, corteHora, emitidoEn),
+        }
+        : null;
+    } catch (err) {
+      // MENU_CORTE_INVALIDO: config rota (solo se llega editando la base a
+      // mano). La hoja se imprime igual —la cocina la necesita— pero sin
+      // afirmar que la lista está cerrada, que es lo que no se puede sostener.
+      console.error('[menu] menuCorteHora inválido en Home:', corteHora, err.code || err.message);
+      corte = null;
+    }
+
+    return res.json({
+      evento,
+      emitidoEn: emitidoEn.toISOString(),
+      corte,
+      aprobadas,
+      pendientes,
+      totales: {
+        // El número contra el que cocina la sede.
+        menusAprobados: sumarMenus(aprobadas),
+        comprasAprobadas: aprobadas.length,
+        // Advertencia, no suma.
+        menusPendientes: sumarMenus(pendientes),
+        comprasPendientes: pendientes.length,
+      },
+    });
+  } catch (err) {
+    console.error('Error en adminEventoMenus:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
@@ -461,13 +734,27 @@ async function adminStatsGlobal(req, res) {
       }),
     ]);
 
+    // Menú de la sede (Sprint 7): la misma resta que en el resto de los reportes.
+    // Sin esto, el KPI grande del dashboard suma como propia la plata de la sede.
+    const menusRow = await prisma.$queryRaw`
+      SELECT COALESCE(SUM(cantidadMenus * menuUnitario), 0) AS totalMenus,
+             COALESCE(SUM(cantidadMenus), 0) AS cantidadMenus
+      FROM Compra
+      WHERE mpEstado = 'approved' AND totalPagado > 0
+    `;
+    const menusTotal = Number(menusRow[0]?.totalMenus || 0);
+    const menusCantidad = Number(menusRow[0]?.cantidadMenus || 0);
+    const recaudado = vendidasAgg._sum.totalPagado || 0;
+
     return res.json({
       totalEventos,
       totalCompras,
       comprasAprobadas: vendidasAgg._count._all + invitacionesAgg._count._all,
       entradasVendidas: vendidasAgg._sum.cantidadEntradas || 0,
       entradasInvitaciones: invitacionesAgg._sum.cantidadEntradas || 0,
-      recaudado: vendidasAgg._sum.totalPagado || 0,
+      recaudado,
+      recaudadoSab: recaudado - menusTotal,
+      menus: { cantidad: menusCantidad, total: menusTotal },
     });
   } catch (err) {
     console.error('Error en adminStatsGlobal:', err);
@@ -502,5 +789,6 @@ module.exports = {
   adminEnviarInvitacion,
   adminListarInvitaciones,
   adminEventoStats,
+  adminEventoMenus,
   adminStatsGlobal,
 };

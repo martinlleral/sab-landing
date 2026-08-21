@@ -29,6 +29,60 @@ let cuponAplicado = null;
 // el comprador elige la opción "Entrada con Aporte".
 let tipoEntradaSeleccionado = 'base';
 
+// Menú de la sede (Sprint 7). El precio es GLOBAL y editable desde el CMS
+// (Home.precioMenu); el toggle es POR EVENTO (Evento.menuHabilitado). La cantidad
+// de menús es un eje independiente de tipoEntrada: las 4 combinaciones
+// (base/aporte × con/sin menú) conviven. Lo que se manda al backend es
+// `cantidadMenus`; el precio se resuelve y se congela allá, nunca acá.
+function getPrecioMenu() {
+  const p = homeData && homeData.precioMenu;
+  return Number.isFinite(p) && p > 0 ? p : 0;
+}
+
+// ¿El evento seleccionado ofrece menú? Requiere el toggle del evento Y un precio
+// global cargado: con precio 0 el backend rechaza con MENU_PRECIO_NO_CONFIGURADO,
+// así que ofrecerlo sería mandar a la gente a un error.
+function eventoOfreceMenu(ev) {
+  if (!ev || !ev.menuHabilitado) return false;
+  if (ev.esExterno && ev.linkExterno) return false;
+  if (!ev.tandaVigente) return false;
+  return getPrecioMenu() > 0;
+}
+
+// Cupo de menús que queda en el evento (Sprint 7, S2). null = SIN TOPE, que no
+// es lo mismo que 0 = agotado; confundirlos deja de vender o vende de más. Lo
+// calcula el backend con la misma definición que usa la reserva atómica
+// (compras aprobadas + pendientes de pago).
+function getMenusRestantes(ev) {
+  const r = ev && ev.menusRestantes;
+  return Number.isFinite(r) ? r : null;
+}
+
+// ¿Ya cerró la venta de menús de este evento? (Sprint 7, S3). Lo decide el
+// BACKEND con su propio reloj y lo manda en el evento: acá no se recalcula la
+// hora de corte. El navegador puede tener la hora mal, y sobre todo: la regla
+// del corte tiene que estar escrita en un solo lugar — la que vale es la que
+// aplica el checkout al crear la preferencia.
+function menuCerradoPorHora(ev) {
+  return !!(ev && ev.menuCerrado);
+}
+
+// Hora de cierre configurada en el CMS ("HH:MM"). Solo para TEXTO: avisar de
+// antemano hasta cuándo se puede sumar el menú. Nunca para decidir.
+function horaCorteMenu() {
+  const h = homeData && homeData.menuCorteHora;
+  return typeof h === 'string' && /^([01]\d|2[0-3]):([0-5]\d)$/.test(h) ? h : '';
+}
+
+// Cantidad de menús elegida. Lee del select; 0 si la sección está oculta.
+function getCantidadMenus() {
+  const section = document.getElementById('menu-section');
+  if (!section || section.style.display === 'none') return 0;
+  const sel = document.getElementById('modal-cantidad-menus');
+  const n = parseInt(sel?.value, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 // Sanitización XSS — escapar HTML en datos del CMS
 function esc(str) {
   if (!str) return '';
@@ -743,6 +797,10 @@ function onEventoSeleccionadoChange() {
   // Cambiar de evento también resetea el tipo de entrada (cada tanda decide
   // si ofrece aporte y con qué porcentaje).
   tipoEntradaSeleccionado = 'base';
+  // Y resetea el menú: menuHabilitado es por evento, y arrastrar "2 menús" a un
+  // evento que no los ofrece haría que el backend rechace con MENU_NO_HABILITADO.
+  const selMenus = document.getElementById('modal-cantidad-menus');
+  if (selMenus) selMenus.value = '0';
 
   const ev = getEventoSeleccionado();
   const nombreEl = document.getElementById('modal-evento-nombre');
@@ -756,6 +814,7 @@ function onEventoSeleccionadoChange() {
     if (flyerWrap) flyerWrap.style.display = 'none';
     fillEventoInfoCards(null);
     renderTandasInfo(null);
+    renderMenuSection();
     updateTotal();
     updateBtnPagarState(null);
     return;
@@ -777,6 +836,7 @@ function onEventoSeleccionadoChange() {
   fillEventoInfoCards(ev);
   renderTandasInfo(ev);
   renderTipoEntradaSection();
+  renderMenuSection();
   updateTotal();
   updateBtnPagarState(ev);
 }
@@ -849,17 +909,34 @@ function updateTotal() {
   // El aporte siempre llega íntegro a la coop, aún con cupón.
   const descuentoUnit = cuponAplicado?.descuentoUnitario || 0;
   const descuentoTotal = descuentoUnit * cant;
-  const total = Math.max(0, subtotal - descuentoTotal);
+
+  // El menú se suma DESPUÉS del descuento y NUNCA se descuenta (regla del
+  // Sprint 7): es plata que la coop le paga igual a la sede. Misma aritmética
+  // que calcularTotalCompra en el backend, que es quien cobra de verdad.
+  const menus = getCantidadMenus();
+  const precioMenu = getPrecioMenu();
+  const totalMenus = menus * precioMenu;
+
+  const totalEntradas = Math.max(0, subtotal - descuentoTotal);
+  const total = totalEntradas + totalMenus;
 
   totalEl.textContent = `$ ${formatPrecio(total)}`;
 
-  // Breakdown visible cuando hay descuento O cuando hay excedente por aporte.
+  // Breakdown visible cuando hay descuento, excedente por aporte O menú: en los
+  // tres casos el total deja de ser "cantidad × precio de la card".
   const breakdown = document.getElementById('modal-breakdown');
   if (breakdown) {
-    if (descuentoTotal > 0 || excedente > 0) {
+    if (descuentoTotal > 0 || excedente > 0 || totalMenus > 0) {
       breakdown.style.display = 'block';
       const subEl = document.getElementById('modal-subtotal');
       const descEl = document.getElementById('modal-descuento');
+      // Con menú en juego, "Subtotal" es ambiguo: se aclara a qué corresponde.
+      const subLabelEl = document.getElementById('modal-subtotal-label');
+      if (subLabelEl) {
+        subLabelEl.textContent = totalMenus > 0
+          ? `Entradas (${cant} × $${formatPrecio(precioUnit)})`
+          : 'Subtotal';
+      }
       if (subEl) subEl.textContent = `$ ${formatPrecio(subtotal)}`;
       if (descEl) {
         // Bootstrap .d-flex incluye !important, así que mutar style.display
@@ -877,11 +954,183 @@ function updateTotal() {
           }
         }
       }
+
+      // Línea del menú. Mismo toggle por classList que la del descuento (el
+      // !important de Bootstrap). La nota aclaratoria solo aparece cuando hay
+      // menú Y cupón a la vez: es ahí donde el número sorprende.
+      const menuRow = document.getElementById('modal-menu-row');
+      const menuTotalEl = document.getElementById('modal-menu-total');
+      const menuLabelEl = document.getElementById('modal-menu-label');
+      const menuNotaEl = document.getElementById('modal-menu-nota');
+      if (menuRow && menuTotalEl) {
+        if (totalMenus > 0) {
+          menuRow.classList.remove('d-none');
+          menuRow.classList.add('d-flex');
+          if (menuLabelEl) {
+            menuLabelEl.textContent = menus > 1
+              ? `${nombreMenu()} (${menus} × $${formatPrecio(precioMenu)})`
+              : nombreMenu();
+          }
+          menuTotalEl.textContent = `$ ${formatPrecio(totalMenus)}`;
+        } else {
+          menuRow.classList.remove('d-flex');
+          menuRow.classList.add('d-none');
+        }
+      }
+      if (menuNotaEl) {
+        menuNotaEl.style.display = (totalMenus > 0 && descuentoTotal > 0) ? 'block' : 'none';
+      }
     } else {
       breakdown.style.display = 'none';
     }
   }
 }
+
+// ============================================
+// MENÚ DE LA SEDE (cantidad independiente de las entradas)
+// ============================================
+
+// El nombre de la sede sale del CMS (override del evento → default de Home), así
+// que si el menú se ofrece en otro lugar el copy acompaña sin tocar código.
+function nombreMenu() {
+  const ev = getEventoSeleccionado();
+  const sede = (ev && ev.boxLugarOverride && ev.boxLugarOverride.trim())
+    || (homeData && homeData.boxLugar)
+    || '';
+  return sede ? `Menú de ${sede}` : 'Menú';
+}
+
+// Muestra u oculta la sección del menú y repuebla el select con las opciones
+// 0..cantidadEntradas. Conserva la elección previa si sigue siendo válida, y la
+// baja al máximo si el comprador redujo la cantidad de entradas (no la resetea a
+// 0: perder la elección sin avisar es peor que ajustarla).
+function renderMenuSection() {
+  const section = document.getElementById('menu-section');
+  const sel = document.getElementById('modal-cantidad-menus');
+  if (!section || !sel) return;
+
+  const ev = getEventoSeleccionado();
+  if (!eventoOfreceMenu(ev)) {
+    section.style.display = 'none';
+    sel.innerHTML = '<option value="0">Sin menú</option>';
+    sel.value = '0';
+    sel.disabled = false;
+    return;
+  }
+
+  const precioMenu = getPrecioMenu();
+  const cantEntradas = parseInt(document.getElementById('modal-cantidad')?.value, 10) || 1;
+  const previo = parseInt(sel.value, 10) || 0;
+
+  // Cupo de la cocina (S2). `menusRestantes` null = sin tope, que NO es lo mismo
+  // que 0 (agotado). Puede quedar viejo si alguien compró mientras el modal
+  // estaba abierto: el backend lo revalida y responde MENUS_SIN_CUPO /
+  // MENUS_AGOTADO_RACE, que el checkout traduce a un mensaje humano.
+  const restantes = getMenusRestantes(ev);
+  const cupoNota = document.getElementById('menu-cupo-nota');
+  const retiroNota = document.getElementById('menu-retiro-nota');
+
+  const labelEl = document.getElementById('menu-label');
+  if (labelEl) labelEl.textContent = nombreMenu();
+  const precioLabelEl = document.getElementById('menu-precio-unit-label');
+  if (precioLabelEl) precioLabelEl.textContent = ` — $ ${formatPrecio(precioMenu)} por persona`;
+
+  // Cerrado por horario: mismo tratamiento que "agotado" —la sección se muestra
+  // con el select deshabilitado y una nota— por el mismo motivo: esconderla haría
+  // creer que esta fecha nunca tuvo menú. Va ANTES que el cupo porque es el
+  // estado terminal del día: pasado el corte, cuántos quedaban ya no le sirve a
+  // nadie.
+  if (menuCerradoPorHora(ev)) {
+    const hora = horaCorteMenu();
+    sel.innerHTML = '<option value="0">Cerrado por hoy</option>';
+    sel.value = '0';
+    sel.disabled = true;
+    if (cupoNota) {
+      cupoNota.innerHTML = '<i class="bi bi-info-circle me-1"></i>'
+        + 'La venta de menús para esta fecha <strong>ya cerró</strong>'
+        + (hora ? ` (cierra a las ${hora} del día del show)` : '')
+        + '. Las entradas siguen disponibles.';
+      // El gris de las notas: cerrar a horario es un estado previsto, no un error
+      // de la persona. Misma decisión que tomó S2 para "agotado".
+      cupoNota.style.color = '#a0aec0';
+      cupoNota.style.display = 'block';
+    }
+    if (retiroNota) retiroNota.style.display = 'none';
+    section.style.display = 'block';
+    return;
+  }
+
+  // Agotado: la sección se muestra igual (que exista el menú es información útil,
+  // y su ausencia se leería como que esta fecha no tiene), pero sin nada que elegir.
+  if (restantes === 0) {
+    sel.innerHTML = '<option value="0">Menús agotados</option>';
+    sel.value = '0';
+    sel.disabled = true;
+    if (cupoNota) {
+      // Agotarse no es un error de la persona: es un estado. Va en el gris de las
+      // notas, no en el rojo que este modal reserva para "algo salió mal" — y el
+      // propio select ya dice "Menús agotados", así que esta línea solo agrega la
+      // parte que tranquiliza.
+      cupoNota.innerHTML = '<i class="bi bi-info-circle me-1"></i>'
+        + 'Los menús de esta fecha <strong>se agotaron</strong>. Las entradas siguen disponibles.';
+      cupoNota.style.color = '#a0aec0';
+      cupoNota.style.display = 'block';
+    }
+    if (retiroNota) retiroNota.style.display = 'none';
+    section.style.display = 'block';
+    return;
+  }
+
+  // Techo del select: no más menús que entradas (regla dura) y no más que los que
+  // quedan por vender. Se elige el menor de los dos.
+  const techo = restantes === null ? cantEntradas : Math.min(cantEntradas, restantes);
+  const elegido = Math.min(previo, techo);
+
+  const opciones = ['<option value="0">Sin menú</option>'];
+  for (let i = 1; i <= techo; i++) {
+    opciones.push(`<option value="${i}">${i} menú${i > 1 ? 's' : ''} — $ ${formatPrecio(precioMenu * i)}</option>`);
+  }
+  sel.innerHTML = opciones.join('');
+  sel.value = String(elegido);
+  sel.disabled = false;
+
+  if (retiroNota) retiroNota.style.display = 'block';
+  // Hasta cuándo se puede sumar: dicho ANTES, cuando todavía sirve para algo.
+  // Enterarse del corte recién al chocarse con él es enterarse tarde.
+  const corteNota = document.getElementById('menu-corte-nota');
+  if (corteNota) {
+    const hora = horaCorteMenu();
+    corteNota.textContent = hora ? ` Se puede sumar hasta las ${hora} del día del show.` : '';
+  }
+  if (cupoNota) {
+    // El aviso solo aparece cuando el cupo es lo que limita la elección. Si
+    // quedan 40 menús y pediste 2 entradas, el número no aporta nada y ensucia.
+    if (restantes !== null && restantes <= cantEntradas) {
+      cupoNota.innerHTML = '<i class="bi bi-info-circle me-1"></i>'
+        + (restantes === 1
+          ? 'Queda <strong>1</strong> menú para esta fecha.'
+          : `Quedan <strong>${restantes}</strong> menús para esta fecha.`);
+      // El gris de las notas, no el celeste: ese color es el del único link de
+      // texto del modal (el de "¿Tenés un código de descuento?"), y usarlo acá
+      // haría parecer clickeable algo que no lo es. La urgencia la lleva el
+      // número en negrita, que es el dato que importa.
+      cupoNota.style.color = '#a0aec0';
+      cupoNota.style.display = 'block';
+    } else {
+      cupoNota.style.display = 'none';
+    }
+  }
+
+  section.style.display = 'block';
+}
+
+// Cambiar la cantidad de entradas cambia el techo del menú: hay que repoblar el
+// select antes de recalcular el total, o el máximo queda desfasado un paso.
+function onCantidadEntradasChange() {
+  renderMenuSection();
+  updateTotal();
+}
+window.onCantidadEntradasChange = onCantidadEntradasChange;
 
 // ============================================
 // TIPO DE ENTRADA (base vs aporte "A la Gorra")
@@ -1077,7 +1326,8 @@ window.quitarCupon = quitarCupon;
 
 document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'modal-cantidad') {
-    updateTotal();
+    // Repuebla el select de menús antes de recalcular: su máximo depende de esto.
+    onCantidadEntradasChange();
   }
 });
 
@@ -1129,6 +1379,8 @@ async function handleComprar() {
     };
     if (cuponAplicado) body.cuponCodigo = cuponAplicado.codigo;
     if (tipoEntradaSeleccionado === 'aporte') body.tipoEntrada = 'aporte';
+    const menus = getCantidadMenus();
+    if (menus > 0) body.cantidadMenus = menus;
 
     const result = await fetchJSON(API.preferencia, {
       method: 'POST',
@@ -1142,10 +1394,85 @@ async function handleComprar() {
       throw new Error('No se recibió link de pago');
     }
   } catch (err) {
-    showModalError(err.message || 'Error al procesar el pago. Intentá de nuevo.');
+    // Si el rechazo fue por cupo —quedan pocos o no queda ninguno—, el backend
+    // manda cuántos quedan de verdad:
+    // se corrige el estado del front y se repuebla el select ANTES de mostrar el
+    // error, para que la persona pueda arreglar el pedido en el mismo lugar donde
+    // se lo rechazaron en vez de tener que recargar.
+    if (err && (err.code === 'MENUS_SIN_CUPO' || err.code === 'MENUS_AGOTADOS')
+        && Number.isFinite(err.menusRestantes)) {
+      const ev = getEventoSeleccionado();
+      if (ev) {
+        ev.menusRestantes = err.menusRestantes;
+        renderMenuSection();
+        updateTotal();
+      }
+    }
+    // Mismo trato para el corte horario (S3): el modal pudo abrirse a las 17:50 y
+    // pagarse a las 18:05. Se corrige el estado del front con lo que dice el
+    // servidor y se repuebla la sección ANTES de mostrar el error, para que la
+    // compra se pueda completar con entradas solas sin recargar. Es el hallazgo
+    // de R1: un rechazo que no deja salida convierte una venta en un abandono.
+    if (err && err.code === 'MENU_CORTE_PASADO') {
+      const ev = getEventoSeleccionado();
+      if (ev) {
+        ev.menuCerrado = true;
+        renderMenuSection();
+        updateTotal();
+      }
+    }
+    showModalError(mensajeErrorCompra(err));
     btn.disabled = false;
     if (spinner) spinner.style.display = 'none';
   }
+}
+
+// Traduce los `code` de las reglas duras del backend a algo que se entienda en el
+// modal. Son estados que la UI ya previene (el select acota los menús al máximo,
+// la sección se oculta si el evento no ofrece menú), así que llegar acá significa
+// que el estado del front quedó viejo: el mensaje tiene que decir qué hacer, no
+// solo que falló. Fallback al `error` del backend para todo lo demás.
+const MENSAJES_ERROR_COMPRA = {
+  MENU_NO_HABILITADO: 'Este evento ya no ofrece menú. Recargá la página y volvé a intentar.',
+  MENUS_EXCEDEN_ENTRADAS: 'No se puede comprar más menús que entradas. Ajustá las cantidades.',
+  CANTIDAD_INVALIDA: 'Elegí al menos 1 entrada.',
+  MENU_PRECIO_NO_CONFIGURADO: 'El menú no está disponible en este momento. Escribinos por WhatsApp y lo resolvemos.',
+  MENUS_INVALIDO: 'La cantidad de menús no es válida. Elegila de nuevo.',
+  MENUS_AGOTADOS: 'Los menús de esta fecha se agotaron. Podés seguir con las entradas solas.',
+  // El race es el único caso donde el front NO sabe cuántos quedan (otra compra
+  // tomó el cupo mientras esta se estaba creando), así que se pide recargar en vez
+  // de arriesgar un número inventado.
+  MENUS_AGOTADO_RACE: 'Alguien tomó los últimos menús mientras completabas la compra. '
+    + 'Recargá la página para ver cuántos quedan; no se te cobró nada.',
+  MENU_CORTE_PASADO: 'La venta de menús para esta fecha ya cerró. '
+    + 'Ya ajustamos tu pedido: tocá Pagar de nuevo para confirmar solo las entradas.',
+  // Config rota (la hora de corte quedó en un valor imposible). No es algo que la
+  // persona pueda arreglar, así que se la manda a un humano en vez de a reintentar.
+  MENU_CORTE_INVALIDO: 'El menú no está disponible en este momento. Escribinos por WhatsApp y lo resolvemos.',
+};
+
+function mensajeErrorCompra(err) {
+  // Caso con número propio: el mensaje útil es el que dice cuántos quedan, y ese
+  // dato solo lo tiene la respuesta. El select ya se recortó a ese máximo.
+  if (err && err.code === 'MENUS_SIN_CUPO' && Number.isFinite(err.menusRestantes)) {
+    const n = err.menusRestantes;
+    if (n === 0) return MENSAJES_ERROR_COMPRA.MENUS_AGOTADOS;
+    // El verbo también concuerda: "Queda 1 menú", no "Quedan 1 menú".
+    // Y no se pide "ajustá la cantidad": el selector ya se recortó solo al máximo
+    // real, y queda fuera de pantalla desde donde se lee este cartel. Mandar a
+    // arreglar algo que ya está arreglado, y que además no se ve, es peor que no
+    // decir nada.
+    return `${n === 1 ? 'Queda 1 menú' : `Quedan ${n} menús`} para esta fecha. `
+      + 'Ya ajustamos tu pedido: tocá Pagar de nuevo para confirmarlo.';
+  }
+  // El corte tiene mensaje propio cuando el backend manda la hora: decir a qué
+  // hora cerró explica el rechazo y evita el "¿y por qué?" por WhatsApp.
+  if (err && err.code === 'MENU_CORTE_PASADO' && typeof err.menuCorteHora === 'string' && err.menuCorteHora) {
+    return `La venta de menús cerró a las ${err.menuCorteHora} del día del show. `
+      + 'Ya ajustamos tu pedido: tocá Pagar de nuevo para confirmar solo las entradas.';
+  }
+  if (err && err.code && MENSAJES_ERROR_COMPRA[err.code]) return MENSAJES_ERROR_COMPRA[err.code];
+  return (err && err.message) || 'Error al procesar el pago. Intentá de nuevo.';
 }
 
 function showModalError(msg) {
@@ -1319,7 +1646,20 @@ function renderPaymentStatus(status, preferenciaId, data) {
 async function fetchJSON(url, options = {}) {
   const res = await fetch(url, options);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    // Se adjunta el `code` del backend al Error para que quien llama pueda dar un
+    // mensaje específico (ver mensajeErrorCompra). El `message` sigue siendo el
+    // texto del backend, así que los callers que no miran el code no cambian.
+    const err = new Error(data.error || `HTTP ${res.status}`);
+    if (data.code) err.code = data.code;
+    // Cupo de menús que devuelve el backend al rechazar por tope (S2): permite
+    // corregir el select con el número real sin volver a pedir el evento.
+    if (Number.isFinite(data.menusRestantes)) err.menusRestantes = data.menusRestantes;
+    // Hora de corte del menú (S3): viaja por el mismo camino y por el mismo
+    // motivo — que el mensaje pueda decir a qué hora cerró.
+    if (typeof data.menuCorteHora === 'string') err.menuCorteHora = data.menuCorteHora;
+    throw err;
+  }
   return data;
 }
 

@@ -146,12 +146,20 @@
           <div class="bo-stat" style="border-left:3px solid #48bb78;">
             <div class="bo-stat-value" style="color:#48bb78;" id="r-recaudado">—</div>
             <div class="bo-stat-label">Recaudado total</div>
-            <div class="bo-stat-desc">Base + aporte extra</div>
+            <div class="bo-stat-desc" id="r-recaudado-desc">Base + aporte extra</div>
           </div>
           <div class="bo-stat" style="border-left:3px solid #a78bfa;">
             <div class="bo-stat-value" style="color:#a78bfa;" id="r-aporte">—</div>
             <div class="bo-stat-label">Aporte extra (A la Gorra)</div>
             <div class="bo-stat-desc">Solo el excedente sobre el precio base</div>
+          </div>
+          <!-- Menú de la sede: aparece solo si hay menús vendidos. Es plata que la
+               cooperativa cobra y le paga a la sede, así que NO es recaudación
+               propia — pero sí entra en el total cobrado por MP. -->
+          <div class="bo-stat" style="border-left:3px solid #c4384b; display:none;" id="r-menus-card">
+            <div class="bo-stat-value" style="color:#c4384b;" id="r-menus">—</div>
+            <div class="bo-stat-label">Menú de la sede</div>
+            <div class="bo-stat-desc" id="r-menus-desc">A pagarle a la sede — no es recaudación del SAB</div>
           </div>
           <div class="bo-stat" style="border-left:3px solid #38b2ac;">
             <div class="bo-stat-value" style="color:#38b2ac;" id="r-asistencia">—</div>
@@ -272,13 +280,14 @@
                   <th>Fecha</th>
                   <th>Vendidas</th>
                   <th>Invitaciones</th>
-                  <th>Recaudado</th>
+                  <th title="Lo que le queda al SAB: el cobrado por MP menos el menú de la sede">Recaudado SAB</th>
+                  <th title="Plata cobrada por cuenta de la sede — hay que pagársela">Menú sede</th>
                   <th>Aporte extra</th>
                   <th>% ocupación</th>
                 </tr>
               </thead>
               <tbody id="comparativa-body">
-                <tr><td colspan="7" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
+                <tr><td colspan="8" class="text-center py-4" style="color:#666;">Cargando...</td></tr>
               </tbody>
             </table>
           </div>

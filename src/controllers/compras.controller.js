@@ -6,7 +6,14 @@ const brevoService = require('../services/brevo.service');
 const qrService = require('../services/qr.service');
 const { procesarPagoAprobado, revertirCompraAprobada } = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
-const { calcularPrecioFinal, reservarCupon, validarCupon } = require('../services/precios.service');
+const { calcularTotalCompra, reservarCupon, validarCupon, OFFSET_ART_HORAS } = require('../services/precios.service');
+const { compararPorApellido } = require('../utils/orden');
+const { serializarCSV, slugArchivo } = require('../utils/csv');
+// El módulo entero, además de los destructurados: las funciones del tope de menús
+// se llaman como `precios.x()` para que los tests puedan monkey-patchear el
+// pre-chequeo y simular una lectura vieja (patrón sin jest del proyecto, el mismo
+// que usa pagos.service.js con `precios.liberarCupon`).
+const precios = require('../services/precios.service');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -50,7 +57,10 @@ function verifyMpSignature(req, secret) {
 
 async function crearPreferencia(req, res) {
   try {
-    const { eventoId, email, nombre, apellido, telefono, cantidad, tipoEntrada, cuponCodigo } = req.body;
+    const {
+      eventoId, email, nombre, apellido, telefono, cantidad, tipoEntrada, cuponCodigo,
+      cantidadMenus,
+    } = req.body;
 
     if (!eventoId || !email || !nombre || !apellido || !cantidad) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
@@ -78,17 +88,66 @@ async function crearPreferencia(req, res) {
       }
     }
 
-    // Cálculo del precio (aplica tipoEntrada y, si vino, valida cupón). Errores
-    // del helper traen .code para mapear a 400 con mensaje específico.
+    // Menú de Casa Metro: cantidad propia, ortogonal a tipoEntrada. El precio es
+    // global (Home.precioMenu) y la compra lo congela. El body puede no traer el
+    // campo (checkout de un evento sin menú, o cliente viejo) → 0.
+    const menusPedidos = cantidadMenus === undefined || cantidadMenus === null || cantidadMenus === ''
+      ? 0
+      : parseInt(cantidadMenus);
+    let precioMenu = 0;
+    let menusRestantes = null;
+    // Corte horario (S3): la hora sale de la MISMA lectura de Home que el precio.
+    // null = no se pudo leer la config → sin corte; el precio en 0 ya frena la
+    // venta por MENU_PRECIO_NO_CONFIGURADO, así que no hace falta una segunda
+    // guarda acá.
+    let menuCorteHora = null;
+    if (Number.isInteger(menusPedidos) && menusPedidos > 0) {
+      const home = await prisma.home.findFirst({ select: { precioMenu: true, menuCorteHora: true } });
+      precioMenu = home?.precioMenu ?? 0;
+      menuCorteHora = home?.menuCorteHora ?? null;
+
+      // Cupo de menús (S2). Pre-chequeo de cortesía: da un mensaje concreto
+      // ("quedan 3 y pediste 5") antes de crear nada. Puede quedar viejo entre
+      // esta lectura y la compra — la garantía real la da `reservarMenus` dentro
+      // de la transacción, igual que validarCupon respecto de reservarCupon.
+      if (evento.topeMenus !== null && evento.topeMenus !== undefined) {
+        const ocupados = await precios.contarMenusOcupados(prisma, evento.id);
+        menusRestantes = precios.calcularMenusRestantes(evento.topeMenus, ocupados);
+      }
+    }
+
+    // Cálculo del total (aplica tipoEntrada, valida cupón si vino, valida las
+    // reglas duras del menú y lo suma DESPUÉS del descuento). Errores del helper
+    // traen .code para mapear a 400 con mensaje específico.
     let precioCalc;
     try {
-      precioCalc = await calcularPrecioFinal(tandaVigente, { tipoEntrada, cuponCodigo });
+      precioCalc = await calcularTotalCompra(tandaVigente, {
+        tipoEntrada,
+        cuponCodigo,
+        cantidad: cant,
+        cantidadMenus: menusPedidos,
+        menuHabilitado: evento.menuHabilitado,
+        precioMenu,
+        menusRestantes,
+        // DOBLE CAPA. El front oculta el select pasado el corte, pero alguien
+        // pudo abrir la página a las 17:50 y pagar a las 18:05: la validación
+        // que vale es esta, con el reloj del servidor.
+        fechaEvento: evento.fecha,
+        menuCorteHora,
+      });
     } catch (err) {
-      if (err.code) return res.status(400).json({ error: err.message, code: err.code });
+      if (err.code) {
+        const payload = { error: err.message, code: err.code };
+        // El cupo viaja en el body para que el checkout pueda recortar el select
+        // al número real sin pedir el evento de nuevo.
+        if (err.menusRestantes !== undefined) payload.menusRestantes = err.menusRestantes;
+        if (err.menuCorteHora !== undefined) payload.menuCorteHora = err.menuCorteHora;
+        return res.status(400).json(payload);
+      }
       throw err;
     }
 
-    const totalPagado = precioCalc.precioUnitarioFinal * cant;
+    const totalPagado = precioCalc.totalPagado;
 
     // Tx atómica: si hay cupón, re-validamos dentro de la tx (defensa contra
     // cambios del admin entre cálculo y reserva), reservamos el uso, creamos
@@ -114,10 +173,20 @@ async function crearPreferencia(req, res) {
             precioUnitario: tandaVigente.precio,
             tipoEntrada: precioCalc.tipoEntrada,
             excedenteUnitario: precioCalc.excedenteUnitario,
+            cantidadMenus: precioCalc.cantidadMenus,
+            menuUnitario: precioCalc.menuUnitario,
             totalPagado,
             mpEstado: 'pending',
           },
         });
+
+        // Reserva atómica del cupo de menús (S2). Va DESPUÉS del create a
+        // propósito: el aggregate de `reservarMenus` cuenta la compra recién
+        // insertada, así que es "mutar y verificar después con rollback si se
+        // pasó" — la misma forma que reservarCupon, sin contador que mantener.
+        if (precioCalc.cantidadMenus > 0) {
+          await precios.reservarMenus(tx, evento.id, evento.topeMenus);
+        }
 
         if (precioCalc.cupon) {
           await tx.cuponUso.create({
@@ -142,6 +211,19 @@ async function crearPreferencia(req, res) {
       cantidad: cant,
       email,
       preferenciaId: String(compra.id),
+      // El menú va como ítem APARTE de la preferencia, no sumado al precio de la
+      // entrada: así el comprador ve las dos líneas en el checkout de MP y el
+      // reporte de MP muestra la plata de Casa Metro diferenciada de la del SAB
+      // (que es justo lo que pidió el operador). La suma de los ítems da
+      // compra.totalPagado, que es lo que el webhook cruza contra
+      // transaction_amount — si esto se desalinea, el webhook rechaza el pago.
+      itemsExtra: precioCalc.cantidadMenus > 0
+        ? [{
+          title: `Menú Casa Metro — ${precioCalc.cantidadMenus} menú(s)`,
+          unit_price: precioCalc.menuUnitario,
+          quantity: precioCalc.cantidadMenus,
+        }]
+        : undefined,
     });
 
     await prisma.compra.update({
@@ -284,48 +366,78 @@ async function checkAndProcess(req, res) {
   }
 }
 
+/**
+ * Estados de MP que el listado admite como filtro explícito.
+ *
+ * `refunded` no está: las devoluciones se ven bajo "Todos" pero no tienen su
+ * propia opción en el select del backoffice. El export lo respeta igual (no
+ * inventa un filtro que la pantalla no ofrece) y las incluye por la vía del
+ * toggle "incluir todos los estados".
+ */
+const ESTADOS_VALIDOS = ['approved', 'pending', 'rejected', 'cancelled'];
+
+/**
+ * Traduce los query params de filtrado al `where` de Prisma.
+ *
+ * Vive como función propia porque la usan DOS endpoints que tienen que devolver
+ * exactamente el mismo conjunto de compras: el listado paginado que el operador
+ * ve en pantalla y el export que se baja desde esa misma pantalla. Si cada uno
+ * armara su filtro, el día que uno cambie el CSV va a traer un conjunto distinto
+ * del que la pantalla muestra — y el operador no tiene forma de saber cuál de
+ * los dos miente. Es el mismo motivo por el que el orden alfabético se extrajo a
+ * `utils/orden.js` en el ítem 44: un criterio compartido se escribe una vez.
+ *
+ * @param {object} query - `req.query`
+ * @returns {{where: object, q: string}} el filtro y el término de búsqueda ya
+ *   normalizado (el listado lo necesita aparte para decidir si pagina)
+ */
+function construirFiltroCompras(query) {
+  const where = {};
+  if (query.eventoId) where.eventoId = parseInt(query.eventoId);
+  // Filtro server-side por estado MP. Antes el filtro era client-side sobre la
+  // página de 20 visible, lo que daba conteos incoherentes ("33 aprobados en
+  // total" vs "10 visibles cuando filtro Aprobados en página 1"). Ahora la
+  // BD filtra y el total devuelto refleja el filtro.
+  if (query.mpEstado && ESTADOS_VALIDOS.includes(query.mpEstado)) {
+    where.mpEstado = query.mpEstado;
+  }
+
+  // Búsqueda libre por nombre/apellido/email del comprador. SQLite + Prisma
+  // usa LIKE, case-insensitive para ASCII por default. Para acentos exactos,
+  // un "Gomez" no matchea "Gómez" — mantenemos la solución simple porque el
+  // caso típico es búsqueda parcial de apellido.
+  const q = (query.q || '').trim();
+  if (q) {
+    where.OR = [
+      { nombre: { contains: q } },
+      { apellido: { contains: q } },
+      { email: { contains: q } },
+    ];
+  }
+
+  // Filtro de validación de entradas. Solo tiene sentido sobre compras
+  // approved (las únicas que tienen QR generado), así que forzamos approved
+  // si el filtro está activo aunque no venga mpEstado explícito.
+  const validacion = query.validacion;
+  if (validacion === 'pendiente') {
+    where.mpEstado = 'approved';
+    where.entradas = { some: { validada: false } };
+  } else if (validacion === 'validada') {
+    where.mpEstado = 'approved';
+    // every: true requiere también `some: {}` para excluir compras sin
+    // entradas generadas (every aplica vacuously sobre conjuntos vacíos).
+    where.entradas = { some: {}, every: { validada: true } };
+  }
+
+  return { where, q };
+}
+
 async function adminListar(req, res) {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
-    const where = {};
-    if (req.query.eventoId) where.eventoId = parseInt(req.query.eventoId);
-    // Filtro server-side por estado MP. Antes el filtro era client-side sobre la
-    // página de 20 visible, lo que daba conteos incoherentes ("33 aprobados en
-    // total" vs "10 visibles cuando filtro Aprobados en página 1"). Ahora la
-    // BD filtra y el total devuelto refleja el filtro.
-    const ESTADOS_VALIDOS = ['approved', 'pending', 'rejected', 'cancelled'];
-    if (req.query.mpEstado && ESTADOS_VALIDOS.includes(req.query.mpEstado)) {
-      where.mpEstado = req.query.mpEstado;
-    }
-
-    // Búsqueda libre por nombre/apellido/email del comprador. SQLite + Prisma
-    // usa LIKE, case-insensitive para ASCII por default. Para acentos exactos,
-    // un "Gomez" no matchea "Gómez" — mantenemos la solución simple porque el
-    // caso típico es búsqueda parcial de apellido.
-    const q = (req.query.q || '').trim();
-    if (q) {
-      where.OR = [
-        { nombre: { contains: q } },
-        { apellido: { contains: q } },
-        { email: { contains: q } },
-      ];
-    }
-
-    // Filtro de validación de entradas. Solo tiene sentido sobre compras
-    // approved (las únicas que tienen QR generado), así que forzamos approved
-    // si el filtro está activo aunque no venga mpEstado explícito.
-    const validacion = req.query.validacion;
-    if (validacion === 'pendiente') {
-      where.mpEstado = 'approved';
-      where.entradas = { some: { validada: false } };
-    } else if (validacion === 'validada') {
-      where.mpEstado = 'approved';
-      // every: true requiere también `some: {}` para excluir compras sin
-      // entradas generadas (every aplica vacuously sobre conjuntos vacíos).
-      where.entradas = { some: {}, every: { validada: true } };
-    }
+    const { where, q } = construirFiltroCompras(req.query);
 
     // Orden server-side de las 5 columnas ordenables de la tabla del backoffice.
     // Whitelist explícita: el nombre de columna viene del cliente y no puede
@@ -384,12 +496,11 @@ async function adminListar(req, res) {
         select: { id: true, apellido: true, nombre: true },
       });
 
+      // El comparador vive en utils/orden.js porque la lista de cocina (ítem 44)
+      // tiene que ordenar exactamente igual: es el mismo operador buscando el
+      // mismo apellido en dos pantallas distintas.
       claves.sort((a, b) => {
-        const va = `${a.apellido || ''} ${a.nombre || ''}`;
-        const vb = `${b.apellido || ''} ${b.nombre || ''}`;
-        // sensitivity 'base' → ignora mayúsculas y acentos, que es como busca
-        // una persona. Desempate por id para que el orden sea estable.
-        const cmp = va.localeCompare(vb, 'es', { sensitivity: 'base' }) || (a.id - b.id);
+        const cmp = compararPorApellido(a, b);
         return dirOrden === 'asc' ? cmp : -cmp;
       });
 
@@ -425,6 +536,292 @@ async function adminListar(req, res) {
     });
   } catch (err) {
     console.error('Error en adminListar compras:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+/**
+ * ── Export CSV de compradores (ítem 42, S5) ──
+ *
+ * El operador lo pidió así: *"no tengo la posibilidad de bajar un Excel de toda
+ * la lista de compradores"*. Figura como P1 desde la auditoría del 4/4 y estaba
+ * anunciado en `docs/FAQS.md` como pendiente del Sprint 2: es lo que se venía
+ * debiendo, no una novedad.
+ *
+ * ⚠️ ENDPOINT DEDICADO, NO EL PAGINADO. `adminListar` devuelve 20 filas por
+ * página y topea en 200 cuando hay búsqueda. Un export que reusara eso bajaría
+ * un archivo que PARECE completo y no lo está — el peor resultado posible,
+ * porque nada en la planilla avisa que faltan filas. Es el mismo patrón que el
+ * proyecto ya usa para las agregaciones del dashboard.
+ *
+ * QUÉ FILAS TRAE. Las mismas que la pantalla, vía `construirFiltroCompras`:
+ * evento, estado, validación y búsqueda salen del mismo código, así que el CSV
+ * no puede divergir del listado. Encima de eso, UNA regla propia del export:
+ *
+ *   - por defecto trae **solo aprobadas** (`estados` ausente), porque a la
+ *     administración le sirve quién pagó, no quién abandonó el checkout;
+ *   - `estados=todas` trae todo, devoluciones y pendientes incluidas;
+ *   - y si el operador eligió un estado explícito en pantalla, ese GANA sobre
+ *     las dos reglas anteriores. Un filtro elegido a mano es una decisión; el
+ *     default solo llena el vacío cuando no hubo ninguna.
+ *
+ * EN QUÉ ORDEN. Siempre alfabético por apellido, con `compararPorApellido` —el
+ * mismo criterio de la pantalla y de la hoja de la cocina, escrito una sola vez
+ * en `utils/orden.js`—. No respeta el orden de la pantalla a propósito: una
+ * planilla se reordena con un clic en Excel, y salir siempre igual hace que dos
+ * descargas del mismo evento se puedan comparar renglón contra renglón.
+ *
+ * LA PLATA, DESGLOSADA. `totalPagado` incluye el menú, y la plata del menú es de
+ * Casa Metro, no del SAB (eje E3 del sprint). Un CSV que mostrara solo el total
+ * repetiría en la planilla de la administración el mismo error que S1a encontró
+ * en el backoffice: leer la recaudación de la sede como recaudación propia. Por
+ * eso van las tres columnas —menú, SAB y total— con la misma resta que usan los
+ * reportes (`recaudadoSab = total - menús`), y por eso el precio del menú sale
+ * de `menuUnitario`, congelado en la compra: leerlo del precio global de hoy
+ * daría números viejos mal.
+ *
+ * PII. El archivo lleva mail y teléfono de gente real (Ley 25.326) y termina en
+ * la carpeta de Descargas de quien lo baja. Por eso `eventoId` es obligatorio:
+ * sin él, este endpoint sería un volcado de la base entera en un clic, y nadie
+ * pidió eso. Si algún día hace falta el consolidado, se abre a propósito.
+ */
+
+/**
+ * Fecha y hora en horario de Argentina, para leer dentro de la planilla.
+ *
+ * El servidor corre en UTC (contenedor sin `tzdata`), así que una compra de las
+ * 22:30 del sábado se guarda como 01:30 del domingo. Escribir eso en una
+ * planilla de administración corre las compras de la noche al día siguiente.
+ *
+ * Se resuelve con la aritmética que el proyecto ya usa (`OFFSET_ART_HORAS` en
+ * `precios.service.js`: UTC−3 fijo, Argentina no tiene DST desde 2009) y NO con
+ * `Intl` + nombre de zona IANA, que depende de que el contenedor traiga la base
+ * de zonas horarias — algo que no se puede verificar desde acá y que fallaría en
+ * producción, en silencio y con la fecha corrida.
+ *
+ * @param {Date} fecha
+ * @returns {string} "DD/MM/AAAA HH:MM"
+ */
+function fechaHoraArgentina(fecha) {
+  if (!fecha) return '';
+  const d = new Date(fecha);
+  if (Number.isNaN(d.getTime())) return '';
+  const art = new Date(d.getTime() - OFFSET_ART_HORAS * 60 * 60 * 1000);
+  const dd = String(art.getUTCDate()).padStart(2, '0');
+  const mm = String(art.getUTCMonth() + 1).padStart(2, '0');
+  const aaaa = art.getUTCFullYear();
+  const hh = String(art.getUTCHours()).padStart(2, '0');
+  const mi = String(art.getUTCMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${aaaa} ${hh}:${mi}`;
+}
+
+/** Estados de MP en castellano, para que la planilla no diga "refunded". */
+const ESTADO_LEGIBLE = {
+  approved: 'Aprobada',
+  pending: 'Pendiente',
+  rejected: 'Rechazada',
+  cancelled: 'Cancelada',
+  refunded: 'Devuelta',
+  charged_back: 'Contracargo',
+};
+
+/** Tipos de entrada en castellano. `aporte` es "A la Gorra" de cara al público. */
+const TIPO_ENTRADA_LEGIBLE = {
+  base: 'Base',
+  aporte: 'A la Gorra',
+};
+
+/**
+ * Los mismos estados, en plural: el nombre del archivo habla del CONJUNTO de
+ * filas, no de una. `ESTADO_LEGIBLE` no sirve acá — "compradores-…-aprobada.csv"
+ * se lee como si el archivo tuviera una sola.
+ */
+const ALCANCE_ARCHIVO = {
+  approved: 'aprobadas',
+  pending: 'pendientes',
+  rejected: 'rechazadas',
+  cancelled: 'canceladas',
+  refunded: 'devueltas',
+};
+
+// Cómo se nombra el recorte en el pie de la planilla. El mapa de archivo
+// (ALCANCE_ARCHIVO) produce slugs para el nombre del .csv; acá hace falta algo
+// que una persona pueda leer dentro de la hoja.
+const ALCANCE_LEGIBLE = {
+  aprobadas: 'solo aprobadas',
+  pendientes: 'solo pendientes',
+  rechazadas: 'solo rechazadas',
+  canceladas: 'solo canceladas',
+  'todos-los-estados': 'todos los estados',
+};
+
+const COLUMNAS_EXPORT = [
+  // El apellido va primero y el ID al final: la planilla se abre muchas veces en
+  // un celular (viaja por WhatsApp), y ahí solo se ven las primeras columnas. El
+  // ID es lo que menos le dice a quien cruza contra el padrón de afiliados.
+  'Apellido',
+  'Nombre',
+  'Email',
+  'Teléfono',
+  'Entradas',
+  'Tipo de entrada',
+  'Menús',
+  'Precio unitario menú',
+  'Total menús (Casa Metro)',
+  'Total SAB',
+  'Total pagado',
+  'Estado',
+  'Entradas validadas',
+  'Fecha de compra',
+  'ID',
+];
+
+// ⚠️ SIN columna de códigos QR, a propósito (decisión del recorrido de la
+// sesión V, 20/8). Esta planilla existe para cruzar compradores contra el
+// padrón de afiliados, y para eso el código de la entrada no le sirve a nadie.
+// Lo que sí hacía era viajar: el archivo se manda por WhatsApp (operador →
+// coordinadora → tesorero) y los dos validadores aceptan códigos tipeados a
+// mano, así que cualquiera con la planilla podía marcar como usada una entrada
+// ajena. El dueño real llegaba a la puerta y la encontraba validada.
+// El dato sigue estando en el backoffice, que es donde tiene sentido.
+
+async function adminExportar(req, res) {
+  try {
+    const eventoId = parseInt(req.query.eventoId);
+    if (!eventoId) return res.status(400).json({ error: 'Se requiere eventoId' });
+
+    const evento = await prisma.evento.findUnique({
+      where: { id: eventoId },
+      select: { id: true, nombre: true, fecha: true },
+    });
+    if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    const { where, q } = construirFiltroCompras(req.query);
+    // Cinturón: `construirFiltroCompras` ya puso el eventoId, pero el export no
+    // puede permitirse que un cambio futuro allá lo deje sin filtrar y baje la
+    // base entera. Lo reafirma acá, donde está la regla de PII.
+    where.eventoId = eventoId;
+
+    // El default (solo aprobadas) se aplica únicamente si nadie decidió otra
+    // cosa: un `mpEstado` explícito o el filtro de validación ya escribieron
+    // `where.mpEstado`, y esa decisión manda sobre el default.
+    const incluirTodos = req.query.estados === 'todas';
+    if (!where.mpEstado && !incluirTodos) where.mpEstado = 'approved';
+
+    const compras = await prisma.compra.findMany({
+      where,
+      select: {
+        id: true, nombre: true, apellido: true, email: true, telefono: true,
+        cantidadEntradas: true, tipoEntrada: true,
+        cantidadMenus: true, menuUnitario: true, totalPagado: true,
+        mpEstado: true, createdAt: true,
+        // Sin `codigoQR`: la columna salió del CSV (ver COLUMNAS_EXPORT). Se
+        // traen solo los `validada` para el contador "2/3".
+        entradas: { select: { validada: true }, orderBy: { id: 'asc' } },
+      },
+    });
+
+    compras.sort(compararPorApellido);
+
+    const filas = compras.map((c) => {
+      const menus = c.cantidadMenus || 0;
+      const totalMenus = menus * (c.menuUnitario || 0);
+      const validadas = c.entradas.filter((e) => e.validada).length;
+      return [
+        c.apellido,
+        c.nombre,
+        c.email,
+        c.telefono,
+        c.cantidadEntradas,
+        TIPO_ENTRADA_LEGIBLE[c.tipoEntrada] || c.tipoEntrada,
+        menus,
+        c.menuUnitario || 0,
+        totalMenus,
+        (c.totalPagado || 0) - totalMenus,
+        c.totalPagado || 0,
+        ESTADO_LEGIBLE[c.mpEstado] || c.mpEstado,
+        `${validadas}/${c.entradas.length}`,
+        fechaHoraArgentina(c.createdAt),
+        c.id,
+      ];
+    });
+
+    // El nombre del archivo dice QUÉ trae. Sin eso, dos descargas del mismo
+    // evento con filtros distintos quedan en Descargas como "compradores.csv" y
+    // "compradores (1).csv", y no hay forma de saber cuál era cuál.
+    const alcance = where.mpEstado ? (ALCANCE_ARCHIVO[where.mpEstado] || slugArchivo(where.mpEstado)) : 'todos-los-estados';
+    const filtrado = (q || req.query.validacion) ? '-filtrado' : '';
+    const sello = fechaHoraArgentina(new Date()).replace(/[/ :]/g, '').slice(0, 12);
+    const nombreArchivo = `compradores-${slugArchivo(evento.nombre)}-${alcance}${filtrado}-${sello}.csv`;
+
+    // ── Pie de la planilla: totales + identificación ──────────────────────
+    //
+    // Va al FINAL y nunca arriba. La fila 1 tiene que seguir siendo la de
+    // encabezados: es lo que hace que el archivo abra en columnas de doble clic
+    // y que Sheets lo reconozca como tabla. Un título arriba rompe justamente lo
+    // único que hoy funciona perfecto.
+    //
+    // Sale del recorrido de la sesión V: el operador pidió identificación y
+    // totales, y aclaró en la misma frase que NO quería adornos ("me parece bien
+    // que sea sencillo"). Así que es una fila en blanco, una de totales y una de
+    // procedencia — nada más. Quien abre el archivo tiene que poder decir de
+    // quién es, de qué evento, qué recorte trae y cuánta plata suma, sin
+    // preguntarle a nadie.
+    const totalEntradas = filas.reduce((a, f) => a + (Number(f[4]) || 0), 0);
+    const totalMenusVendidos = filas.reduce((a, f) => a + (Number(f[6]) || 0), 0);
+    const sumaMenus = filas.reduce((a, f) => a + (Number(f[8]) || 0), 0);
+    const sumaSab = filas.reduce((a, f) => a + (Number(f[9]) || 0), 0);
+    const sumaPagado = filas.reduce((a, f) => a + (Number(f[10]) || 0), 0);
+
+    const filaTotales = new Array(COLUMNAS_EXPORT.length).fill('');
+    filaTotales[0] = `TOTALES (${filas.length} compra${filas.length === 1 ? '' : 's'})`;
+    filaTotales[4] = totalEntradas;
+    filaTotales[6] = totalMenusVendidos;
+    filaTotales[8] = sumaMenus;
+    filaTotales[9] = sumaSab;
+    filaTotales[10] = sumaPagado;
+
+    // La identificación va como pares etiqueta/valor, NO como una frase larga en
+    // una sola celda. El motivo es de planilla, no de estilo: un texto largo en
+    // la columna A ensancha la columna del apellido en cualquier visor que
+    // autoajuste, y desacomoda la tabla entera para leer un dato que se consulta
+    // una vez. Con la etiqueta corta en la primera columna y el valor en la de
+    // los emails —que ya es la más ancha del archivo— ninguna columna cambia de
+    // tamaño. (Hallazgo del recorrido, sesión V.)
+    const COL_ETIQUETA = 0;                          // 'Apellido'
+    const COL_VALOR = COLUMNAS_EXPORT.indexOf('Email');
+    const filaPie = (etiqueta, valor) => {
+      const f = new Array(COLUMNAS_EXPORT.length).fill('');
+      f[COL_ETIQUETA] = etiqueta;
+      f[COL_VALOR] = valor;
+      return f;
+    };
+
+    const vacia = () => new Array(COLUMNAS_EXPORT.length).fill('');
+    const filasConPie = [
+      ...filas,
+      vacia(),
+      filaTotales,
+      vacia(),
+      filaPie('Planilla', 'Sindicato Argentino de Boleros'),
+      filaPie('Evento', evento.nombre),
+      filaPie('Incluye', `${ALCANCE_LEGIBLE[alcance] || alcance}${filtrado ? ' · con filtros de pantalla' : ''}`),
+      filaPie('Generada', fechaHoraArgentina(new Date())),
+    ];
+
+    const csv = serializarCSV(COLUMNAS_EXPORT, filasConPie);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+    // Se lo damos también al navegador: `fetch` no ve `Content-Disposition` si
+    // no está expuesto, y el front necesita el nombre para nombrar la descarga.
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Filas-Export');
+    // Cuántas filas trae, para que el front lo pueda decir en pantalla sin
+    // tener que parsear el CSV que acaba de bajar.
+    res.setHeader('X-Filas-Export', String(filas.length));
+    return res.send(csv);
+  } catch (err) {
+    console.error('Error en adminExportar compras:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
@@ -588,4 +985,4 @@ async function adminDevolver(req, res) {
   }
 }
 
-module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminGetById, adminEliminar, adminEliminarPendientes, adminReenviarMail, adminDevolver };
+module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminExportar, adminGetById, adminEliminar, adminEliminarPendientes, adminReenviarMail, adminDevolver };
