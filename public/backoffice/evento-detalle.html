@@ -288,6 +288,7 @@
                     <p class="small mb-0 mt-2" id="menu-tope-hint" style="color:#888;">
                       Cuántos menús puede cocinar la sede. Dejalo <strong>vacío</strong> si no hay límite.
                       Al llegar al tope, el checkout deja de ofrecerlo.
+                      <br><strong>0 no es «sin límite»</strong>: es «no vender ninguno».
                     </p>
                   </div>
                   <p class="small mb-0" style="color:#666;">
@@ -658,14 +659,20 @@
 
         loadEvento(eventoId).then(() => {
           dirty = boWatchDirty('eventoForm');
-          // El hint acompaña el tipeo, marcado como "(sin guardar)" hasta que se
-          // guarde de verdad (ver pintarHintTope).
-          const inTope = document.getElementById('topeMenus');
-          if (inTope) inTope.addEventListener('input', () => pintarHintTope(inTope.value, true));
         });
         cargarTandas();
         cargarInvitaciones();
         initCupones(parseInt(eventoId, 10));
+      }
+
+      // El hint acompaña el tipeo, marcado como "(sin guardar)" hasta que se
+      // guarde de verdad (ver pintarHintTope). Va FUERA del `if (!isNuevo)`:
+      // antes solo se enganchaba al editar, así que al crear un evento el campo
+      // del tope no respondía a nada — ni siquiera al 0.
+      const inTope = document.getElementById('topeMenus');
+      if (inTope) {
+        inTope.addEventListener('input', () => pintarHintTope(inTope.value, !isNuevo));
+        if (isNuevo) pintarHintTope('');
       }
 
       document.getElementById('eventoForm').addEventListener('submit', saveEvento);
@@ -1060,26 +1067,69 @@
      * misma sesión vino a arreglar —la pantalla afirmando un estado que no es el
      * del sistema—, solo que del otro lado. Acompaña, y declara qué está viendo.
      */
+    // El hint del tope tiene que hablar SIEMPRE, y sobre todo en el momento en
+    // que el operador carga el tope por primera vez: es cuando más fácil es
+    // confundir "0" con "sin límite", y es el único camino que va a recorrer
+    // quien active el menú por primera vez.
+    //
+    // Antes salía de largo si `menuOcupados` era null — o sea, en TODO evento sin
+    // tope cargado — así que tipear un 0 no producía ninguna respuesta en
+    // pantalla justo donde hacía falta. El "0" es el único valor del formulario
+    // que se puede tipear queriendo decir exactamente lo contrario de lo que
+    // hace, así que no alcanza con no impedirlo: hay que nombrarlo.
     function pintarHintTope(tope, provisional = false) {
       const topeHint = document.getElementById('menu-tope-hint');
-      if (!topeHint || menuOcupados === null) return;
-      const t = Number(tope);
-      if (!Number.isInteger(t) || t < 0) {
-        topeHint.innerHTML = `Tomados hoy: <strong>${menuOcupados}</strong> `
-          + '<span style="color:#aaa;">(compras pagas + pendientes de pago)</span>.'
-          + '<br>Dejá el campo vacío si no hay límite.';
+      if (!topeHint) return;
+
+      const gris = (t) => `<span style="color:#aaa;">${t}</span>`;
+      const aviso = (t) => '<span style="color:#e0a800;">'
+        + `<i class="bi bi-exclamation-triangle me-1"></i>${t}</span>`;
+      const marca = provisional ? ' <span style="color:#e0a800;">(sin guardar)</span>' : '';
+      // "Tomados hoy" solo se puede afirmar si el backend mandó el cupo vivo.
+      // Sin ese dato el hint sigue hablando, pero del tope y no del consumo:
+      // afirmar un consumo que no se midió es el patrón que ya nos costó dos 🔴.
+      const tomados = menuOcupados === null
+        ? ''
+        : `Tomados hoy: <strong>${menuOcupados}</strong>`
+          + gris(' (compras pagas + pendientes de pago)') + '. ';
+
+      const crudo = String(tope === null || tope === undefined ? '' : tope).trim();
+      const t = Number(crudo);
+
+      // Vacío = sin tope. Es el default y se dice, no se deja implícito.
+      if (crudo === '' || !Number.isInteger(t) || t < 0) {
+        topeHint.innerHTML = tomados
+          + `<strong>Sin tope</strong>${marca}: se venden menús mientras haya entradas.`
+          + '<br>' + gris('Poné un número si la cocina tiene un límite. '
+            + 'Ojo: <strong>0 no es «sin límite»</strong>, es «no vender ninguno».');
         return;
       }
+
+      // 0 es un valor válido y significa lo contrario que vacío.
+      if (t === 0) {
+        topeHint.innerHTML = tomados
+          + aviso(`<strong>0 = no se vende ningún menú</strong>${marca} en esta fecha.`)
+          + '<br>' + gris('Si querías decir <strong>sin límite</strong>, '
+            + 'dejá el campo <strong>vacío</strong>.');
+        return;
+      }
+
+      // Tope cargado pero sin cupo vivo del backend (evento nuevo, o todavía sin
+      // guardar): se describe el tope sin inventar cuántos se tomaron.
+      if (menuOcupados === null) {
+        topeHint.innerHTML = `Tope: <strong>${t}</strong> menús${marca}. `
+          + gris('Al llegar al tope, el checkout deja de ofrecerlo.')
+          + '<br>' + gris('Dejá el campo vacío si no hay límite.');
+        return;
+      }
+
       const restantes = Math.max(0, t - menuOcupados);
       const estado = restantes === 0
-        ? '<span style="color:#e0a800;"><i class="bi bi-exclamation-triangle me-1"></i><strong>Menús agotados</strong> — el checkout ya no los ofrece.</span>'
+        ? aviso('<strong>Menús agotados</strong> — el checkout ya no los ofrece.')
         : `Quedan <strong>${restantes}</strong> por vender.`;
-      const marca = provisional
-        ? ' <span style="color:#e0a800;">(sin guardar)</span>'
-        : '';
-      topeHint.innerHTML = `Tomados hoy: <strong>${menuOcupados}</strong> de ${t}${marca} `
-        + '<span style="color:#aaa;">(compras pagas + pendientes de pago)</span>. ' + estado
-        + '<br>Dejá el campo vacío si no hay límite.';
+      topeHint.innerHTML = `Tomados hoy: <strong>${menuOcupados}</strong> de ${t}${marca}`
+        + gris(' (compras pagas + pendientes de pago)') + '. ' + estado
+        + '<br>' + gris('Dejá el campo vacío si no hay límite.');
     }
 
     function fillForm(ev) {
@@ -1107,10 +1157,13 @@
         // Los ocupados no dependen del tope: son las compras vivas. Se guardan
         // para poder recalcular el hint mientras se tipea, sin ir al servidor.
         menuOcupados = ev.topeMenus - ev.menusRestantes;
-        pintarHintTope(ev.topeMenus);
       } else {
         menuOcupados = null;
       }
+      // Se pinta SIEMPRE, tenga tope o no: el evento sin tope es justamente el
+      // que el operador está por configurar, y el hint es lo único que le dice
+      // qué significa lo que va a tipear.
+      pintarHintTope(ev.topeMenus);
 
       if (ev.esExterno) {
         document.getElementById('link-externo-wrap').style.display = 'block';
