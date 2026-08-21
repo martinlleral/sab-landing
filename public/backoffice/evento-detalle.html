@@ -324,6 +324,11 @@
                   <button type="submit" class="btn-bo-primary w-100 mb-2" id="btn-guardar">
                     <i class="bi bi-floppy me-1"></i> Guardar Evento
                   </button>
+                  <!-- Ver la nota gemela en home-cms.html: el aviso va pegado al
+                       botón, que es donde mira quien está por guardar. -->
+                  <div id="dirty-hint" style="display:none; color:#e0a800; font-size:0.85rem;" class="mb-2 text-center">
+                    <i class="bi bi-exclamation-circle me-1"></i>Tenés cambios sin guardar
+                  </div>
                   <a href="/backoffice/eventos-lista.html" class="btn-bo-secondary w-100 mb-2">
                     <i class="bi bi-arrow-left me-1"></i> Volver a lista
                   </a>
@@ -626,6 +631,10 @@
     const modo = params.get('modo');
     const isNuevo = modo === 'nuevo' || !eventoId;
 
+    // Ver la nota gemela en home-cms.html: el watcher arranca después de que el
+    // formulario quedó poblado, si no `fillForm` lo ensucia solo.
+    let dirty = { limpiar: () => {} };
+
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('page-title').textContent = isNuevo ? 'Nuevo Evento' : 'Editar Evento';
       cargarSedeDefault();
@@ -647,7 +656,7 @@
         document.getElementById('precioEntrada').required = false;
         document.getElementById('cantidadDisponible').required = false;
 
-        loadEvento(eventoId);
+        loadEvento(eventoId).then(() => { dirty = boWatchDirty('eventoForm'); });
         cargarTandas();
         cargarInvitaciones();
         initCupones(parseInt(eventoId, 10));
@@ -1163,11 +1172,21 @@
         if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
         boAlert('✅ Evento guardado correctamente', 'success');
+        dirty.limpiar();
 
         if (isNuevo && data.id) {
           setTimeout(() => {
             window.location.href = `/backoffice/evento-detalle.html?id=${data.id}`;
           }, 1200);
+        } else {
+          // Releer del servidor después de guardar. Sin esto, la ayuda del tope
+          // sigue mostrando el número VIEJO ("Tomados hoy: 8 de 12" con el tope
+          // ya en 14): la pantalla no se queda callada, afirma un dato que dejó
+          // de ser cierto, y el operador concluye que no se guardó. El número
+          // que después le pasa a la cocina sale de esa lectura.
+          // `menusRestantes` lo recalcula el backend (adjuntarEstadoMenu), así
+          // que el cupo también queda al día si alguien compró mientras tanto.
+          await loadEvento(eventoId);
         }
       } catch (err) {
         boAlert('Error: ' + err.message);

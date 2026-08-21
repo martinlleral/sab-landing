@@ -138,7 +138,14 @@ function renderMenusResumen(data) {
     const cant = data.menus?.cantidad || 0;
     menusDesc.textContent = `${cant} menú${cant === 1 ? '' : 's'} · a pagarle a la sede, no es recaudación del SAB`;
   }
-  if (desc) desc.textContent = `Cobrado por MP, incluye el menú. Del SAB: ${fmtPesos(data.recaudado.sab)}`;
+  // El número del SAB va destacado dentro de la descripción, no en texto
+  // corrido: es el que el tesorero necesita para cerrar caja, y salía en el
+  // mismo gris que el resto. Ojo con el diagnóstico —que el KPI GRANDE siga
+  // siendo el cobrado por MP es deliberado y correcto (es el que concilia
+  // contra el reporte de MP)—; lo que nunca se decidió fue que el neto
+  // quedara sin ninguna jerarquía. Es innerHTML con números ya formateados
+  // por el propio código, no con dato de usuario.
+  if (desc) desc.innerHTML = `Cobrado por MP, incluye el menú. <strong style="color:#cbd5e0;">Del SAB: ${fmtPesos(data.recaudado.sab)}</strong>`;
 }
 
 // ============================================
@@ -589,13 +596,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   await cargarSelectorEventos();
 
   // 2. Wire-up de filtros
-  document.getElementById('btn-aplicar-filtros').addEventListener('click', () => {
+  // Toma los tres controles tal como están en pantalla y recarga TODO con eso.
+  // Es la única forma de que lo que se ve en los filtros y lo que muestran los
+  // números sea siempre lo mismo (ver el comentario del listener del select).
+  function aplicarFiltrosDesdeDOM() {
     state.eventoId = document.getElementById('filtro-evento').value || null;
     state.desde = document.getElementById('filtro-desde').value || '';
     state.hasta = document.getElementById('filtro-hasta').value || '';
     actualizarBtnLinkReporte();
     recargarTodo();
-  });
+  }
+
+  document.getElementById('btn-aplicar-filtros').addEventListener('click', aplicarFiltrosDesdeDOM);
 
   document.getElementById('btn-limpiar-filtros').addEventListener('click', () => {
     document.getElementById('filtro-evento').value = '';
@@ -618,13 +630,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // Cambio en evento del filtro → recargar drill-down sin esperar el botón Aplicar
-  // (es la interacción más natural: elegir evento y ver tandas/cadencia/QR).
-  document.getElementById('filtro-evento').addEventListener('change', (e) => {
-    state.eventoId = e.target.value || null;
-    actualizarBtnLinkReporte();
-    cargarPorEvento();
-  });
+  // Cambio en evento del filtro → recargar TODO, no solo el drill-down.
+  //
+  // Antes esto llamaba únicamente a `cargarPorEvento()`, con la buena intención
+  // de que elegir un evento mostrara sus tandas sin apretar Aplicar. El efecto
+  // no visto: la pantalla quedaba MITAD Y MITAD —drill-down del evento nuevo,
+  // KPIs de recaudación del filtro anterior— y el selector, que es el rótulo de
+  // qué se está mirando, ya decía el evento nuevo. O sea, los números de un
+  // evento bajo el nombre de otro, en la pantalla de la que sale la caja del
+  // tesorero y lo que se le paga a la sede.
+  //
+  // Recargar todo cuesta unos requests más y elimina la divergencia de raíz, en
+  // vez de avisarla. De paso saca el paso extra que el operador ya había
+  // señalado como incómodo: elegir el evento ES aplicar el filtro.
+  document.getElementById('filtro-evento').addEventListener('change', aplicarFiltrosDesdeDOM);
 
   // 3. Carga inicial: todo en paralelo + comunidad (lleva un round-trip a Supabase)
   recargarTodo();

@@ -382,10 +382,19 @@
         document.getElementById('stat-menus-desc').textContent =
           `${boPrecio(menusTotal)} para la sede, no del SAB`
           + (menusPend > 0 ? ` · ${menusPend} más en compras pendientes` : '');
+        // El número del SAB va destacado dentro de la descripción, no en texto
+        // corrido: es el que el tesorero necesita para cerrar caja, y salía en el
+        // mismo gris que el resto. Ojo con el diagnóstico —que el KPI GRANDE siga
+        // siendo el cobrado por MP es deliberado y correcto (es el que concilia
+        // contra el reporte de MP)—; lo que nunca se decidió fue que el neto
+        // quedara sin ninguna jerarquía. Es innerHTML con números ya formateados
+        // por el propio código, no con dato de usuario.
         if (recDesc) {
-          recDesc.textContent = menusTotal > 0
-            ? `Incluye ${boPrecio(menusTotal)} de menú. Del SAB: ${boPrecio(stats.recaudadoSab ?? stats.recaudado)}`
-            : 'Solo compras aprobadas con pago real';
+          if (menusTotal > 0) {
+            recDesc.innerHTML = `Incluye ${boPrecio(menusTotal)} de menú. <strong style="color:#cbd5e0;">Del SAB: ${boPrecio(stats.recaudadoSab ?? stats.recaudado)}</strong>`;
+          } else {
+            recDesc.textContent = 'Solo compras aprobadas con pago real';
+          }
         }
       } else {
         if (menusCard) menusCard.style.display = 'none';
@@ -523,17 +532,33 @@
     let filasEnPantalla = null;
 
     function pintarAlcanceExport(total) {
-      if (total !== undefined) filasEnPantalla = total;
+      // `typeof === 'number'` y no `!== undefined`: esta función está registrada
+      // como listener directo de cuatro controles, así que el navegador la llama
+      // con el objeto `Event` como primer argumento. Con la guarda floja,
+      // `filasEnPantalla` quedaba valiendo un Event —truthy— y el `=== 0` de
+      // abajo daba false: el botón de descarga se volvía a encender con la tabla
+      // vacía, justo lo que esa guarda existe para evitar.
+      if (typeof total === 'number') filasEnPantalla = total;
       const { filtro, validacion, q, todos } = paramsExport();
       const ETIQUETAS = { approved: 'aprobadas', pending: 'pendientes', rejected: 'rechazadas', cancelled: 'canceladas' };
       const chk = document.getElementById('export-todos-estados');
       // Con un estado elegido a mano, el switch no cambia nada: el filtro de
       // pantalla manda. Se apaga y se aclara, en vez de mentir prendido.
-      chk.disabled = !!filtro;
-      chk.parentElement.style.opacity = filtro ? '0.45' : '1';
+      //
+      // El filtro de VALIDACIÓN hace lo mismo aunque no lo parezca: filtrar por
+      // "validadas" / "falta validar" solo tiene sentido sobre compras aprobadas
+      // (son las únicas con QR), así que `construirFiltroCompras` fuerza
+      // mpEstado='approved' y el backend ignora `estados=todas` en silencio. Sin
+      // contemplarlo acá, el cartel decía "todas, devoluciones incluidas"
+      // mientras bajaba solo aprobadas: el operador se llevaba un archivo con
+      // menos filas de las que el propio cartel le prometía.
+      const fuerzaAprobadas = !!filtro || !!validacion;
+      chk.disabled = fuerzaAprobadas;
+      chk.parentElement.style.opacity = fuerzaAprobadas ? '0.45' : '1';
 
       let alcance;
       if (filtro) alcance = ETIQUETAS[filtro] || filtro;
+      else if (validacion) alcance = 'solo aprobadas';
       else if (todos) alcance = 'todas, devoluciones incluidas';
       else alcance = 'solo aprobadas';
 

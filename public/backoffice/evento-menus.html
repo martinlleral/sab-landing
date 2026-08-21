@@ -316,7 +316,14 @@
         <div id="bo-alert" class="bo-alert"></div>
 
         <!-- Barra de acciones: no se imprime -->
-        <div class="no-print d-flex gap-2 align-items-center flex-wrap mb-3" id="barra-acciones" style="display:none;">
+        <!-- Sin `d-flex` en el HTML a propósito: Bootstrap la declara con
+             !important y le gana al `display:none` inline, así que la barra se
+             veía desde antes de cargar y también cuando la carga falla —con el
+             botón "Imprimir" ofreciendo imprimir una hoja que no existe—. La
+             clase se agrega por JS recién cuando hay datos (ver `d-none` abajo).
+             Es el patrón ya documentado en el proyecto: con Bootstrap se togglea
+             por classList, nunca mutando style.display. -->
+        <div class="no-print d-none gap-2 align-items-center flex-wrap mb-3" id="barra-acciones">
           <a id="btn-volver" href="/backoffice/eventos-lista.html" class="btn-bo-secondary">
             <i class="bi bi-arrow-left me-1"></i> Volver a las compras
           </a>
@@ -417,7 +424,11 @@
         const data = await boFetch(`/api/admin/eventos/${eventoId}/menus`);
         traidoEn = new Date();
         render(data);
-        document.getElementById('barra-acciones').style.display = 'flex';
+        // classList y no style.display: `.d-flex` de Bootstrap es !important y
+        // el inline no le gana (ni para mostrar ni para ocultar).
+        const barra = document.getElementById('barra-acciones');
+        barra.classList.remove('d-none');
+        barra.classList.add('d-flex');
         document.getElementById('hoja').style.display = 'block';
         document.getElementById('ayuda-hoja').style.display = 'block';
         chequearAntiguedad();

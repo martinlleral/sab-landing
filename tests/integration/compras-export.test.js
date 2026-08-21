@@ -306,10 +306,17 @@ async function main() {
     // ────────────────────────────────────────────────────────────────
     // 5) Columnas restantes con dato real
     // ────────────────────────────────────────────────────────────────
+    // Candado de la decisión del recorrido (sesión V, 20/8): la planilla NO
+    // lleva los códigos de las entradas. Va como check y no como comentario
+    // porque el dato es fácil de "devolver" sin querer: el include de Prisma
+    // sigue trayendo las entradas para el contador "1/2", así que agregar la
+    // columna de vuelta es una línea. Si alguien la agrega, esto se pone rojo.
+    const cabecerasQR = Object.keys(COL).filter((c) => /qr|código|codigo/i.test(c));
     checks.push({
-      name: 'Los códigos QR de una compra van en una celda, separados por espacio',
-      pass: !!filaMenu && filaMenu[COL['Códigos QR']].split(' ').length === 2,
-      detail: `qr=${JSON.stringify(filaMenu && filaMenu[COL['Códigos QR']])}`,
+      name: 'La planilla NO expone los códigos QR de las entradas (viaja por WhatsApp)',
+      pass: cabecerasQR.length === 0
+        && !cuerpo1.some((f) => f.some((celda) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(celda)))),
+      detail: `cabeceras sospechosas=${JSON.stringify(cabecerasQR)}`,
     });
     checks.push({
       name: 'Entradas validadas se lee "1/2" (la compra con menú tiene 1 de 2 validadas)',

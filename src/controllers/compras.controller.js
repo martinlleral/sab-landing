@@ -660,8 +660,16 @@ const COLUMNAS_EXPORT = [
   'Estado',
   'Entradas validadas',
   'Fecha de compra',
-  'Códigos QR',
 ];
+
+// ⚠️ SIN columna de códigos QR, a propósito (decisión del recorrido de la
+// sesión V, 20/8). Esta planilla existe para cruzar compradores contra el
+// padrón de afiliados, y para eso el código de la entrada no le sirve a nadie.
+// Lo que sí hacía era viajar: el archivo se manda por WhatsApp (operador →
+// coordinadora → tesorero) y los dos validadores aceptan códigos tipeados a
+// mano, así que cualquiera con la planilla podía marcar como usada una entrada
+// ajena. El dueño real llegaba a la puerta y la encontraba validada.
+// El dato sigue estando en el backoffice, que es donde tiene sentido.
 
 async function adminExportar(req, res) {
   try {
@@ -693,7 +701,9 @@ async function adminExportar(req, res) {
         cantidadEntradas: true, tipoEntrada: true,
         cantidadMenus: true, menuUnitario: true, totalPagado: true,
         mpEstado: true, createdAt: true,
-        entradas: { select: { codigoQR: true, validada: true }, orderBy: { id: 'asc' } },
+        // Sin `codigoQR`: la columna salió del CSV (ver COLUMNAS_EXPORT). Se
+        // traen solo los `validada` para el contador "2/3".
+        entradas: { select: { validada: true }, orderBy: { id: 'asc' } },
       },
     });
 
@@ -719,10 +729,6 @@ async function adminExportar(req, res) {
         ESTADO_LEGIBLE[c.mpEstado] || c.mpEstado,
         `${validadas}/${c.entradas.length}`,
         fechaHoraArgentina(c.createdAt),
-        // Espacio como separador: los códigos son UUID (sin espacios), así que
-        // la celda se puede volver a partir si hace falta, y ningún separador
-        // de planilla se confunde.
-        c.entradas.map((e) => e.codigoQR).join(' '),
       ];
     });
 
