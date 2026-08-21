@@ -644,8 +644,21 @@ const ALCANCE_ARCHIVO = {
   refunded: 'devueltas',
 };
 
+// Cómo se nombra el recorte en el pie de la planilla. El mapa de archivo
+// (ALCANCE_ARCHIVO) produce slugs para el nombre del .csv; acá hace falta algo
+// que una persona pueda leer dentro de la hoja.
+const ALCANCE_LEGIBLE = {
+  aprobadas: 'solo compras aprobadas',
+  pendientes: 'solo compras pendientes',
+  rechazadas: 'solo compras rechazadas',
+  canceladas: 'solo compras canceladas',
+  'todos-los-estados': 'todos los estados, devoluciones incluidas',
+};
+
 const COLUMNAS_EXPORT = [
-  'ID',
+  // El apellido va primero y el ID al final: la planilla se abre muchas veces en
+  // un celular (viaja por WhatsApp), y ahí solo se ven las primeras columnas. El
+  // ID es lo que menos le dice a quien cruza contra el padrón de afiliados.
   'Apellido',
   'Nombre',
   'Email',
@@ -660,6 +673,7 @@ const COLUMNAS_EXPORT = [
   'Estado',
   'Entradas validadas',
   'Fecha de compra',
+  'ID',
 ];
 
 // ⚠️ SIN columna de códigos QR, a propósito (decisión del recorrido de la
@@ -714,7 +728,6 @@ async function adminExportar(req, res) {
       const totalMenus = menus * (c.menuUnitario || 0);
       const validadas = c.entradas.filter((e) => e.validada).length;
       return [
-        c.id,
         c.apellido,
         c.nombre,
         c.email,
@@ -729,6 +742,7 @@ async function adminExportar(req, res) {
         ESTADO_LEGIBLE[c.mpEstado] || c.mpEstado,
         `${validadas}/${c.entradas.length}`,
         fechaHoraArgentina(c.createdAt),
+        c.id,
       ];
     });
 
@@ -740,7 +754,40 @@ async function adminExportar(req, res) {
     const sello = fechaHoraArgentina(new Date()).replace(/[/ :]/g, '').slice(0, 12);
     const nombreArchivo = `compradores-${slugArchivo(evento.nombre)}-${alcance}${filtrado}-${sello}.csv`;
 
-    const csv = serializarCSV(COLUMNAS_EXPORT, filas);
+    // ── Pie de la planilla: totales + identificación ──────────────────────
+    //
+    // Va al FINAL y nunca arriba. La fila 1 tiene que seguir siendo la de
+    // encabezados: es lo que hace que el archivo abra en columnas de doble clic
+    // y que Sheets lo reconozca como tabla. Un título arriba rompe justamente lo
+    // único que hoy funciona perfecto.
+    //
+    // Sale del recorrido de la sesión V: el operador pidió identificación y
+    // totales, y aclaró en la misma frase que NO quería adornos ("me parece bien
+    // que sea sencillo"). Así que es una fila en blanco, una de totales y una de
+    // procedencia — nada más. Quien abre el archivo tiene que poder decir de
+    // quién es, de qué evento, qué recorte trae y cuánta plata suma, sin
+    // preguntarle a nadie.
+    const totalEntradas = filas.reduce((a, f) => a + (Number(f[4]) || 0), 0);
+    const totalMenusVendidos = filas.reduce((a, f) => a + (Number(f[6]) || 0), 0);
+    const sumaMenus = filas.reduce((a, f) => a + (Number(f[8]) || 0), 0);
+    const sumaSab = filas.reduce((a, f) => a + (Number(f[9]) || 0), 0);
+    const sumaPagado = filas.reduce((a, f) => a + (Number(f[10]) || 0), 0);
+
+    const filaTotales = new Array(COLUMNAS_EXPORT.length).fill('');
+    filaTotales[0] = `TOTALES (${filas.length} compra${filas.length === 1 ? '' : 's'})`;
+    filaTotales[4] = totalEntradas;
+    filaTotales[6] = totalMenusVendidos;
+    filaTotales[8] = sumaMenus;
+    filaTotales[9] = sumaSab;
+    filaTotales[10] = sumaPagado;
+
+    const filaOrigen = new Array(COLUMNAS_EXPORT.length).fill('');
+    filaOrigen[0] = `Sindicato Argentino de Boleros · ${evento.nombre} · ${ALCANCE_LEGIBLE[alcance] || alcance}`
+      + `${filtrado ? ' · con filtros de pantalla' : ''} · generada el ${fechaHoraArgentina(new Date())}`;
+
+    const filasConPie = [...filas, new Array(COLUMNAS_EXPORT.length).fill(''), filaTotales, filaOrigen];
+
+    const csv = serializarCSV(COLUMNAS_EXPORT, filasConPie);
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);

@@ -455,9 +455,12 @@
       }
     }
 
-    // Formato explícito en hora de Argentina: quien imprime puede tener el
-    // navegador en otro huso, y la hoja afirma una hora local. Es el mismo
-    // cuidado que S3 le puso al campo de la hora de corte en el CMS.
+    // Se fuerza el huso de Argentina al FORMATEAR (quien imprime puede tener el
+    // navegador en otro huso), pero la hoja NO lo aclara: es una precaución de
+    // quien construye el sistema, no información para la cocina. Que el dato sea
+    // correcto es trabajo nuestro; agregarle esa aclaración al papel es ruido en
+    // una hoja que se lee de parado y con gente esperando (hallazgo ⚪ del
+    // recorrido de la sesión V).
     const TZ = 'America/Argentina/Buenos_Aires';
     const fmtHora = (iso) => new Date(iso).toLocaleTimeString('es-AR', {
       timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false,
@@ -496,7 +499,7 @@
           : ` La venta de menús cierra a las ${data.corte.hora} del día del evento: <strong>todavía puede crecer</strong>.`;
       }
       document.getElementById('hoja-emision').innerHTML =
-        `Hoja emitida el <strong>${esc(emision)}</strong> (hora de Argentina).${leyendaCorte}`;
+        `Hoja emitida el <strong>${esc(emision)}</strong>.${leyendaCorte}`;
       document.getElementById('hoja-id-txt').textContent =
         `${ev.nombre} · ${fmtFechaEvento(ev.fecha)} · hoja emitida ${emision} h`;
 

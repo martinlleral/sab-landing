@@ -656,7 +656,13 @@
         document.getElementById('precioEntrada').required = false;
         document.getElementById('cantidadDisponible').required = false;
 
-        loadEvento(eventoId).then(() => { dirty = boWatchDirty('eventoForm'); });
+        loadEvento(eventoId).then(() => {
+          dirty = boWatchDirty('eventoForm');
+          // El hint acompaña el tipeo, marcado como "(sin guardar)" hasta que se
+          // guarde de verdad (ver pintarHintTope).
+          const inTope = document.getElementById('topeMenus');
+          if (inTope) inTope.addEventListener('input', () => pintarHintTope(inTope.value, true));
+        });
         cargarTandas();
         cargarInvitaciones();
         initCupones(parseInt(eventoId, 10));
@@ -1041,6 +1047,41 @@
       }
     }
 
+    // Menús ya tomados (pagas + pendientes). Lo fija el servidor al cargar; el
+    // tope se puede tipear, los ocupados no.
+    let menuOcupados = null;
+
+    /**
+     * Pinta la ayuda del tope de menús.
+     *
+     * `provisional` es la parte importante: mientras se tipea, el número nuevo
+     * TODAVÍA NO ESTÁ GUARDADO, y la pantalla tiene que decirlo. Acompañar el
+     * tipeo mostrando "8 de 14" a secas sería volver a caer en lo mismo que esta
+     * misma sesión vino a arreglar —la pantalla afirmando un estado que no es el
+     * del sistema—, solo que del otro lado. Acompaña, y declara qué está viendo.
+     */
+    function pintarHintTope(tope, provisional = false) {
+      const topeHint = document.getElementById('menu-tope-hint');
+      if (!topeHint || menuOcupados === null) return;
+      const t = Number(tope);
+      if (!Number.isInteger(t) || t < 0) {
+        topeHint.innerHTML = `Tomados hoy: <strong>${menuOcupados}</strong> `
+          + '<span style="color:#aaa;">(compras pagas + pendientes de pago)</span>.'
+          + '<br>Dejá el campo vacío si no hay límite.';
+        return;
+      }
+      const restantes = Math.max(0, t - menuOcupados);
+      const estado = restantes === 0
+        ? '<span style="color:#e0a800;"><i class="bi bi-exclamation-triangle me-1"></i><strong>Menús agotados</strong> — el checkout ya no los ofrece.</span>'
+        : `Quedan <strong>${restantes}</strong> por vender.`;
+      const marca = provisional
+        ? ' <span style="color:#e0a800;">(sin guardar)</span>'
+        : '';
+      topeHint.innerHTML = `Tomados hoy: <strong>${menuOcupados}</strong> de ${t}${marca} `
+        + '<span style="color:#aaa;">(compras pagas + pendientes de pago)</span>. ' + estado
+        + '<br>Dejá el campo vacío si no hay límite.';
+    }
+
     function fillForm(ev) {
       document.getElementById('nombre').value = ev.nombre || '';
       document.getElementById('descripcion').value = ev.descripcion || '';
@@ -1062,15 +1103,13 @@
       // Cupo vivo. `menusRestantes` viene calculado por el backend con la misma
       // definición que usa la reserva (aprobadas + pendientes), así que el número
       // que ve el operador es el mismo que aplica el checkout.
-      const topeHint = document.getElementById('menu-tope-hint');
-      if (topeHint && ev.topeMenus !== null && ev.topeMenus !== undefined && ev.menusRestantes !== null) {
-        const ocupados = ev.topeMenus - ev.menusRestantes;
-        const estado = ev.menusRestantes === 0
-          ? '<span style="color:#e0a800;"><i class="bi bi-exclamation-triangle me-1"></i><strong>Menús agotados</strong> — el checkout ya no los ofrece.</span>'
-          : `Quedan <strong>${ev.menusRestantes}</strong> por vender.`;
-        topeHint.innerHTML = `Tomados hoy: <strong>${ocupados}</strong> de ${ev.topeMenus} `
-          + '<span style="color:#aaa;">(compras pagas + pendientes de pago)</span>. ' + estado
-          + '<br>Dejá el campo vacío si no hay límite.';
+      if (ev.topeMenus !== null && ev.topeMenus !== undefined && ev.menusRestantes !== null) {
+        // Los ocupados no dependen del tope: son las compras vivas. Se guardan
+        // para poder recalcular el hint mientras se tipea, sin ir al servidor.
+        menuOcupados = ev.topeMenus - ev.menusRestantes;
+        pintarHintTope(ev.topeMenus);
+      } else {
+        menuOcupados = null;
       }
 
       if (ev.esExterno) {

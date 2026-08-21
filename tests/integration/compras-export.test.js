@@ -204,7 +204,19 @@ async function main() {
     const r1 = await call(controller.adminExportar, { eventoId: evento.id });
     const csv1 = parsearCSV(r1.body || '');
     (csv1[0] || []).forEach((h, i) => { COL[h] = i; });
-    const cuerpo1 = csv1.slice(1);
+    // El CSV termina con un pie de 3 filas (vacía + TOTALES + procedencia), que
+    // NO son compras. Todo lo que mide compras tiene que descontarlo, y el pie
+    // se verifica aparte más abajo.
+    const sinPie = (filas) => {
+      const i = filas.findIndex((f) => String(f[0] || '').startsWith('TOTALES'));
+      return i === -1 ? filas : filas.slice(0, Math.max(0, i - 1));
+    };
+    const pieDe = (filas) => {
+      const i = filas.findIndex((f) => String(f[0] || '').startsWith('TOTALES'));
+      return i === -1 ? { totales: null, origen: null } : { totales: filas[i], origen: filas[i + 1] || null };
+    };
+
+    const cuerpo1 = sinPie(csv1.slice(1));
 
     // 22 de relleno + conMenu + hostil + nocturna = 25 aprobadas. Las 3 no aprobadas, fuera.
     checks.push({
@@ -318,6 +330,29 @@ async function main() {
         && !cuerpo1.some((f) => f.some((celda) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(celda)))),
       detail: `cabeceras sospechosas=${JSON.stringify(cabecerasQR)}`,
     });
+    // ── El pie de la planilla (hallazgos 🟡 del recorrido de la sesión V) ──
+    const pie1 = pieDe(csv1.slice(1));
+    const sumaCol = (idx) => cuerpo1.reduce((a, f) => a + (Number(f[idx]) || 0), 0);
+    checks.push({
+      name: 'La planilla cierra con una fila TOTALES y sus sumas cuadran con el cuerpo',
+      pass: !!pie1.totales
+        && Number(pie1.totales[COL['Total pagado']]) === sumaCol(COL['Total pagado'])
+        && Number(pie1.totales[COL['Total SAB']]) === sumaCol(COL['Total SAB'])
+        && Number(pie1.totales[COL['Total menús (Casa Metro)']]) === sumaCol(COL['Total menús (Casa Metro)'])
+        && Number(pie1.totales[COL['Entradas']]) === sumaCol(COL['Entradas']),
+      detail: pie1.totales ? `totales=${JSON.stringify([pie1.totales[COL['Entradas']], pie1.totales[COL['Total pagado']]])}` : 'sin fila TOTALES',
+    });
+    checks.push({
+      name: 'La planilla dice de quién es, de qué evento y qué recorte trae',
+      pass: !!pie1.origen && /Sindicato Argentino de Boleros/.test(pie1.origen[0]) && /aprobadas|estados/.test(pie1.origen[0]),
+      detail: pie1.origen ? String(pie1.origen[0]).slice(0, 90) : 'sin fila de procedencia',
+    });
+    checks.push({
+      name: 'El encabezado sigue siendo la PRIMERA fila (abre en columnas de doble clic)',
+      pass: csv1[0][0] === 'Apellido' && csv1[0][csv1[0].length - 1] === 'ID',
+      detail: `primera=${csv1[0][0]} última=${csv1[0][csv1[0].length - 1]}`,
+    });
+
     checks.push({
       name: 'Entradas validadas se lee "1/2" (la compra con menú tiene 1 de 2 validadas)',
       pass: !!filaMenu && filaMenu[COL['Entradas validadas']] === '1/2',
@@ -345,7 +380,7 @@ async function main() {
     // 6) El toggle de estados
     // ────────────────────────────────────────────────────────────────
     const r6 = await call(controller.adminExportar, { eventoId: evento.id, estados: 'todas' });
-    const cuerpo6 = parsearCSV(r6.body || '').slice(1);
+    const cuerpo6 = sinPie(parsearCSV(r6.body || '').slice(1));
     const estados6 = new Set(cuerpo6.map((f) => f[COL['Estado']]));
     checks.push({
       name: 'estados=todas → suma pendientes, devueltas y rechazadas (28 filas)',
@@ -365,7 +400,7 @@ async function main() {
     // 7) El filtro explícito de pantalla GANA sobre el default
     // ────────────────────────────────────────────────────────────────
     const r7 = await call(controller.adminExportar, { eventoId: evento.id, mpEstado: 'pending' });
-    const cuerpo7 = parsearCSV(r7.body || '').slice(1);
+    const cuerpo7 = sinPie(parsearCSV(r7.body || '').slice(1));
     checks.push({
       name: '🎯 mpEstado=pending en pantalla GANA sobre el default de aprobadas (1 fila, Pendiente)',
       pass: cuerpo7.length === 1 && cuerpo7[0][COL['Estado']] === 'Pendiente',
@@ -378,7 +413,7 @@ async function main() {
     const rListado = await call(controller.adminListar, { eventoId: evento.id, q: 'relleno' });
     const rExport = await call(controller.adminExportar, { eventoId: evento.id, q: 'relleno', estados: 'todas' });
     const idsListado = (rListado.body?.compras || []).map((c) => String(c.id)).sort();
-    const idsExport = parsearCSV(rExport.body || '').slice(1).map((f) => f[COL['ID']]).sort();
+    const idsExport = sinPie(parsearCSV(rExport.body || '').slice(1)).map((f) => f[COL['ID']]).sort();
     checks.push({
       name: '🎯 Con la MISMA búsqueda, el CSV y el listado devuelven exactamente las mismas compras',
       pass: idsListado.length === 22 && JSON.stringify(idsListado) === JSON.stringify(idsExport),
@@ -386,7 +421,7 @@ async function main() {
     });
 
     const rVal = await call(controller.adminExportar, { eventoId: evento.id, validacion: 'pendiente' });
-    const cuerpoVal = parsearCSV(rVal.body || '').slice(1);
+    const cuerpoVal = sinPie(parsearCSV(rVal.body || '').slice(1));
     checks.push({
       name: 'validacion=pendiente → solo las aprobadas con alguna entrada sin validar (conMenu + hostil)',
       pass: cuerpoVal.length === 2 &&
