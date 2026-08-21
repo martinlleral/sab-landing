@@ -885,6 +885,26 @@ Notas de implementación, por si hay que volver:
 
 ## 🍽️ Sprint 7 — Entrada + menú de Casa Metro (aprobado 16/8, cargado 17/8)
 
+> ### 🚀 Deployado a producción el **21/8/2026** (sesión S7)
+>
+> Los cuatro ítems (42, 43a/43b/43c, 44, 45) están **en producción**. `main` = `e392f94`.
+>
+> - **Migración** `20260817163938_sprint7_menu_casa_metro` aplicada sobre la base real con ventas
+>   vivas, por `docker cp` al volumen + `migrate deploy` **antes** del rebuild. Los 6 `ADD COLUMN`
+>   entraron sin reescribir ninguna tabla. `prisma migrate status` → *"Database schema is up to date"*.
+> - **Backfill verificado, no asumido:** los 6 eventos previos quedaron en `menuHabilitado=false` /
+>   `topeMenus=null`, y las **2158 compras** históricas en `cantidadMenus=0` / `menuUnitario=0`.
+> - **Los 3 archivos nuevos** (`src/utils/orden.js`, `src/utils/csv.js`,
+>   `public/backoffice/evento-menus.html`) verificados dentro del contenedor: sin ellos el server no
+>   arranca. El plan avisaba de dos; `csv.js` es el tercero.
+> - El menú queda **apagado en todos los eventos** — que es el default correcto. Activarlo requiere
+>   el precio real del menú y el tope, que los define el operador.
+>
+> **Lo que este deploy encontró y no estaba en el plan:** el evento del 26/8 en Casa Metro ya estaba
+> publicado y vendiendo desde el 20/8, o sea **antes** del deploy. El orden que el sprint pedía
+> (deploy → activar menú → publicar) no llegó a cumplirse. Consecuencia acotada: **1 compra de 4
+> entradas** que no puede sumar menú. Ver la nota de coordinación en la ficha interna del sprint.
+
 **Scope nuevo, ninguno es defecto.** Origen: 3 audios del operador del backoffice, del 10/8 → ficha interna del backlog (15/8) → adenda aprobada el 16/8. Se cargan acá recién ahora porque se dejaron afuera a propósito hasta que el alcance estuviera acordado por escrito.
 
 **Qué es.** Vender el menú de Casa Metro **en el mismo checkout que la entrada**, con la plata del menú identificable por separado y con la cocina sabiendo cuántos platos hacer y a quién entregárselos.
