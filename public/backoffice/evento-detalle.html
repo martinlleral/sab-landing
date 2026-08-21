@@ -1097,11 +1097,23 @@
       const t = Number(crudo);
 
       // Vacío = sin tope. Es el default y se dice, no se deja implícito.
-      if (crudo === '' || !Number.isInteger(t) || t < 0) {
+      if (crudo === '') {
         topeHint.innerHTML = tomados
           + `<strong>Sin tope</strong>${marca}: se venden menús mientras haya entradas.`
           + '<br>' + gris('Poné un número si la cocina tiene un límite. '
             + 'Ojo: <strong>0 no es «sin límite»</strong>, es «no vender ninguno».');
+        return;
+      }
+
+      // Hay algo tipeado pero no es un entero válido (un `12.5`, un pegado con
+      // letras). NO se dice "sin tope": el campo muestra un valor, y afirmar lo
+      // contrario de lo que se ve es el patrón que ya nos costó dos 🔴. Se dice
+      // que ese valor no sirve.
+      if (!Number.isInteger(t) || t < 0) {
+        topeHint.innerHTML = tomados
+          + aviso('<strong>Ese valor no es un tope válido</strong> — tiene que ser '
+            + 'un número entero de 0 para arriba.')
+          + '<br>' + gris('Dejá el campo <strong>vacío</strong> si no hay límite.');
         return;
       }
 
