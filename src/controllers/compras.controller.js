@@ -648,11 +648,11 @@ const ALCANCE_ARCHIVO = {
 // (ALCANCE_ARCHIVO) produce slugs para el nombre del .csv; acá hace falta algo
 // que una persona pueda leer dentro de la hoja.
 const ALCANCE_LEGIBLE = {
-  aprobadas: 'solo compras aprobadas',
-  pendientes: 'solo compras pendientes',
-  rechazadas: 'solo compras rechazadas',
-  canceladas: 'solo compras canceladas',
-  'todos-los-estados': 'todos los estados, devoluciones incluidas',
+  aprobadas: 'solo aprobadas',
+  pendientes: 'solo pendientes',
+  rechazadas: 'solo rechazadas',
+  canceladas: 'solo canceladas',
+  'todos-los-estados': 'todos los estados',
 };
 
 const COLUMNAS_EXPORT = [
@@ -781,11 +781,33 @@ async function adminExportar(req, res) {
     filaTotales[9] = sumaSab;
     filaTotales[10] = sumaPagado;
 
-    const filaOrigen = new Array(COLUMNAS_EXPORT.length).fill('');
-    filaOrigen[0] = `Sindicato Argentino de Boleros · ${evento.nombre} · ${ALCANCE_LEGIBLE[alcance] || alcance}`
-      + `${filtrado ? ' · con filtros de pantalla' : ''} · generada el ${fechaHoraArgentina(new Date())}`;
+    // La identificación va como pares etiqueta/valor, NO como una frase larga en
+    // una sola celda. El motivo es de planilla, no de estilo: un texto largo en
+    // la columna A ensancha la columna del apellido en cualquier visor que
+    // autoajuste, y desacomoda la tabla entera para leer un dato que se consulta
+    // una vez. Con la etiqueta corta en la primera columna y el valor en la de
+    // los emails —que ya es la más ancha del archivo— ninguna columna cambia de
+    // tamaño. (Hallazgo del recorrido, sesión V.)
+    const COL_ETIQUETA = 0;                          // 'Apellido'
+    const COL_VALOR = COLUMNAS_EXPORT.indexOf('Email');
+    const filaPie = (etiqueta, valor) => {
+      const f = new Array(COLUMNAS_EXPORT.length).fill('');
+      f[COL_ETIQUETA] = etiqueta;
+      f[COL_VALOR] = valor;
+      return f;
+    };
 
-    const filasConPie = [...filas, new Array(COLUMNAS_EXPORT.length).fill(''), filaTotales, filaOrigen];
+    const vacia = () => new Array(COLUMNAS_EXPORT.length).fill('');
+    const filasConPie = [
+      ...filas,
+      vacia(),
+      filaTotales,
+      vacia(),
+      filaPie('Planilla', 'Sindicato Argentino de Boleros'),
+      filaPie('Evento', evento.nombre),
+      filaPie('Incluye', `${ALCANCE_LEGIBLE[alcance] || alcance}${filtrado ? ' · con filtros de pantalla' : ''}`),
+      filaPie('Generada', fechaHoraArgentina(new Date())),
+    ];
 
     const csv = serializarCSV(COLUMNAS_EXPORT, filasConPie);
 

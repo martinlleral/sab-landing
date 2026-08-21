@@ -213,7 +213,10 @@ async function main() {
     };
     const pieDe = (filas) => {
       const i = filas.findIndex((f) => String(f[0] || '').startsWith('TOTALES'));
-      return i === -1 ? { totales: null, origen: null } : { totales: filas[i], origen: filas[i + 1] || null };
+      if (i === -1) return { totales: null, campos: {} };
+      const campos = {};
+      filas.slice(i + 1).forEach((f) => { if (f[0]) campos[f[0]] = f[COL['Email']]; });
+      return { totales: filas[i], campos };
     };
 
     const cuerpo1 = sinPie(csv1.slice(1));
@@ -344,8 +347,19 @@ async function main() {
     });
     checks.push({
       name: 'La planilla dice de quién es, de qué evento y qué recorte trae',
-      pass: !!pie1.origen && /Sindicato Argentino de Boleros/.test(pie1.origen[0]) && /aprobadas|estados/.test(pie1.origen[0]),
-      detail: pie1.origen ? String(pie1.origen[0]).slice(0, 90) : 'sin fila de procedencia',
+      pass: /Sindicato Argentino de Boleros/.test(pie1.campos['Planilla'] || '')
+        && !!pie1.campos['Evento'] && /aprobadas|estados/.test(pie1.campos['Incluye'] || '')
+        && !!pie1.campos['Generada'],
+      detail: JSON.stringify(pie1.campos).slice(0, 110),
+    });
+    // El pie va como pares etiqueta/valor justamente para no ensanchar la
+    // columna del apellido: si alguien vuelve a meter la frase larga en la
+    // primera columna, esto se pone en rojo.
+    const celdasA = csv1.slice(1).map((f) => String(f[0] || ''));
+    checks.push({
+      name: 'Ninguna celda de la 1ª columna es una frase larga (ensancharía la columna)',
+      pass: celdasA.every((c) => c.length <= 24),
+      detail: `más larga=${JSON.stringify(celdasA.reduce((a, c) => (c.length > a.length ? c : a), ''))}`,
     });
     checks.push({
       name: 'El encabezado sigue siendo la PRIMERA fila (abre en columnas de doble clic)',
