@@ -1037,11 +1037,19 @@ Notas de implementación, por si hay que volver:
 > número exacto ("quedan 3 y pediste 5") antes de crear nada, igual que `validarCupon` respecto de
 > `reservarCupon`.
 >
-> **Una definición única de "cupo tomado".** `ESTADOS_MENU_OCUPADO` = aprobadas + pendientes, en un
-> solo lugar, y la usan la reserva, el checkout y el backoffice. Sin eso, el número que ve el
-> comprador y el que aplica el backend podían divergir. Ojo con la trampa: `menus.cantidad` de los
-> reportes filtra `totalPagado > 0` porque mide **plata**; el cupo mide **platos** y no puede
-> derivarse de ahí.
+> **Una definición única de "cupo tomado".** En un solo lugar, y la usan la reserva, el checkout y
+> el backoffice. Sin eso, el número que ve el comprador y el que aplica el backend podían divergir.
+> Ojo con la trampa: `menus.cantidad` de los reportes filtra `totalPagado > 0` porque mide
+> **plata**; el cupo mide **platos** y no puede derivarse de ahí.
+>
+> ⚠️ **CORREGIDO EL 26/8/2026.** Aquella definición era `ESTADOS_MENU_OCUPADO` = aprobadas +
+> pendientes, sin vencimiento, apoyada en que el autocancel de 72 h liberaría lo abandonado. El
+> primer evento con menú activo mostró el agujero: la venta del menú cierra a las **18:00 del día
+> del evento**, o sea que la reserva le sobrevivía al evento. 21 de 50 cupos quedaron tomados por
+> gente que nunca pagó, con el checkout diciendo "agotados" y 29 menús vendidos. Hoy la definición
+> es `whereMenuOcupado()` y tiene tres ramas: aprobada · pendiente **con pago en curso en MP**
+> (Rapipago, sin vencimiento) · pendiente **reciente** (< 30 min, la que vence). Ver
+> `tests/integration/menu-reserva-vence.test.js`.
 >
 > **Verificado también en el navegador** (16 checks): los tres estados del select —sin tope, "quedan
 > N", agotado—, que el techo sea el menor entre entradas y cupo, y que el rechazo por cupo recorte

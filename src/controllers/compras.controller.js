@@ -4,7 +4,7 @@ const config = require('../config');
 const mpService = require('../services/mercadopago.service');
 const brevoService = require('../services/brevo.service');
 const qrService = require('../services/qr.service');
-const { procesarPagoAprobado, revertirCompraAprobada } = require('../services/pagos.service');
+const { procesarPagoAprobado, procesarPagoCancelado, revertirCompraAprobada } = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
 const { calcularTotalCompra, reservarCupon, validarCupon, OFFSET_ART_HORAS } = require('../services/precios.service');
 const { compararPorApellido } = require('../utils/orden');
@@ -985,4 +985,116 @@ async function adminDevolver(req, res) {
   }
 }
 
-module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminExportar, adminGetById, adminEliminar, adminEliminarPendientes, adminReenviarMail, adminDevolver };
+// Libera a mano el cupo que retiene una compra pendiente. Es la contracara
+// operativa de `whereMenuOcupado`: la regla libera sola a los 30 minutos, pero
+// el caso patológico existe (un cupón de Rapipago que quedó `pending` en MP para
+// siempre reserva sin vencimiento), y el 26/8 el operador se encontró con 21
+// menús trabados y NADA con qué destrabarlos — `procesarPagoCancelado` sólo se
+// invocaba desde el cron.
+//
+// CANCELA, no borra. `adminEliminarPendientes`, que ya existía, hace `delete`:
+// pierde el registro de que esa persona intentó comprar y —peor— no devuelve el
+// uso del cupón. Acá se delega en `procesarPagoCancelado`, que mueve el estado a
+// 'cancelled' y libera el cupón en la misma transacción.
+//
+// Fail-closed a propósito: si MP dice que hay un pago en curso, o si MP no
+// contesta, NO se cancela. Cancelarle la compra a alguien que está por pagar un
+// cupón de Rapipago es la clase de error que termina con una persona en la puerta
+// con el comprobante en la mano y sin entrada. Para eso está `forzar`, que exige
+// que el operador confirme sabiendo lo que se encontró.
+async function adminLiberarCupo(req, res) {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido', code: 'INVALID_ID' });
+
+    const forzar = req.body?.forzar === true;
+    const liberadaPor = req.session?.usuario?.email || 'admin';
+
+    const compra = await prisma.compra.findUnique({ where: { id } });
+    if (!compra) return res.status(404).json({ error: 'Compra no encontrada', code: 'NOT_FOUND' });
+
+    if (compra.mpEstado !== 'pending') {
+      return res.status(400).json({
+        error: `Solo se puede liberar una compra pendiente (estado actual: ${compra.mpEstado})`,
+        code: 'NOT_PENDING',
+        estado: compra.mpEstado,
+      });
+    }
+
+    if (!forzar) {
+      // Guarda 1, gratis: si el cron ya le escribió el mpPagoId, MP confirmó un
+      // pago en curso. No hace falta preguntarle de nuevo.
+      if (compra.mpPagoId) {
+        return res.status(409).json({
+          error: 'Esta persona tiene un pago en curso en Mercado Pago. Si la liberás y después paga, va a quedar sin entrada.',
+          code: 'PAGO_EN_CURSO',
+          mpPagoId: compra.mpPagoId,
+        });
+      }
+
+      // Guarda 2: preguntarle a MP por si el cron todavía no pasó (gira cada 60 s).
+      // ⚠️ Este filtro por collector + monto está DUPLICADO de syncPagos.js — es la
+      // misma regla de "pago válido para esta compra". Se dejó duplicado a
+      // propósito: unificarlo toca el job que sostiene las ventas y esto se
+      // escribió con un evento vendiendo. Unificar después del 2/9.
+      let pagos;
+      try {
+        pagos = await mpService.buscarPagoPorCompra(compra.id);
+      } catch (err) {
+        console.error(`[liberar-cupo] MP no respondió para compra #${id}:`, err.message);
+        return res.status(503).json({
+          error: 'No se pudo consultar Mercado Pago para verificar que nadie esté pagando. Probá de nuevo en un minuto.',
+          code: 'MP_NO_DISPONIBLE',
+        });
+      }
+
+      const expectedCollector = config.mercadopago.userId;
+      const vivos = (pagos || []).filter((p) => {
+        if (expectedCollector && String(p.collector_id) !== String(expectedCollector)) return false;
+        if (Number(p.transaction_amount) !== Number(compra.totalPagado)) return false;
+        return ['approved', 'pending', 'in_process', 'authorized'].includes(p.status);
+      });
+
+      if (vivos.length > 0) {
+        return res.status(409).json({
+          error: `Mercado Pago informa un pago ${vivos[0].status} para esta compra. No la liberes sin revisarlo.`,
+          code: 'PAGO_EN_CURSO',
+          mpPagoId: String(vivos[0].id),
+          mpStatus: vivos[0].status,
+        });
+      }
+    }
+
+    const r = await procesarPagoCancelado(compra.id, 'cancelled');
+
+    // Alguien más llegó primero entre nuestra lectura y el update: el cron que
+    // gira cada 60 s, o el otro operador con la misma pantalla abierta. No es un
+    // error —el cupo está libre igual— pero no podemos decir "liberaste 6 menús"
+    // cuando no fue esta acción la que los liberó.
+    if (r.ya_procesada) {
+      const actual = await prisma.compra.findUnique({ where: { id }, select: { mpEstado: true } });
+      return res.json({
+        ok: true,
+        yaProcesada: true,
+        compraId: id,
+        estado: actual?.mpEstado || 'desconocido',
+        mensaje: 'Esta compra ya había dejado de retener cupo.',
+      });
+    }
+
+    console.log(`🔓 [LIBERAR-CUPO] Admin=${liberadaPor} compra=#${id} menus=${compra.cantidadMenus} cupon_liberado=${r.libero_cupon} forzado=${forzar}`);
+
+    return res.json({
+      ok: true,
+      compraId: id,
+      menusLiberados: compra.cantidadMenus || 0,
+      libero_cupon: r.libero_cupon,
+      forzado: forzar,
+    });
+  } catch (err) {
+    console.error('Error en adminLiberarCupo:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+module.exports = { crearPreferencia, webhook, checkAndProcess, adminListar, adminExportar, adminGetById, adminEliminar, adminEliminarPendientes, adminReenviarMail, adminDevolver, adminLiberarCupo };

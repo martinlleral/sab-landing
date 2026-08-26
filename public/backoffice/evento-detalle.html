@@ -1091,7 +1091,7 @@
       const tomados = menuOcupados === null
         ? ''
         : `Tomados hoy: <strong>${menuOcupados}</strong>`
-          + gris(' (compras pagas + pendientes de pago)') + '. ';
+          + gris(' (pagas + las que se están pagando ahora)') + '. ';
 
       const crudo = String(tope === null || tope === undefined ? '' : tope).trim();
       const t = Number(crudo);
@@ -1140,7 +1140,9 @@
         ? aviso('<strong>Menús agotados</strong> — el checkout ya no los ofrece.')
         : `Quedan <strong>${restantes}</strong> por vender.`;
       topeHint.innerHTML = `Tomados hoy: <strong>${menuOcupados}</strong> de ${t}${marca}`
-        + gris(' (compras pagas + pendientes de pago)') + '. ' + estado
+        + gris(' (pagas + las que se están pagando ahora)') + '. ' + estado
+        + '<br>' + gris('Una compra sin pagar suelta el lugar a la media hora. '
+          + 'Si querés ver quiénes están en el medio, entrá a <strong>Menús</strong>.')
         + '<br>' + gris('Dejá el campo vacío si no hay límite.');
     }
 

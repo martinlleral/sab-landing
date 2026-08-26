@@ -4,8 +4,8 @@ const qrService = require('../services/qr.service');
 const brevoService = require('../services/brevo.service');
 const { getTandaVigente } = require('../services/tandas.service');
 const {
-  ESTADOS_MENU_OCUPADO, contarMenusOcupados, calcularMenusRestantes, menuVentaCerrada,
-  calcularCorteMenu,
+  whereMenuOcupado, compraOcupaMenu, contarMenusOcupados, calcularMenusRestantes,
+  menuVentaCerrada, calcularCorteMenu,
 } = require('../services/precios.service');
 const { compararPorApellido } = require('../utils/orden');
 
@@ -36,7 +36,7 @@ function adjuntarTandaVigente(evento) {
  * portada puede traer hasta 50 eventos y un aggregate por cada uno serían 50
  * viajes a la base en el endpoint más caliente del sitio.
  *
- * El conteo usa `ESTADOS_MENU_OCUPADO` — la misma definición de "cupo tomado"
+ * El conteo compone `whereMenuOcupado()` — la misma definición de "cupo tomado"
  * que la reserva atómica, para que el número que ve el comprador y el que aplica
  * el backend no puedan divergir.
  */
@@ -71,7 +71,7 @@ async function adjuntarEstadoMenu(eventos) {
       by: ['eventoId'],
       where: {
         eventoId: { in: conTope.map((e) => e.id) },
-        mpEstado: { in: ESTADOS_MENU_OCUPADO },
+        ...whereMenuOcupado(),
       },
       _sum: { cantidadMenus: true },
     });
@@ -647,26 +647,50 @@ async function adminEventoMenus(req, res) {
     });
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
 
-    // Una sola query para las dos listas: `ESTADOS_MENU_OCUPADO` es la misma
-    // definición de "compra viva" que usa la reserva del cupo. Reusarla es lo
-    // que hace que valga el invariante `aprobados + pendientes === ocupados`:
-    // la hoja de la cocina y el contador que corta la venta miran lo mismo.
+    // Una sola query para las dos listas. Ojo con el filtro: acá NO se compone
+    // `whereMenuOcupado()`, y es a propósito. Esa cláusula contesta "¿corta la
+    // venta?"; esta pantalla contesta otra cosa — "¿quién dijo que venía a comer?".
+    // Un pendiente que ya venció su reserva sigue siendo alguien que empezó a
+    // comprar, y el operador necesita verlo (para llamarlo, o para liberarlo a
+    // mano). Traemos aprobadas + TODAS las pendientes y marcamos fila por fila
+    // cuál reserva cupo, que es lo que hace legible el contador de arriba.
     // Sin email ni teléfono: esta hoja va a la cocina y a la puerta, no a la
     // administración, y sale impresa de un sistema que guarda PII.
     const filas = await prisma.compra.findMany({
       where: {
         eventoId,
         cantidadMenus: { gt: 0 },
-        mpEstado: { in: ESTADOS_MENU_OCUPADO },
+        mpEstado: { in: ['approved', 'pending'] },
       },
       select: {
         id: true, nombre: true, apellido: true,
         cantidadMenus: true, cantidadEntradas: true, mpEstado: true,
+        mpPagoId: true, createdAt: true,
       },
     });
 
+    const ahora = new Date();
     const aprobadas = filas.filter((c) => c.mpEstado === 'approved').sort(compararPorApellido);
-    const pendientes = filas.filter((c) => c.mpEstado === 'pending').sort(compararPorApellido);
+    // `reservaCupo` es lo que separa "todavía la estamos esperando" de "esta ya
+    // no le saca el lugar a nadie". La UI lo usa para ofrecer liberar sólo las
+    // que efectivamente están reteniendo un cupo.
+    const pendientes = filas
+      .filter((c) => c.mpEstado === 'pending')
+      .map((c) => ({
+        id: c.id,
+        nombre: c.nombre,
+        apellido: c.apellido,
+        cantidadMenus: c.cantidadMenus,
+        cantidadEntradas: c.cantidadEntradas,
+        mpEstado: c.mpEstado,
+        reservaCupo: compraOcupaMenu(c, ahora),
+        // Para que la pantalla pueda decir "hace 4 minutos" y el operador entienda
+        // SOLO por qué esa fila reserva y aquella no. Sin esto, "reserva el lugar"
+        // es una afirmación sin fundamento visible, y lo que no se explica se
+        // vuelve a preguntar por WhatsApp.
+        createdAt: c.createdAt,
+      }))
+      .sort(compararPorApellido);
     const sumarMenus = (arr) => arr.reduce((s, c) => s + (c.cantidadMenus || 0), 0);
 
     // Hora de emisión: la del SERVIDOR, no la del navegador que imprime. Es el
@@ -706,6 +730,9 @@ async function adminEventoMenus(req, res) {
         // Advertencia, no suma.
         menusPendientes: sumarMenus(pendientes),
         comprasPendientes: pendientes.length,
+        // De esas pendientes, las que además le están sacando el lugar a otro.
+        // Este es el número que explica por qué el checkout dice lo que dice.
+        menusPendientesReservando: sumarMenus(pendientes.filter((c) => c.reservaCupo)),
       },
     });
   } catch (err) {
