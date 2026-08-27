@@ -101,19 +101,63 @@ function umbralVisibilidadART() {
   return new Date(`${yyyy}-${mm}-${dd}T12:00:00.000Z`);
 }
 
+/**
+ * El evento del hero de la portada.
+ *
+ * 🩹 EL FALLBACK POR FECHA (27/8/2026). Antes esto era sólo la primera query: si
+ * no había un evento marcado `esDestacado` y vigente, devolvía 404 y el hero
+ * quedaba vacío. Pasó de verdad el 27/8 — el destacado era el evento del 26/8, se
+ * venció a las 00:00, y la portada amaneció mostrando un esqueleto ("PRÓXIMO
+ * EVENTO", un guión suelto, "Invitado especial:" sin nadie) con TRES eventos
+ * publicados y vendiendo, uno de ellos a seis días.
+ *
+ * La marca `esDestacado` es una elección editorial y hay que respetarla. Pero
+ * cuando no hay ninguna elección vigente, la portada no puede quedar muda: cae al
+ * evento publicado más próximo. El hueco existía porque el sistema dependía de que
+ * alguien se acordara de mover un checkbox — y los 5 `esDestacado` acumulados desde
+ * junio, ninguno apagado, muestran que ese acuerdo no ocurre.
+ *
+ * El 404 sigue existiendo, pero ahora significa lo que dice: no hay NINGÚN evento
+ * publicado vigente. Ahí sí no hay nada que mostrar.
+ *
+ * `esFallback` viaja en el response para que la portada pueda decidir con el dato
+ * (y para que un test pueda distinguir los dos caminos, que es lo que hace que
+ * este arreglo no se pierda en la próxima refactorización).
+ */
 async function getDestacado(req, res) {
   try {
-    const evento = await prisma.evento.findFirst({
-      where: {
-        esDestacado: true,
-        estaPublicado: true,
-        fecha: { gte: umbralVisibilidadART() },
-      },
+    const base = {
+      estaPublicado: true,
+      fecha: { gte: umbralVisibilidadART() },
+    };
+
+    // `orderBy` explícito: si quedaran dos destacados vigentes marcados (pasa —
+    // nadie apaga el viejo), gana el más próximo y no el que la base devuelva
+    // primero. Sin esto el hero podría cambiar de evento sin que nadie lo toque.
+    let evento = await prisma.evento.findFirst({
+      where: { ...base, esDestacado: true },
+      orderBy: { fecha: 'asc' },
       include: { tandas: { orderBy: { orden: 'asc' } } },
     });
+    let esFallback = false;
+
+    if (!evento) {
+      evento = await prisma.evento.findFirst({
+        where: base,
+        orderBy: { fecha: 'asc' },
+        include: { tandas: { orderBy: { orden: 'asc' } } },
+      });
+      esFallback = true;
+    }
+
     if (!evento) return res.status(404).json({ error: 'No hay evento destacado' });
+
+    if (esFallback) {
+      console.warn(`[portada] sin evento destacado vigente — el hero cae al próximo por fecha (#${evento.id})`);
+    }
+
     const [conMenus] = await adjuntarEstadoMenu([adjuntarTandaVigente(evento)]);
-    return res.json(conMenus);
+    return res.json({ ...conMenus, esFallback });
   } catch (err) {
     console.error('Error en getDestacado:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -147,7 +191,14 @@ async function adminListar(req, res) {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const [eventos, total] = await Promise.all([
+    const umbral = umbralVisibilidadART();
+
+    // `portada` va aparte de la paginación a propósito: el destacado vigente puede
+    // estar en cualquier página, y un aviso que sólo funciona en la página 1 es un
+    // aviso que no funciona. Son dos queries baratas (findFirst con índice de
+    // fecha) contra el endpoint que el operador abre para editar eventos, que es
+    // exactamente donde tiene que enterarse.
+    const [eventos, total, destacadoVigente, proximoVigente] = await Promise.all([
       prisma.evento.findMany({
         orderBy: { fecha: 'desc' },
         skip,
@@ -158,9 +209,34 @@ async function adminListar(req, res) {
         },
       }),
       prisma.evento.count(),
+      prisma.evento.findFirst({
+        where: { esDestacado: true, estaPublicado: true, fecha: { gte: umbral } },
+        orderBy: { fecha: 'asc' },
+        select: { id: true, nombre: true, fecha: true },
+      }),
+      prisma.evento.findFirst({
+        where: { estaPublicado: true, fecha: { gte: umbral } },
+        orderBy: { fecha: 'asc' },
+        select: { id: true, nombre: true, fecha: true },
+      }),
     ]);
 
-    return res.json({ eventos: eventos.map(adjuntarTandaVigente), total, page, totalPages: Math.ceil(total / limit) });
+    return res.json({
+      eventos: eventos.map(adjuntarTandaVigente),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      // Qué está mostrando la portada AHORA MISMO, dicho por el mismo criterio que
+      // usa `getDestacado`. Sin esto, el operador tiene que abrir el sitio en otra
+      // pestaña y deducirlo.
+      portada: {
+        destacadoVigente,
+        // El que se muestra por fallback cuando nadie marcó ninguno.
+        mostrando: destacadoVigente || proximoVigente || null,
+        esFallback: !destacadoVigente && !!proximoVigente,
+        sinEventos: !proximoVigente,
+      },
+    });
   } catch (err) {
     console.error('Error en adminListar eventos:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });

@@ -311,15 +311,52 @@ function renderDestacado(evento) {
 
   const heroContent = document.getElementById('hero-content');
 
+  // SIN EVENTO. Desde el fallback por fecha del backend, acá se llega sólo cuando
+  // NO hay ningún evento publicado vigente — antes se llegaba con la agenda llena
+  // y el destacado vencido, que fue el caso del 27/8.
+  //
+  // ⚠️ Hay que apagar TODO lo que en el HTML es texto fijo, no sólo lo que se
+  // rellena por JS. Esta rama existía y limpiaba el nombre y la fecha, pero dejaba
+  // prendidos el guión (`hero-hora-sep`) y el "Invitado especial:" del
+  // `hero-invitado-wrap` — los dos son literales del markup. El resultado no era
+  // un hero vacío: era un hero roto, con un guión suelto y una etiqueta sin nadie.
+  // Si algún día se suma texto fijo al hero, se apaga acá también.
   if (!evento) {
     if (elNombre) elNombre.textContent = '';
     if (elFecha) elFecha.textContent = '';
+    if (elHora) elHora.textContent = '';
+    const elSep = document.getElementById('hero-hora-sep');
+    if (elSep) elSep.style.display = 'none';
+    if (elInvitadoWrap) elInvitadoWrap.style.display = 'none';
+    if (elInvitado) elInvitado.textContent = '';
+    const elPrecioWrap = document.getElementById('hero-precio-wrap');
+    if (elPrecioWrap) elPrecioWrap.style.display = 'none';
+    // El badge dice "Próximo Evento": sin ninguno, es una promesa que la pantalla
+    // no puede cumplir.
+    const elBadge = document.querySelector('.hero-badge');
+    if (elBadge) elBadge.style.display = 'none';
+    // Y algo tiene que ocupar ese lugar, o la portada queda muda.
+    const elVacio = document.getElementById('hero-vacio');
+    if (elVacio) elVacio.style.display = '';
     if (btnComprar) btnComprar.style.display = 'none';
     if (heroContent) heroContent.classList.add('loaded');
     // Sin destacado, el bloque "Cómo llegar" cae a la sede default de Home.
     renderUbicacion(null);
     return;
   }
+
+  // Camino con evento: revertir lo que la rama de arriba pudo haber apagado. Sin
+  // esto, un render vacío seguido de uno con evento (el retry de una request que
+  // falló) dejaría el hero mutilado — el bug de "apagué y nunca lo volví a
+  // prender", que sólo aparece en el segundo render y por eso no se ve probando a
+  // mano una vez.
+  const elSepOn = document.getElementById('hero-hora-sep');
+  if (elSepOn) elSepOn.style.display = '';
+  const elBadgeOn = document.querySelector('.hero-badge');
+  if (elBadgeOn) elBadgeOn.style.display = '';
+  const elVacioOff = document.getElementById('hero-vacio');
+  if (elVacioOff) elVacioOff.style.display = 'none';
+  if (btnComprar) btnComprar.style.display = '';
 
   // Título: si el invitado aparece en el nombre, partimos en 2 líneas:
   //   "Amor de Miércoles con Leo García"

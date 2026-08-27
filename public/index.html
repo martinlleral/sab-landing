@@ -157,6 +157,14 @@
           <p class="hero-guest" id="hero-invitado-wrap">
             Invitado especial: <strong id="hero-invitado"></strong>
           </p>
+          <!-- Lo que se muestra cuando NO hay ningún evento publicado vigente. El
+               resto del hero es texto fijo ("Invitado especial:", el guión de
+               hero-hora-sep) que sin evento queda colgado en pantalla: el 27/8 la
+               portada amaneció mostrando ese esqueleto. Un estado vacío también es
+               un estado y merece su elemento, no el silencio. -->
+          <p class="hero-meta" id="hero-vacio" style="display:none;">
+            Estamos preparando las próximas fechas.
+          </p>
           <p class="hero-precio" id="hero-precio-wrap" style="display:none;">
             <strong id="hero-precio">—</strong>
           </p>
