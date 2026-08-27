@@ -344,6 +344,13 @@
           Esta es la hoja de control de entrega: se imprime, se lleva a la sede y se tilda
           un casillero por cada menú que se entrega. Los casilleros de acá abajo son la vista
           previa de lo que sale en el papel — se tildan a mano, no en la pantalla.
+          <br><br>
+          <strong>Sobre las compras esperando pago:</strong> mientras alguien está pagando, su
+          menú queda reservado (por eso el checkout puede decir "agotado" con menos menús
+          vendidos que el tope). Esa reserva se suelta sola a la media hora. Si ves una que
+          claramente no va a pagar y necesitás el lugar ya, usá <em>Liberar el lugar</em>:
+          antes de soltarlo, el sistema le pregunta a Mercado Pago si esa persona está en
+          medio de un pago.
         </p>
 
         <div class="bo-card">
@@ -439,6 +446,92 @@
       }
     }
 
+    // "hace 4 minutos" al lado de "reserva el lugar" convierte una afirmación del
+    // sistema en algo que el operador puede verificar con la cabeza. La reserva
+    // dura 30 minutos: viendo el reloj, entiende solo cuándo se va a soltar.
+    function hace(iso) {
+      if (!iso) return '';
+      const ms = Date.now() - new Date(iso).getTime();
+      if (!Number.isFinite(ms) || ms < 0) return '';
+      const min = Math.floor(ms / 60000);
+      if (min < 1) return ' (recién)';
+      if (min < 60) return ` (hace ${min} min)`;
+      const hs = Math.floor(min / 60);
+      if (hs < 24) return ` (hace ${hs} h)`;
+      const dias = Math.floor(hs / 24);
+      return ` (hace ${dias} ${dias === 1 ? 'día' : 'días'})`;
+    }
+
+    // Suelta a mano el cupo que retiene una compra sin pagar. NO usa boFetch: el
+    // helper aplana todo a un Error con el mensaje, y acá el `code` y el status
+    // son la mitad de la decisión — un 409 no es una falla, es MP diciendo "esta
+    // persona está pagando", y eso se le tiene que poder mostrar al operador para
+    // que decida. Un 503 tampoco es una falla del botón: es "no sé", y frente a
+    // "no sé" no se cancela nada.
+    async function liberarCupo(btn) {
+      const id = btn.dataset.id;
+      const nombre = btn.dataset.nombre;
+      const menus = parseInt(btn.dataset.menus) || 0;
+
+      if (!boConfirm(`¿Liberar el lugar de ${nombre}?\n\n`
+        + `Vuelven ${menus} menú(s) a la venta y la compra queda cancelada. `
+        + 'Si esa persona después paga, se va a quedar sin su lugar.')) return;
+
+      const pedir = async (forzar) => {
+        const res = await fetch(`/api/admin/compras/${id}/liberar-cupo`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ forzar }),
+        });
+        if (res.status === 401) { window.location.href = '/backoffice/login.html'; return null; }
+        return { status: res.status, data: await res.json().catch(() => ({})) };
+      };
+
+      btn.disabled = true;
+      btn.textContent = 'Liberando...';
+      try {
+        let r = await pedir(false);
+        if (!r) return;
+
+        if (r.status === 409) {
+          // MP dice que hay un pago en curso. Se le cuenta al operador lo que se
+          // encontró y decide él: es su cliente y su noche, no la del sistema.
+          const seguir = boConfirm(`${r.data.error}\n\n`
+            + '¿Liberar el lugar igual?\n'
+            + 'Elegí "Cancelar" si preferís primero fijarte en Mercado Pago.');
+          if (!seguir) return;
+          r = await pedir(true);
+          if (!r) return;
+        }
+
+        if (r.status === 503) {
+          boAlert(r.data.error || 'No se pudo consultar Mercado Pago. Probá de nuevo en un minuto.', 'error');
+          return;
+        }
+        if (r.status !== 200) {
+          boAlert(r.data.error || `No se pudo liberar (HTTP ${r.status})`, 'error');
+          return;
+        }
+
+        if (r.data.yaProcesada) {
+          boAlert('Esa compra ya había dejado de retener cupo — la lista se actualizó.', 'success');
+        } else {
+          boAlert(`Listo: volvieron ${r.data.menusLiberados} menú(s) a la venta.`, 'success');
+        }
+        await cargar();
+      } catch (err) {
+        boAlert('Error al liberar el lugar: ' + err.message, 'error');
+      } finally {
+        // Si `cargar()` corrió, este botón ya no existe; si falló, tiene que
+        // volver a estar usable.
+        if (document.body.contains(btn)) {
+          btn.disabled = false;
+          btn.textContent = 'Liberar el lugar';
+        }
+      }
+    }
+
     // Una hoja impresa vale por su hora de emisión. Si la pestaña quedó abierta
     // desde la mañana, lo que se imprimiría es la foto de la mañana — con su
     // hora correcta, pero desactualizada. El aviso es de pantalla, no de papel.
@@ -530,16 +623,41 @@
       }
 
       // ---- pendientes ----
+      // Dos cosas distintas en la misma lista, y hay que decirlo o el operador
+      // vuelve a preguntar "¿por qué dice agotado?": una compra sin pagar retiene
+      // el lugar sólo un rato; pasado eso sigue apareciendo acá (alguien la
+      // empezó, quizás haya que llamarla) pero ya no le saca el cupo a nadie.
       const bloque = document.getElementById('bloque-pendientes');
       if (data.pendientes.length > 0) {
         bloque.style.display = 'block';
+        const reservando = t.menusPendientesReservando || 0;
+        const detalleCupo = reservando > 0
+          ? ` De esos, ${plural(reservando, 'menú', 'menús')} todavía tienen el lugar reservado: `
+            + 'ese es el número que puede hacer que el checkout diga "agotado".'
+          : ' Ninguno está reteniendo cupo: el checkout sigue vendiendo con normalidad.';
         document.getElementById('pendientes-resumen').textContent =
           `${plural(t.comprasPendientes, 'compra', 'compras')} con `
           + `${plural(t.menusPendientes, 'menú', 'menús')} en total todavía no confirmaron el pago. `
-          + 'No están sumados arriba y no hay que cocinarlos, salvo que la cooperativa avise que el pago entró.';
-        document.getElementById('pendientes-lista').innerHTML = data.pendientes.map((c) => `
-          <li class="menu-fila-pendiente">${esc(c.apellido)}, ${esc(c.nombre)} — ${plural(c.cantidadMenus, 'menú', 'menús')}</li>
-        `).join('');
+          + 'No están sumados arriba y no hay que cocinarlos, salvo que la cooperativa avise que el pago entró.'
+          + detalleCupo;
+        document.getElementById('pendientes-lista').innerHTML = data.pendientes.map((c) => {
+          const desde = hace(c.createdAt);
+          const marca = c.reservaCupo
+            ? `<span class="no-print" style="color:#e0a800;"> · reserva el lugar${desde}</span>`
+            : `<span class="no-print" style="color:#888;"> · ya soltó el lugar${desde}</span>`;
+          const boton = c.reservaCupo
+            ? `<button type="button" class="btn btn-sm btn-outline-warning no-print ms-2 btn-liberar"
+                 data-id="${c.id}" data-menus="${c.cantidadMenus}"
+                 data-nombre="${esc(c.apellido)}, ${esc(c.nombre)}">Liberar el lugar</button>`
+            : '';
+          return `<li class="menu-fila-pendiente">${esc(c.apellido)}, ${esc(c.nombre)} — `
+            + `${plural(c.cantidadMenus, 'menú', 'menús')}${marca}${boton}</li>`;
+        }).join('');
+        // Listeners, no onclick con la función stringificada: ese patrón ya rompió
+        // en silencio en este proyecto cuando el contenido traía template strings.
+        for (const btn of document.querySelectorAll('.btn-liberar')) {
+          btn.addEventListener('click', () => liberarCupo(btn));
+        }
       } else {
         bloque.style.display = 'none';
       }

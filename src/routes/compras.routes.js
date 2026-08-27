@@ -14,6 +14,7 @@ adminRouter.use(requireAdmin);
 adminRouter.delete('/pendientes', controller.adminEliminarPendientes);
 adminRouter.post('/:id/reenviar-mail', controller.adminReenviarMail);
 adminRouter.post('/:id/devolver', controller.adminDevolver);
+adminRouter.post('/:id/liberar-cupo', controller.adminLiberarCupo);
 adminRouter.delete('/:id', controller.adminEliminar);
 // ⚠️ ANTES de '/:id': Express matchea por orden de registro, así que con
 // '/:id' declarado primero la descarga entraría por `adminGetById` con

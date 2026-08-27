@@ -80,8 +80,23 @@ async function syncPagosPendientes() {
 
         // 3) Pago activo válido (pending/in_process/authorized en MP) → seguir esperando.
         //    Cubre Rapipago/PagoFácil sin acreditar y revisiones de MP. NUNCA autocancelar acá.
+        //
+        //    Y SE PERSISTE EL mpPagoId. Esto no es cosmética: es lo que distingue
+        //    "esta persona está pagando de verdad" de "esta persona cerró la
+        //    pestaña", y `whereMenuOcupado` lo lee para decidir si el cupo de menú
+        //    sigue reservado. Sin esta línea, el cupón de Rapipago perdería su
+        //    lugar a los 30 minutos y se lo encontraría vendido al ir a pagar.
+        //    Se escribe una sola vez (guarda por mpPagoId vacío) para no pisar en
+        //    cada corrida del cron, que gira cada 60 s.
         const activo = pagosValidos.find((p) => ESTADOS_ACTIVOS.includes(p.status));
         if (activo) {
+          if (!compra.mpPagoId) {
+            await prisma.compra.update({
+              where: { id: compra.id },
+              data: { mpPagoId: String(activo.id) },
+            });
+            console.log(`🔖 Compra #${compra.id} — pago ${activo.id} en curso, cupo de menú sostenido`);
+          }
           console.log(`⏳ Compra #${compra.id} con pago ${activo.status} en MP — esperando`);
           continue;
         }

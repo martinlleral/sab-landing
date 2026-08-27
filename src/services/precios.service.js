@@ -486,15 +486,76 @@ async function liberarCupon(prismaClient, cuponId) {
 }
 
 /**
- * Estados de compra que OCUPAN cupo de menú. Un pendiente todavía puede pagarse
- * (la ventana de autocancel llega a 72 h por Rapipago), así que reservar su menú
- * es lo correcto: si no se paga, el autocancel lo libera solo.
+ * Cuánto dura la reserva de cupo de un pendiente que TODAVÍA no llegó a generar
+ * un pago en Mercado Pago. Es el tiempo que le damos a alguien para completar el
+ * checkout; pasado eso, asumimos abandono y el cupo vuelve al pool.
  *
- * Es la definición ÚNICA de "cupo tomado". Cualquier lugar que muestre menús
- * restantes tiene que usarla, o el backoffice y el checkout dirían números
- * distintos sobre la misma sede.
+ * 🩹 POR QUÉ EXISTE (26/8/2026, evento 28 — el primero con menú activo):
+ * la versión original reservaba el cupo de TODO pendiente y confiaba en que el
+ * autocancel de 72 h lo liberaría. Pero la venta del menú cierra a las 18:00 del
+ * día del evento (`menuCorteHora`): la reserva le sobrevivía al evento. Resultado
+ * real: 21 de 50 cupos tomados por gente que nunca pagó, el checkout diciendo
+ * "menús agotados" con 29 vendidos, y ninguna forma de destrabarlo.
+ *
+ * 30 minutos es holgado para pagar con tarjeta (se aprueba en segundos) y para ir
+ * a buscar la tarjeta a la otra habitación. Rapipago/PagoFácil NO dependen de esta
+ * ventana: apenas la persona genera el cupón hay un pago en MP, `syncPagos` le
+ * escribe el `mpPagoId` (≤60 s) y a partir de ahí reserva sin vencimiento.
  */
-const ESTADOS_MENU_OCUPADO = Object.freeze(['approved', 'pending']);
+const MENU_RESERVA_MINUTOS = 30;
+
+/**
+ * Cláusula Prisma de "esta compra ocupa cupo de menú". Es la definición ÚNICA:
+ * cualquier lugar que cuente o muestre cupo tiene que componer ESTA cláusula, o
+ * el backoffice y el checkout dirían números distintos sobre la misma sede.
+ *
+ * Ocupa cupo una compra que:
+ *   1. está aprobada (pagada, no hay nada que discutir); o
+ *   2. está pendiente y MP ya confirmó un pago en curso (`mpPagoId` no vacío) —
+ *      el caso Rapipago: todavía no acreditó pero va a acreditar; o
+ *   3. está pendiente y es RECIENTE — alguien que está pagando ahora mismo. Esta
+ *      es la rama que vence, y es la que arregla el bug de arriba.
+ *
+ * Lo que deliberadamente ya NO ocupa cupo: el pendiente viejo sin pago en MP.
+ * Eso es un abandono de checkout, y esperar 72 h a que el autocancel lo confirme
+ * era la diferencia entre vender el menú y no venderlo.
+ *
+ * 🔒 Efecto lateral bueno: el job `syncPagos` sólo mira compras de los últimos 7
+ * días (`VENTANA_HORAS`), así que un pendiente más viejo que eso no lo revisa
+ * NADIE nunca. Antes esos ocupaban cupo para siempre. Ahora vencen solos.
+ *
+ * @param {Date} [ahora] - inyectable para tests
+ * @returns {Object} fragmento de `where` para componer con Prisma
+ */
+function whereMenuOcupado(ahora = new Date()) {
+  const desde = new Date(ahora.getTime() - MENU_RESERVA_MINUTOS * 60 * 1000);
+  return {
+    OR: [
+      { mpEstado: 'approved' },
+      { mpEstado: 'pending', mpPagoId: { not: '' } },
+      { mpEstado: 'pending', createdAt: { gte: desde } },
+    ],
+  };
+}
+
+/**
+ * ¿Esta compra ocupa cupo, hoy? Gemela en memoria de `whereMenuOcupado`, para
+ * decidir sobre una fila que YA está en la mano (listas del backoffice) sin
+ * volver a la base. Las dos tienen que decir lo mismo — si tocás una, tocá la otra.
+ *
+ * @param {Object} compra - necesita mpEstado, mpPagoId y createdAt
+ * @param {Date} [ahora]
+ * @returns {boolean}
+ */
+function compraOcupaMenu(compra, ahora = new Date()) {
+  if (!compra) return false;
+  if (compra.mpEstado === 'approved') return true;
+  if (compra.mpEstado !== 'pending') return false;
+  if (compra.mpPagoId) return true;
+  const creada = compra.createdAt instanceof Date ? compra.createdAt : new Date(compra.createdAt);
+  if (Number.isNaN(creada.getTime())) return false;
+  return creada.getTime() >= ahora.getTime() - MENU_RESERVA_MINUTOS * 60 * 1000;
+}
 
 /**
  * Cuenta los menús que hoy ocupan cupo en un evento. Se DERIVA de las compras:
@@ -502,11 +563,12 @@ const ESTADOS_MENU_OCUPADO = Object.freeze(['approved', 'pending']);
  *
  * @param {Object} prismaClient - cliente Prisma o transacción
  * @param {number} eventoId
+ * @param {Date} [ahora] - inyectable para tests
  * @returns {Promise<number>}
  */
-async function contarMenusOcupados(prismaClient, eventoId) {
+async function contarMenusOcupados(prismaClient, eventoId, ahora = new Date()) {
   const agg = await prismaClient.compra.aggregate({
-    where: { eventoId, mpEstado: { in: ESTADOS_MENU_OCUPADO } },
+    where: { eventoId, ...whereMenuOcupado(ahora) },
     _sum: { cantidadMenus: true },
   });
   return agg._sum.cantidadMenus || 0;
@@ -545,6 +607,11 @@ function calcularMenusRestantes(topeMenus, ocupados) {
  * un pre-chequeo con datos viejos, y esta guarda tiene que seguir viendo la
  * realidad.
  *
+ * La compra recién insertada SIEMPRE se cuenta a sí misma: su `createdAt` es de
+ * hace milisegundos, o sea que cae en la rama reciente de `whereMenuOcupado`. Es
+ * lo que sostiene la protección contra la carrera de dos compras simultáneas por
+ * el último menú — la que se perdería contando sólo `approved`.
+ *
  * @param {Object} tx - cliente Prisma de la transacción
  * @param {number} eventoId
  * @param {number|null} topeMenus - null = sin tope, no hay nada que reservar
@@ -566,7 +633,9 @@ module.exports = {
   TIPO_ENTRADA,
   OFFSET_ART_HORAS,
   TIPO_CUPON,
-  ESTADOS_MENU_OCUPADO,
+  MENU_RESERVA_MINUTOS,
+  whereMenuOcupado,
+  compraOcupaMenu,
   normalizarCodigo,
   validarCupon,
   validarMenu,

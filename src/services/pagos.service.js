@@ -109,6 +109,11 @@ async function procesarPagoAprobado(compraId, mpPaymentId) {
  * que ya estuvieron approved — el job filtra esas antes de entrar acá, así que
  * liberar el cupón siempre es seguro (nunca liberamos un uso real).
  *
+ * Desde el 26/8/2026 tiene un segundo caller: `adminLiberarCupo`, el botón del
+ * backoffice para soltar a mano el cupo de menú que retiene un pendiente. Ese
+ * controller sostiene el mismo invariante (rechaza con 400 todo lo que no esté
+ * `pending`), y encima le pregunta a MP si hay un pago en curso antes de llamar.
+ *
  * Idempotente: si ya está en estado terminal, devuelve { ya_procesada: true }
  * sin tocar el cupón.
  *
