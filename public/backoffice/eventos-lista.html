@@ -52,6 +52,13 @@
 
         <div id="bo-alert" class="bo-alert"></div>
 
+        <!-- Qué está mostrando la portada AHORA. El 27/8 el hero amaneció vacío
+             porque el destacado era el evento del día anterior y nadie marcó el
+             siguiente: desde el backoffice era invisible. Este cartel es el que
+             convierte eso en algo que se ve sin abrir el sitio. -->
+        <div id="aviso-portada" style="display:none; border-radius:8px; padding:12px 16px;
+             margin-bottom:16px; font-size:0.92rem; line-height:1.5;"></div>
+
         <div class="d-flex justify-content-between align-items-center mb-3">
           <p style="color:#888; font-size:0.9rem; margin:0;">
             Todos los eventos del sindicato (próximos y pasados). Para crear uno nuevo, usá el botón de la derecha.
@@ -146,6 +153,7 @@
         const data = await boFetch(`/api/admin/eventos?page=${page}&limit=15`);
         todosLosEventos = data.eventos || [];
         document.getElementById('card-total').textContent = `(${data.total})`;
+        pintarAvisoPortada(data.portada);
         renderActual();
         buildPagination(
           document.getElementById('paginacion'),
@@ -157,6 +165,46 @@
         document.getElementById('eventos-body').innerHTML =
           `<tr><td colspan="9" class="text-center py-4" style="color:#fc8181;">Error: ${err.message}</td></tr>`;
       }
+    }
+
+    // Tres estados, tres mensajes distintos. El que importa es el del medio: la
+    // portada FUNCIONA (muestra el próximo por fecha) pero nadie eligió qué
+    // mostrar, y eso hay que decirlo sin alarmar — no está roto, está sin decidir.
+    function pintarAvisoPortada(portada) {
+      const el = document.getElementById('aviso-portada');
+      if (!el || !portada) return;
+
+      // Escape local: esta página no tiene helper propio y la tabla de abajo
+      // inyecta los nombres crudos (deuda vieja, no se toca acá). El aviso nuevo
+      // no hereda esa costumbre — y sobre todo, no puede tirar ReferenceError por
+      // llamar a un `esc` que en esta página no existe.
+      const esc = (v) => String(v === null || v === undefined ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+      const nombreDe = (ev) => ev ? `${esc(ev.nombre)} (${boFecha(ev.fecha)})` : '—';
+
+      if (portada.sinEventos) {
+        el.style.cssText += 'display:block; background:#3b1219; border:1px solid #7f1d1d; color:#fecaca;';
+        el.innerHTML = '<i class="bi bi-exclamation-octagon me-1"></i>'
+          + '<strong>La portada no está mostrando ningún evento.</strong> '
+          + 'No hay eventos publicados con fecha futura, así que el hero dice '
+          + '"Estamos preparando las próximas fechas".';
+        return;
+      }
+
+      if (portada.esFallback) {
+        el.style.cssText += 'display:block; background:#3a2c0a; border:1px solid #a16207; color:#fde68a;';
+        el.innerHTML = '<i class="bi bi-star me-1"></i>'
+          + '<strong>Ningún evento está marcado como destacado.</strong> '
+          + `Mientras tanto la portada muestra el más próximo: <strong>${nombreDe(portada.mostrando)}</strong>. `
+          + 'Si querés que el hero muestre otro, abrilo y tildá <em>"Evento destacado"</em>.';
+        return;
+      }
+
+      el.style.cssText += 'display:block; background:#0f2a1d; border:1px solid #166534; color:#bbf7d0;';
+      el.innerHTML = '<i class="bi bi-check-circle me-1"></i>'
+        + `En la portada se está mostrando <strong>${nombreDe(portada.mostrando)}</strong>.`;
     }
 
     // Aplica filtros + orden actuales y re-renderiza la tabla. Todo en cliente:
