@@ -95,9 +95,15 @@ log "backup START ts=$TS"
 
 # --- 1. SQLite backup atómico ---
 # La imagen node:20-alpine del app no tiene sqlite3 CLI. Usamos una alpine
-# auxiliar que monta el volumen read-only y ejecuta sqlite3 ".backup".
+# auxiliar que monta el volumen y ejecuta sqlite3 ".backup".
+#
+# El volumen va montado RW, no read-only: desde que la base está en modo WAL
+# (1/9/2026), abrirla exige poder crear el índice compartido `prod.db-shm`, y
+# sobre un montaje `:ro` eso falla con "unable to open database file" — el
+# backup se caería entero. `.backup` no modifica los datos de la fuente; lo
+# único que escribe es ese archivo auxiliar.
 docker run --rm \
-  -v "$DB_VOLUME":/src:ro \
+  -v "$DB_VOLUME":/src \
   -v "$BACKUP_DIR":/dst \
   alpine sh -c "apk add --no-cache sqlite >/dev/null 2>&1 && sqlite3 /src/prod.db \".backup /dst/prod-$TS.db\"" \
   || on_fail "sqlite .backup"

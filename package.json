@@ -20,6 +20,7 @@
     "test:smoke:hero": "node scripts/smoke-hero.js",
     "test:loadtest": "node scripts/loadtest-checkout.js",
     "test:integration:qr": "node tests/integration/qr-persistence.test.js",
+    "test:integration:emision": "node tests/integration/entradas-emision-resiliente.test.js",
     "test:integration:precios": "node tests/integration/precios.test.js",
     "test:integration:menu": "node tests/integration/menu-checkout.test.js",
     "test:integration:cupones": "node tests/integration/cupones-admin.test.js",
