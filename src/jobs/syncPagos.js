@@ -1,7 +1,11 @@
 const prisma = require('../utils/prisma');
 const config = require('../config');
 const mpService = require('../services/mercadopago.service');
-const { procesarPagoAprobado, procesarPagoCancelado } = require('../services/pagos.service');
+const {
+  procesarPagoAprobado,
+  procesarPagoCancelado,
+  repararComprasSinEntradas,
+} = require('../services/pagos.service');
 
 const VENTANA_HORAS = 168;
 const HORAS_AUTOCANCEL = 72;
@@ -15,6 +19,13 @@ async function syncPagosPendientes() {
   corriendo = true;
 
   try {
+    // Antes que nada, la red de seguridad: compras cobradas que se quedaron sin
+    // entradas. Va acá arriba y no al final porque el camino de los pendientes
+    // tiene varios `continue` y un early return, y una reparación que solo corre
+    // cuando el resto salió bien no es una red. No cuesta nada cuando no hay
+    // nada roto: es un NOT EXISTS sobre las aprobadas.
+    await repararComprasSinEntradas();
+
     const desde = new Date(Date.now() - VENTANA_HORAS * 60 * 60 * 1000);
     const cutoffCancel = new Date(Date.now() - HORAS_AUTOCANCEL * 60 * 60 * 1000);
 

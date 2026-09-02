@@ -8,6 +8,137 @@ const brevoService = require('./brevo.service');
 const precios = require('./precios.service');
 
 /**
+ * Cuánto margen tiene la transacción que crea las entradas.
+ *
+ * El default de Prisma son 5000 ms y el 27/8/2026 no alcanzaron: una compra de 7
+ * entradas hacía 8 statements (1 update de stock + 7 inserts) contra una SQLite
+ * que en ese momento también estaba atendiendo al cron de pagos. La transacción
+ * se cerró a los 5088 ms, la compra quedó `approved` sin una sola entrada y la
+ * compradora se enteró cinco días después.
+ *
+ * Dos cambios contra eso, y son independientes: el trabajo de adentro bajó a 2
+ * statements (`createMany` en vez de N inserts) y el margen subió a 20 s.
+ */
+const TX_OPTS = { timeout: 20000, maxWait: 15000 };
+
+/**
+ * Emite las entradas que le FALTAN a una compra: genera el QR de cada una, las
+ * crea, ajusta el stock de la tanda por las que efectivamente creó y manda el
+ * mail con todas.
+ *
+ * Es el corazón compartido entre el camino feliz (`procesarPagoAprobado`, donde
+ * "las que faltan" son todas) y la reparación (`repararComprasSinEntradas`,
+ * donde puede ser un remanente). Escribirlo una sola vez es lo que garantiza
+ * que una entrada reparada sea idéntica a una emitida bien la primera vez.
+ *
+ * El increment del stock va por `creadas` y no por `cantidadEntradas` porque
+ * vive en la misma transacción que los inserts: si no hay entradas, tampoco
+ * hubo increment, y reparar tiene que sumar exactamente lo que emite.
+ *
+ * @param {object} compra compra con `evento` incluido (lo necesita el mail)
+ * @param {{ enviarMail?: boolean }} [opts]
+ * @returns {Promise<{ creadas: number, entradas: object[] }>}
+ */
+async function emitirEntradasFaltantes(compra, { enviarMail = true } = {}) {
+  const yaCreadas = await prisma.entrada.count({ where: { compraId: compra.id } });
+  const faltan = compra.cantidadEntradas - yaCreadas;
+  if (faltan <= 0) return { creadas: 0, entradas: [] };
+
+  // Los PNG se escriben a disco ANTES de abrir la transacción: es E/S lenta y no
+  // hay razón para hacerla con la base tomada. Si el disco falla, falla acá,
+  // antes de haber tocado nada.
+  const qrFiles = [];
+  for (let i = 0; i < faltan; i++) {
+    const codigo = uuidv4();
+    const qrImageUrl = await qrService.generarQR(codigo);
+    qrFiles.push({ codigo, qrImageUrl });
+  }
+
+  const entradas = await prisma.$transaction(async (tx) => {
+    // MENÚ DE CASA METRO: acá NO se genera nada por menú. Los menús no son
+    // entradas — no tienen QR ni fila en `Entrada`, y no cuentan contra el aforo
+    // de la tanda. Viven como cantidad en la compra (`Compra.cantidadMenus`), y el
+    // control de entrega es la lista impresa que tilda la cocina, no el validador.
+    //
+    // Source of truth: tanda de la compra. Todas las compras post-backfill
+    // tienen tandaId asignado; si por algún edge case llegara null, el increment
+    // se saltea — preferimos no tocar contadores a tocar el equivocado.
+    if (compra.tandaId) {
+      await tx.tanda.update({
+        where: { id: compra.tandaId },
+        data: { cantidadVendida: { increment: qrFiles.length } },
+      });
+    }
+
+    await tx.entrada.createMany({
+      data: qrFiles.map(({ codigo, qrImageUrl }) => ({
+        compraId: compra.id,
+        codigoQR: codigo,
+        qrImageUrl,
+      })),
+    });
+
+    return tx.entrada.findMany({
+      where: { compraId: compra.id },
+      orderBy: { id: 'asc' },
+    });
+  }, TX_OPTS);
+
+  if (!enviarMail) return { creadas: qrFiles.length, entradas };
+
+  const entradasParaMail = [];
+  for (const entrada of entradas) {
+    const qrBase64 = await qrService.generarQRBase64(entrada.codigoQR);
+    entradasParaMail.push({ ...entrada, qrBase64: qrBase64.split(',')[1] });
+  }
+
+  // Envío en SEGUNDO PLANO (no bloqueante): las entradas y el QR ya están
+  // persistidos y la página de éxito los muestra desde la BD, así que no hace
+  // falta esperar a Brevo (que con reintentos puede tardar varios segundos y
+  // colgaría la respuesta post-pago). El mail es "no crítico": si falla, queda
+  // logueado y se puede reenviar desde el backoffice.
+  brevoService.enviarConfirmacion({
+    email: compra.email,
+    nombre: compra.nombre,
+    evento: compra.evento,
+    entradas: entradasParaMail,
+    compra,
+  }).catch((mailErr) => {
+    console.error('Error al enviar email (no crítico):', mailErr.message);
+  });
+
+  return { creadas: qrFiles.length, entradas };
+}
+
+/**
+ * Devuelve una compra a `pending` cuando la emisión de entradas falló DESPUÉS de
+ * haber ganado el lock. Sin esto, el lock que existe para no duplicar entradas
+ * se convierte en el candado que impide generarlas: la compra queda `approved` y
+ * ningún camino vuelve a intentarlo, porque los tres (webhook, checkAndProcess y
+ * cron) hacen early return ante una compra ya aprobada.
+ *
+ * Con la compra otra vez en `pending`, `syncPagosPendientes` la encuentra en la
+ * vuelta siguiente, ve el pago aprobado en MP y la reprocesa: se arregla sola en
+ * unos 60 segundos.
+ *
+ * Se niega a soltar el lock si ya hay entradas creadas — ahí el problema es otro
+ * y volver a `pending` sería peor (dejaría entradas vivas colgando de una compra
+ * que el sistema considera impaga).
+ *
+ * @returns {Promise<boolean>} true si la compra volvió a pending
+ */
+async function soltarLockAprobado(compraId) {
+  const entradas = await prisma.entrada.count({ where: { compraId } });
+  if (entradas > 0) return false;
+
+  const r = await prisma.compra.updateMany({
+    where: { id: compraId, mpEstado: 'approved' },
+    data: { mpEstado: 'pending' },
+  });
+  return r.count > 0;
+}
+
+/**
  * Procesa una compra aprobada: actualiza estado, genera entradas con QR y envía email.
  *
  * Idempotencia con lock optimista:
@@ -16,10 +147,9 @@ const precios = require('./precios.service');
  * obtiene count=1 y avanza; los otros obtienen count=0 y hacen early return.
  * Esto previene entradas/emails/cantidadVendida duplicados.
  *
- * Trade-off: si falla DESPUÉS del lock (ej. qr.generarQR lanza), la compra
- * queda como approved sin entradas generadas. Es estado inconsistente pero
- * recuperable manualmente desde backoffice, y es mejor que la alternativa
- * (mantener el lock fuera y tener duplicados silenciosos).
+ * Si la emisión falla después del lock, la compra vuelve a `pending`
+ * (`soltarLockAprobado`) y el cron la reprocesa en la vuelta siguiente. Antes no
+ * volvía: quedaba cobrada y sin entradas, sin ningún camino que la retomara.
  *
  * @param {number} compraId
  * @param {string|number} mpPaymentId
@@ -42,61 +172,67 @@ async function procesarPagoAprobado(compraId, mpPaymentId) {
 
   if (!compra) throw new Error(`Compra ${compraId} no encontrada tras ganar lock`);
 
-  const codigos = Array.from({ length: compra.cantidadEntradas }, () => uuidv4());
-  const qrFiles = [];
-  for (const codigo of codigos) {
-    const qrImageUrl = await qrService.generarQR(codigo);
-    qrFiles.push({ codigo, qrImageUrl });
+  try {
+    const { creadas } = await emitirEntradasFaltantes(compra);
+    return { procesada: true, entradas: creadas };
+  } catch (err) {
+    const volvioAPending = await soltarLockAprobado(compraId);
+    console.error(
+      `❌ Compra #${compraId}: falló la emisión de entradas (${err.message}). ` +
+      (volvioAPending
+        ? 'Vuelve a pending — el sync la reprocesa en la próxima vuelta.'
+        : 'NO se pudo soltar el lock (ya tenía entradas) — revisar a mano.')
+    );
+    throw err;
   }
+}
 
-  const entradasCreadas = await prisma.$transaction(async (tx) => {
-    // MENÚ DE CASA METRO: acá NO se genera nada por menú. Los menús no son
-    // entradas — no tienen QR ni fila en `Entrada`, y no cuentan contra el aforo
-    // de la tanda. Viven como cantidad en la compra (`Compra.cantidadMenus`), y el
-    // control de entrega es la lista impresa que tilda la cocina, no el validador.
-    //
-    // Source of truth: tanda de la compra. Todas las compras post-backfill
-    // tienen tandaId asignado; si por algún edge case llegara null, el increment
-    // se saltea — preferimos no tocar contadores a tocar el equivocado.
-    if (compra.tandaId) {
-      await tx.tanda.update({
-        where: { id: compra.tandaId },
-        data: { cantidadVendida: { increment: compra.cantidadEntradas } },
-      });
-    }
+/**
+ * Barrido de red: busca compras aprobadas que se quedaron sin entradas y las
+ * emite. Es la última línea, la que cubre lo que `soltarLockAprobado` no llega a
+ * cubrir — un proceso que muere entre el lock y el catch, un deploy en el peor
+ * milisegundo, cualquier cosa que deje el estado a mitad de camino.
+ *
+ * Solo mira compras que llevan un rato quietas (`ANTIGUEDAD_MINIMA_MS`). Sin esa
+ * espera se metería en el medio de dos cosas que están bien: un
+ * `procesarPagoAprobado` todavía en vuelo, y `adminEnviarInvitacion`, que crea la
+ * compra `approved` y su entrada en dos pasos separados — el barrido vería la
+ * ventana entre ambos como una compra rota y emitiría una entrada de más.
+ *
+ * @param {{ limite?: number }} [opts]
+ * @returns {Promise<Array<{ compraId: number, entradas: number, email: string }>>}
+ */
+const ANTIGUEDAD_MINIMA_MS = 5 * 60 * 1000;
 
-    const entradas = [];
-    for (const { codigo, qrImageUrl } of qrFiles) {
-      const entrada = await tx.entrada.create({
-        data: { compraId: compra.id, codigoQR: codigo, qrImageUrl },
-      });
-      entradas.push(entrada);
-    }
-    return entradas;
+async function repararComprasSinEntradas({ limite = 5 } = {}) {
+  const quietasDesde = new Date(Date.now() - ANTIGUEDAD_MINIMA_MS);
+
+  const rotas = await prisma.compra.findMany({
+    where: {
+      mpEstado: 'approved',
+      entradas: { none: {} },
+      updatedAt: { lt: quietasDesde },
+    },
+    include: { evento: true },
+    orderBy: { id: 'desc' },
+    take: limite,
   });
 
-  const entradasParaMail = [];
-  for (const entrada of entradasCreadas) {
-    const qrBase64 = await qrService.generarQRBase64(entrada.codigoQR);
-    entradasParaMail.push({ ...entrada, qrBase64: qrBase64.split(',')[1] });
+  const reparadas = [];
+  for (const compra of rotas) {
+    try {
+      const { creadas } = await emitirEntradasFaltantes(compra);
+      if (!creadas) continue;
+      reparadas.push({ compraId: compra.id, entradas: creadas, email: compra.email });
+      console.log(
+        `🩹 Compra #${compra.id} reparada — ${creadas} entrada(s) emitida(s), ` +
+        `stock ajustado y mail a ${compra.email}`
+      );
+    } catch (err) {
+      console.error(`Error reparando compra #${compra.id}:`, err.message);
+    }
   }
-
-  // Envío en SEGUNDO PLANO (no bloqueante): las entradas y el QR ya están
-  // persistidos y la página de éxito los muestra desde la BD, así que no hace
-  // falta esperar a Brevo (que con reintentos puede tardar varios segundos y
-  // colgaría la respuesta post-pago). El mail es "no crítico": si falla, queda
-  // logueado y se puede reenviar desde el backoffice.
-  brevoService.enviarConfirmacion({
-    email: compra.email,
-    nombre: compra.nombre,
-    evento: compra.evento,
-    entradas: entradasParaMail,
-    compra,
-  }).catch((mailErr) => {
-    console.error('Error al enviar email (no crítico):', mailErr.message);
-  });
-
-  return { procesada: true, entradas: entradasParaMail.length };
+  return reparadas;
 }
 
 /**
@@ -245,4 +381,10 @@ async function revertirCompraAprobada(compraId, { revertidaPor = null, motivo = 
   });
 }
 
-module.exports = { procesarPagoAprobado, procesarPagoCancelado, revertirCompraAprobada };
+module.exports = {
+  procesarPagoAprobado,
+  procesarPagoCancelado,
+  revertirCompraAprobada,
+  emitirEntradasFaltantes,
+  repararComprasSinEntradas,
+};

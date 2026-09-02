@@ -195,6 +195,32 @@ function validateMpTokens() {
   return errors;
 }
 
+/**
+ * Pone la SQLite en modo WAL y le da paciencia a los escritores.
+ *
+ * En el modo por default (`journal_mode=delete`) un lector y un escritor no
+ * pueden convivir: mientras el cron de pagos lee, el webhook que quiere escribir
+ * las entradas espera, y si espera demasiado su transacción muere. Eso fue
+ * exactamente lo que dejó la compra #2352 cobrada y sin QR el 27/8/2026.
+ *
+ * En WAL los lectores no bloquean al escritor, y `busy_timeout` hace que una
+ * escritura que encuentra la base tomada espere hasta 15 s en vez de fallar al
+ * toque. El modo WAL queda grabado en el archivo (sobrevive reinicios); el
+ * busy_timeout es por conexión y por eso se aplica en cada arranque.
+ *
+ * No es bloqueante: si los PRAGMA fallan, la app arranca igual — la base sigue
+ * funcionando como antes, solo que sin la mejora.
+ */
+async function configurarSQLite() {
+  try {
+    const [modo] = await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL');
+    await prisma.$queryRawUnsafe('PRAGMA busy_timeout=15000');
+    console.log(`🗄  SQLite journal_mode=${modo.journal_mode} · busy_timeout=15s`);
+  } catch (err) {
+    console.error('WARN: no se pudieron aplicar los PRAGMA de SQLite:', err.message);
+  }
+}
+
 async function start() {
   if (config.nodeEnv === 'production' && config.sessionSecret === 'dev_secret_change_in_production') {
     console.error('FATAL: SESSION_SECRET no configurado en producción. Setear en .env antes de arrancar.');
@@ -214,6 +240,7 @@ async function start() {
   try {
     await prisma.$connect();
     console.log('✅ Base de datos conectada');
+    await configurarSQLite();
 
     server = app.listen(config.port, () => {
       console.log(`🚀 Servidor corriendo en http://localhost:${config.port}`);
