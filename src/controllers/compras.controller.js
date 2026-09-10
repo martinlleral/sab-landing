@@ -210,6 +210,14 @@ async function crearPreferencia(req, res) {
       precio: precioCalc.precioUnitarioFinal,
       cantidad: cant,
       email,
+      // Los datos del comprador salen de la COMPRA, no del body: es lo que
+      // efectivamente quedó guardado (con el telefono ya normalizado a ''), así
+      // el payer que ve MP y el que ve el backoffice son el mismo. El antifraude
+      // de MP los cruza para decidir si aprueba — mandar solo el email sube el
+      // score de riesgo y produce `rejected_high_risk` sin causa real.
+      nombre: compra.nombre,
+      apellido: compra.apellido,
+      telefono: compra.telefono,
       preferenciaId: String(compra.id),
       // El menú va como ítem APARTE de la preferencia, no sumado al precio de la
       // entrada: así el comprador ve las dos líneas en el checkout de MP y el
