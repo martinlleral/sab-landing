@@ -37,7 +37,7 @@ Es una landing con ticketera propia (sin Passline ni Eventbrite) que le permite 
 
 - Mostrar los shows próximos del ciclo **Amor de Miércoles** y giras externas
 - Vender entradas online con QR único por entrada (sistema antifraude)
-- Cobrar directo a la cuenta MercadoPago del SAB (sin comisiones intermedias: **ahorro estimado de $6-8M/año** vs. plataformas de ticketera externas)
+- Cobrar directo a la cuenta MercadoPago del SAB, sin la comisión de una ticketera externa (Passline, Eventbrite)
 - Enviar el QR al mail del comprador automáticamente
 - Validar entradas en la puerta del show con cámara o ingreso manual
 - Capturar contactos para un futuro sistema de socios (waitlist con encuesta de research)
