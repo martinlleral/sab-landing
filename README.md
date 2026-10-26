@@ -6,7 +6,7 @@
 [![Stars](https://img.shields.io/github/stars/martinlleral/sab-landing?style=social)](https://github.com/martinlleral/sab-landing)
 [![Status: production](https://img.shields.io/badge/status-in%20production-success)](https://sindicatoargentinodeboleros.com.ar/)
 
-Landing page + ticketera propia + sistema de suscripciones para el **Sindicato Argentino de Boleros**, orquesta cooperativa de 21 músicos y músicas de La Plata, Argentina.
+Landing page + ticketera propia + panel de ventas para el **Sindicato Argentino de Boleros**, orquesta cooperativa de 21 músicos y músicas de La Plata, Argentina.
 
 > **Basado en el trabajo original de Luciano Menez** ([@lucianomenez](https://gitlab.com/lucianomenez) en GitLab), quien desarrolló el stack completo de la ticketera en 2025. Este repositorio es la continuación del proyecto: mantenimiento, extensiones y migración a infraestructura propia del SAB a partir de 2026.
 
@@ -21,9 +21,11 @@ Este proyecto es un ejemplo concreto de **trabajo colaborativo en capas**:
 
 - **2025** — Luciano Menez desarrolla desde cero la ticketera propia del SAB: Node.js + Express + Prisma + SQLite, integración MercadoPago, generación de QR únicos antifraude, sistema de mails transaccionales, backoffice admin completo con CMS de home/eventos, lector de QR en puerta, y pipeline de deploy con Docker + GitLab CI. Lucho hace todo esto **de onda** (pro bono) como aporte al SAB — un trabajo serio que evitó que el sindicato tuviera que pagar comisiones de Passline/Eventbrite y le dio independencia tecnológica real.
 
-- **Abril 2026** — El proyecto pasa a manos de Martín Lleral, que toma el mantenimiento + extensiones como parte de un Sprint 2: agregar sistema de suscripciones, waitlist con encuesta de research, fixes de seguridad y accesibilidad, migración de infraestructura a una cuenta DigitalOcean propia del SAB, y publicación del código como open source con licencia MIT.
+- **Abril 2026** — El proyecto pasa a manos de Martín Lleral, que toma el mantenimiento + extensiones como parte de un Sprint 2: tandas de precio, waitlist con encuesta de research (el primer paso hacia un sistema de socios), fixes de seguridad y accesibilidad, migración de infraestructura a una cuenta DigitalOcean propia del SAB, y publicación del código como open source con licencia MIT.
 
-La mayor parte del código de la ticketera — el corazón funcional del sistema — es obra de Lucho. Las extensiones de este repo (waitlist, sección "Quiénes somos", fixes de seguridad, runbook de deploy, auditorías) son contribuciones posteriores de Martín. Ambos trabajos existen en el mismo árbol y ambas autorías están reconocidas en el [`LICENSE`](LICENSE).
+- **Mayo a agosto de 2026** — Los sprints siguientes suman lo que el SAB usa para vender y controlar cada fecha: cupones, entradas a la gorra, tableros de ventas y asistencia, el link con el reporte de cada fecha, el link de venta por evento, el link para validar en la puerta, las devoluciones, la planilla de compradores y la venta del menú con la entrada. En agosto los cobros pasan a la cuenta de MercadoPago de la cooperativa.
+
+La base de la ticketera — la compra con MercadoPago, el QR de cada entrada, los mails y el panel — es obra de Lucho. Lo que vino después (waitlist, tandas, cupones, tableros, los links para compartir, devoluciones, sección "Quiénes somos", fixes de seguridad, runbook de deploy, auditorías) son contribuciones de Martín. Ambos trabajos existen en el mismo árbol y ambas autorías están reconocidas en el [`LICENSE`](LICENSE).
 
 Las extensiones del Sprint 2 fueron desarrolladas usando [Claude Code](https://claude.ai/code) (Anthropic) como co-autor técnico. Las decisiones de diseño, prioridades de seguridad y research son de Martín; la ejecución de código, refactors y documentación técnica fueron producidos en pares humano-AI. Cada commit tiene coautoría explícita (`Co-Authored-By: Claude`).
 
@@ -57,9 +59,9 @@ Es una landing con ticketera propia (sin Passline ni Eventbrite) que le permite 
 | Auth | `express-session` + `bcryptjs` |
 | Upload de imágenes | `multer` |
 | Captura de research | Supabase (Postgres) para waitlist de socios |
-| Reverse proxy / SSL | Nginx + Let's Encrypt |
+| Reverse proxy / SSL | Nginx detrás de Cloudflare |
 | Contenedores | Docker + Docker Compose |
-| Hosting | DigitalOcean droplet básico ($4/mes) |
+| Hosting | DigitalOcean, en una cuenta propia del SAB |
 
 ### Arquitectura
 
@@ -260,12 +262,21 @@ Lucho desarrolló desde cero la ticketera propia del SAB en 2025, como aporte pr
 - El pipeline de deploy con Docker + GitLab CI
 - La configuración inicial del dominio y SSL
 
-**La mayor parte del código de este repositorio es obra suya.** Sin ese primer esfuerzo, nada de lo que vino después habría existido.
+**La base de la ticketera — la compra, el QR de cada entrada y el panel — es obra suya.** Sin ese primer esfuerzo, nada de lo que vino después habría existido.
 
 ### Martín Lleral — mantenimiento y extensiones
 GitHub: [@martinlleral](https://github.com/martinlleral)
 
-Tomó el proyecto en abril 2026 como parte de un Sprint 2 + Sprint 3 con el SAB. Contribuciones posteriores:
+Tomó el proyecto en abril de 2026 y lo siguió con el SAB sprint a sprint. Contribuciones posteriores:
+- Tandas de precio secuenciales, con las anteriores tachadas en la compra
+- Cupones de descuento por evento (porcentaje o monto fijo, con tope de usos y vencimiento)
+- Entradas «A la Gorra»: un aporte voluntario sobre el precio de la entrada
+- Tableros de ventas y asistencia, con gráficas por día, por tanda y entre eventos
+- Tres links para compartir: el de venta de cada evento, el del reporte de ventas de cada fecha y el de validar entradas en la puerta desde cualquier celular (los dos últimos, sin dar acceso al panel)
+- Devoluciones: una compra reintegrada se marca en el panel, la entrada deja de servir y el lugar vuelve a estar disponible
+- Descarga del listado de compradores a una planilla
+- Venta del menú junto con la entrada
+- El pase de los cobros a la cuenta de MercadoPago de la cooperativa
 - Auditoría técnica completa (panel de 7 expertos) y auditorías de Sprint
 - Fixes de seguridad (XSS, CORS, RLS en Supabase, rotación de admin)
 - Sección "Quiénes somos" con historia del SAB, foto grupal, hitos y artistas colaboradores
