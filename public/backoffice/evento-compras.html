@@ -691,7 +691,7 @@
               ? `<button class="btn-bo-secondary" style="padding:4px 8px; font-size:0.8rem;" onclick="reenviarMail(${c.id}, ${JSON.stringify(c.email).replace(/"/g, '&quot;')})" title="Reenviar mail con QR">
                    <i class="bi bi-envelope-arrow-up"></i> Reenviar
                  </button>
-                 <button class="btn-bo-secondary" style="color:#f6ad55; border-color:#f6ad55; padding:4px 8px; font-size:0.8rem; margin-left:4px;" onclick="devolverCompra(${c.id})" title="Marcar como devuelta (tras un refund en Mercado Pago)">
+                 <button class="btn-bo-secondary" style="color:#f6ad55; border-color:#f6ad55; padding:4px 8px; font-size:0.8rem; margin-left:4px;" onclick="devolverCompra(${c.id}, ${c.totalPagado})" title="${c.totalPagado === 0 ? 'Dar de baja la entrada' : 'Marcar como devuelta (tras un refund en Mercado Pago)'}">
                    <i class="bi bi-arrow-counterclockwise"></i> Devolver
                  </button>`
               : `<button class="btn-bo-secondary" style="color:#fc8181; border-color:#fc8181; padding:4px 8px; font-size:0.8rem;" onclick="eliminarCompra(${c.id})" title="Eliminar compra">
@@ -800,13 +800,21 @@
     // US-A: marca una compra aprobada como devuelta tras un refund en MP. El
     // prompt del motivo hace de confirmación (Cancelar aborta). Avisa si alguna
     // entrada ya había sido usada en la puerta (la devolución igual procede).
-    async function devolverCompra(id) {
+    // Una entrada en $0 (invitación o entrada incluida) no pasó por Mercado Pago: no
+    // hay reintegro que esperar, y el cartel no puede pedirlo.
+    async function devolverCompra(id, totalPagado) {
       const motivo = prompt(
-        `Marcar la compra #${id} como DEVUELTA.\n\n` +
-        `Usalo cuando Euge YA hizo el reintegro en Mercado Pago. Esto:\n` +
-        `  • invalida las entradas (dejan de servir en la puerta),\n` +
-        `  • libera el lugar (vuelve al stock) y el cupón si usó,\n` +
-        `  • saca la venta de la recaudación y los reportes.\n\n` +
+        (totalPagado === 0
+          ? `Dar de baja la entrada #${id}.\n\n` +
+            `No se pagó, así que no hay nada que reintegrar en Mercado Pago. Esto:\n` +
+            `  • invalida la entrada (deja de servir en la puerta),\n` +
+            `  • libera el lugar (vuelve al stock) y el cupón si usó,\n` +
+            `  • la saca de los reportes.\n\n`
+          : `Marcar la compra #${id} como DEVUELTA.\n\n` +
+            `Usalo cuando Euge YA hizo el reintegro en Mercado Pago. Esto:\n` +
+            `  • invalida las entradas (dejan de servir en la puerta),\n` +
+            `  • libera el lugar (vuelve al stock) y el cupón si usó,\n` +
+            `  • saca la venta de la recaudación y los reportes.\n\n`) +
         `Motivo (opcional):`,
         ''
       );
@@ -817,7 +825,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ motivo: String(motivo).trim() }),
         });
-        let msg = `Compra #${id} marcada como devuelta.`;
+        let msg = totalPagado === 0 ? `Entrada #${id} dada de baja.` : `Compra #${id} marcada como devuelta.`;
         if (data.stock_devuelto > 0) msg += ` Se liberaron ${data.stock_devuelto} lugar(es).`;
         if (data.libero_cupon) msg += ' Cupón liberado.';
         if (data.entradas_ya_validadas > 0) {

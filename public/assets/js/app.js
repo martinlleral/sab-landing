@@ -959,6 +959,12 @@ function updateTotal() {
 
   totalEl.textContent = `$ ${formatPrecio(total)}`;
 
+  // La entrada incluida: en $0 con cupón de afiliadxs no hay paso por MP.
+  const incluidaNota = document.getElementById('modal-incluida-nota');
+  if (incluidaNota) {
+    incluidaNota.style.display = (cuponAplicado?.paraAfiliados && total === 0) ? 'block' : 'none';
+  }
+
   // Breakdown visible cuando hay descuento, excedente por aporte O menú: en los
   // tres casos el total deja de ser "cantidad × precio de la card".
   const breakdown = document.getElementById('modal-breakdown');
@@ -1357,9 +1363,16 @@ async function aplicarCupon() {
       tipo: result.cupon.tipo,
       valor: result.cupon.valor,
       unaEntradaPorCompra: result.cupon.unaEntradaPorCompra === true,
+      paraAfiliados: result.cupon.paraAfiliados === true,
     };
     renderCuponPanel();
     updateTotal();
+    // En el celular el total y la nota quedan más abajo que el cupón, tapados por
+    // el pie del modal. 'nearest' sólo mueve si hace falta.
+    const incluidaNota = document.getElementById('modal-incluida-nota');
+    if (incluidaNota && incluidaNota.style.display !== 'none') {
+      incluidaNota.scrollIntoView({ block: 'nearest' });
+    }
   } catch (err) {
     cuponAplicado = null;
     setCuponFeedback(`❌ ${err.message}`, true);
@@ -1448,7 +1461,9 @@ async function handleComprar() {
       body: JSON.stringify(body),
     });
 
-    if (result.init_point) {
+    if (result.invitacion) {
+      mostrarEntradaEnCamino(result.email);
+    } else if (result.init_point) {
       window.location.href = result.init_point;
     } else {
       throw new Error('No se recibió link de pago');
@@ -1485,6 +1500,20 @@ async function handleComprar() {
     btn.disabled = false;
     if (spinner) spinner.style.display = 'none';
   }
+}
+
+// La entrada incluida no pasa por MP, así que no hay vuelta con ?status=: se cierra
+// el modal y se muestra acá mismo, en la misma pantalla que el resultado de un pago.
+function mostrarEntradaEnCamino(email) {
+  const modalEl = document.getElementById('modalCompra');
+  if (modalEl && typeof bootstrap !== 'undefined') bootstrap.Modal.getInstance(modalEl)?.hide();
+
+  const mainContent = document.getElementById('main-content');
+  const statusSection = document.getElementById('pago-status');
+  if (mainContent) mainContent.style.display = 'none';
+  if (statusSection) statusSection.style.display = 'flex';
+  renderPaymentStatus('incluida', null, { email });
+  window.scrollTo(0, 0);
 }
 
 // Traduce los `code` de las reglas duras del backend a algo que se entienda en el
@@ -1647,6 +1676,20 @@ function renderPaymentStatus(status, preferenciaId, data) {
   }
 
   const states = {
+    incluida: {
+      icon: '🎟️',
+      title: '¡Tu entrada está en camino!',
+      color: '#48bb78',
+      html: `
+        <p class="pago-status-msg">
+          No tenés nada que pagar. Te la mandamos a <strong>${escapeHtml(data?.email || 'tu mail')}</strong> con su código QR.
+        </p>
+        ${avisoMail}
+        <p style="color:#888;font-size:.85rem;">
+          Si en 10 minutos no te llegó, escribinos por
+          <a href="https://wa.me/5492215917409" target="_blank" rel="noopener" style="color:#48bb78;">WhatsApp</a>.
+        </p>`,
+    },
     approved: {
       icon: '🎉',
       title: '¡Tu compra fue recibida!',

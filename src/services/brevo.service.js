@@ -201,6 +201,19 @@ async function resolverDireccion(evento) {
   return [sede, ciudad].filter(Boolean).join(', ');
 }
 
+// A quien no pagó nada (entrada incluida, invitación) no se le habla de una compra:
+// podría creer que le cobraron.
+function fraseConfirmacion(compra, cantidadEntradas) {
+  if (compra?.totalPagado !== 0) return 'Tu compra fue confirmada';
+  return cantidadEntradas === 1 ? 'Tu entrada está confirmada' : 'Tus entradas están confirmadas';
+}
+
+function escapeHtml(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 function buildHtml({ nombre, evento, entradas, compra, direccionLinea }) {
   const esSingular = entradas.length === 1;
   const aporteBlock = buildAporteBlock(compra);
@@ -227,11 +240,11 @@ function buildHtml({ nombre, evento, entradas, compra, direccionLinea }) {
   <div style="max-width:600px; margin:0 auto; background:#fff;">
     <div style="background:#111; padding:32px; text-align:center;">
       <h1 style="color:#fff; margin:0; font-size:20px; letter-spacing:2px;">🎵 SINDICATO ARGENTINO DE BOLEROS</h1>
-      <p style="color:#ccc; margin:8px 0 0;">Confirmación de compra</p>
+      <p style="color:#ccc; margin:8px 0 0;">Confirmación de ${compra?.totalPagado === 0 ? 'entrada' : 'compra'}</p>
     </div>
     <div style="padding:32px;">
-      <h2 style="color:#111;">¡Hola, ${nombre}!</h2>
-      <p style="color:#444; font-size:16px;">Tu compra fue confirmada. A continuación encontrás ${esSingular ? 'tu entrada con el código QR' : 'tus entradas con los códigos QR'} para ingresar al evento.</p>
+      <h2 style="color:#111;">¡Hola, ${escapeHtml(nombre)}!</h2>
+      <p style="color:#444; font-size:16px;">${fraseConfirmacion(compra, entradas.length)}. A continuación encontrás ${esSingular ? 'tu entrada con el código QR' : 'tus entradas con los códigos QR'} para ingresar al evento.</p>
 
       <div style="background:#f9f9f9; border-radius:8px; padding:16px; margin:24px 0;">
         <h3 style="color:#111; margin:0 0 12px;">📅 Detalle del Evento</h3>
@@ -300,7 +313,7 @@ async function enviarConfirmacion({ email, nombre, evento, entradas, compra }) {
   const text = [
     `Hola ${nombre},`,
     '',
-    `Tu compra fue confirmada para ${evento.nombre} (${formatFecha(evento.fecha)}, ${evento.hora} hs).`,
+    `${fraseConfirmacion(compra, entradas.length)} para ${evento.nombre} (${formatFecha(evento.fecha)}, ${evento.hora} hs).`,
     `Dirección: ${direccionLinea}`,
     '',
     `Adjuntamos tu${entradas.length === 1 ? '' : 's'} entrada${entradas.length === 1 ? '' : 's'} con código QR. Presentá el QR en la puerta del evento.`,

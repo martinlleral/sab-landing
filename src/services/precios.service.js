@@ -57,6 +57,68 @@ function normalizarCodigo(codigo) {
   return String(codigo || '').trim().toUpperCase();
 }
 
+// Para comparar mails, no para guardarlos: mayúsculas y espacios no cambian de
+// persona. Los alias (puntos, `+algo`) se dejan: esto es un freno, no una garantía.
+function normalizarEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+/**
+ * ¿El cupón sólo vale para compras de una entrada? El de afiliados siempre: el
+ * beneficio es de una entrada por persona, aunque en el panel se haya destildado
+ * el interruptor. Si no fuera así, un cupón al 100 % daría varias entradas gratis.
+ */
+function cuponEsDeUnaEntrada(cupon) {
+  return !!(cupon && (cupon.unaEntradaPorCompra || cupon.paraAfiliados));
+}
+
+/**
+ * ¿Esta compra es una entrada incluida en la afiliación? Si lo es, sale como una
+ * invitación: sin Mercado Pago, aprobada y con su QR por mail.
+ *
+ * Se mira el TOTAL y no el «100 %»: un cupón de monto que cubre el precio también
+ * llega acá, y con menú o aporte el total no da $0 y se paga por MP. Un cupón
+ * común al 100 % NO entra: sigue yendo a MP.
+ */
+function esEntradaIncluida(cupon, cantidad, totalPagado) {
+  return !!(cupon && cupon.paraAfiliados) && cantidad === 1 && totalPagado === 0;
+}
+
+/**
+ * Un uso por mail en cada show con los cupones de afiliados. Es un freno, no una
+ * garantía: el mail se puede cambiar.
+ *
+ * Cuenta las compras vivas, con la misma definición que el cupo de menús: una
+ * devuelta o cancelada libera el mail, y un pendiente abandonado también (si no,
+ * quien cierra el checkout de MP queda trabado hasta el autocancel de 72 h).
+ *
+ * Se llama dentro de la transacción: Prisma las abre en SQLite con BEGIN IMMEDIATE,
+ * así que dos pedidos simultáneos se ordenan y el segundo ya ve la compra del
+ * primero. La comparación va en memoria porque SQLite compara mails con
+ * mayúsculas tal como se escribieron; son pocas compras por show.
+ *
+ * @param {Object} tx - cliente Prisma de la transacción
+ * @param {number} eventoId
+ * @param {string} email
+ * @param {Date} [ahora] - inyectable para tests
+ */
+async function verificarMailAfiliados(tx, eventoId, email, ahora = new Date()) {
+  const vivas = await tx.compra.findMany({
+    where: {
+      eventoId,
+      ...whereMenuOcupado(ahora),
+      cuponUsos: { some: { cupon: { paraAfiliados: true } } },
+    },
+    select: { email: true },
+  });
+  const buscado = normalizarEmail(email);
+  if (vivas.some((c) => normalizarEmail(c.email) === buscado)) {
+    const e = new Error('Este mail ya tiene su entrada de afiliadx para este show. Si no te llegó, escribinos por WhatsApp.');
+    e.code = 'CUPON_MAIL_YA_USADO';
+    throw e;
+  }
+}
+
 /**
  * Valida un cupón contra un evento sin mutar estado. Tira Error con .code para
  * que el controller mapee a HTTP 400 con mensaje específico.
@@ -104,7 +166,7 @@ function validarCupon(cupon, eventoId, { cantidad, ahora = new Date() } = {}) {
   // Va última a propósito: es la única que la persona arregla sola (cambiando la
   // cantidad). Pedirle que elija 1 entrada para un cupón vencido es mandarla a
   // arreglar algo que no la va a destrabar.
-  if (cupon.unaEntradaPorCompra && cantidad !== 1) {
+  if (cuponEsDeUnaEntrada(cupon) && cantidad !== 1) {
     const e = new Error('Este cupón vale para una sola entrada por compra. Para usarlo, elegí 1 entrada.');
     e.code = 'CUPON_UNA_ENTRADA';
     throw e;
@@ -663,6 +725,10 @@ module.exports = {
   whereMenuOcupado,
   compraOcupaMenu,
   normalizarCodigo,
+  normalizarEmail,
+  cuponEsDeUnaEntrada,
+  esEntradaIncluida,
+  verificarMailAfiliados,
   validarCupon,
   validarMenu,
   calcularCorteMenu,

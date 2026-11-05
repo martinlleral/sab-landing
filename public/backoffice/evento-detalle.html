@@ -521,7 +521,8 @@
                   </div>
                   <div class="col-12" style="margin-top:4px;">
                     <small style="color:#888;">
-                      <strong>Para afiliadxs:</strong> es el beneficio de la afiliación.
+                      <strong>Para afiliadxs:</strong> es el beneficio de la afiliación: vale para 1 entrada y una vez
+                      por mail en cada show. Al 100 %, la entrada sale sin pasar por Mercado Pago y llega por mail.
                       <strong>Una entrada por compra:</strong> el cupón sólo se puede usar comprando 1 entrada;
                       si no, descuenta todas las entradas de la compra.
                     </small>
@@ -1021,8 +1022,8 @@
           : '<span style="color:#666;">—</span>';
         return `<tr>
           <td>${inv.id}</td>
-          <td>${inv.nombre} ${inv.apellido}</td>
-          <td style="color:#888;">${inv.email}</td>
+          <td>${esc(inv.nombre)} ${esc(inv.apellido)}${inv.esAfiliadx ? ' <span class="badge bg-success ms-1">Afiliadx</span>' : ''}</td>
+          <td style="color:#888;">${esc(inv.email)}</td>
           <td style="color:#888;">${boFecha(inv.createdAt)}</td>
           <td>${estado}</td>
         </tr>`;

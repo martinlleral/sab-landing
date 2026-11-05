@@ -15,9 +15,9 @@
  *  - La validación pública: el mismo rechazo y el dato para el checkout.
  *  - El panel: el alta y la edición guardan los dos campos; sin ellos, false.
  *  - Regresión: un cupón común sigue descontando las 2 entradas.
- *  - ⏸ Pendiente (sesión 2): la compra al 100 % con cupón de afiliados sale como
- *    invitación, sin pasar por MP. Un pendiente que empieza a pasar FALLA, para
- *    que quien lo hizo pasar le saque la marca.
+ *  - La compra al 100 % con cupón de afiliados sale como invitación, sin pasar
+ *    por MP. Un check marcado `pendiente` que empieza a pasar FALLA, para que quien
+ *    lo hizo pasar le saque la marca.
  *
  * Uso local (con dev.db):
  *   node tests/integration/cupones-afiliados.test.js
@@ -35,8 +35,7 @@ const {
 const TEST_PREFIX = 'cupones-afiliados-test-';
 
 // Mocks de MP y de Brevo (CommonJS: el controller ve la misma instancia). Brevo
-// también, aunque hoy ninguna de estas compras manda mail: el pendiente de la
-// sesión 2 sí lo va a mandar, y el .env local tiene una clave real.
+// también: la compra al 100 % manda mail, y el .env local tiene una clave real.
 let mpCalls = [];
 const originalCrearPref = mpService.crearPreferencia;
 mpService.crearPreferencia = async (args) => {
@@ -396,11 +395,11 @@ async function main() {
     );
 
     // ============================================
-    // BLOQUE 5 — ⏸ PENDIENTE (sesión 2): la entrada incluida
+    // BLOQUE 5 — La entrada incluida
     // ============================================
-    // Hoy una compra en $0 se manda igual a MP y sin pago aprobado no sale el QR.
-    // La sesión 2 hace que, con cupón de afiliados, salga como una invitación: sin
-    // MP, aprobada en $0, con su entrada y descontando cupo de la tanda.
+    // Con cupón de afiliados, una compra en $0 sale como una invitación: sin MP,
+    // aprobada, con su entrada y descontando cupo de la tanda. Los bordes están en
+    // entrada-incluida.test.js.
 
     const ev5 = await setupEvento('incluida');
     const cupAfi5 = await crearCupon(ev5.id, {
@@ -422,8 +421,7 @@ async function main() {
       mpCalls.length === 0 && compra5?.mpEstado === 'approved' && compra5?.totalPagado === 0
         && entradas5 === 1 && vendidaDespues === vendidaAntes + 1,
       `mpCalls=${mpCalls.length} estado=${compra5?.mpEstado} total=${compra5?.totalPagado} `
-        + `entradas=${entradas5} cupo ${vendidaAntes}→${vendidaDespues}`,
-      { pendiente: 'sesión 2' }
+        + `entradas=${entradas5} cupo ${vendidaAntes}→${vendidaDespues}`
     );
 
     // ============================================

@@ -65,7 +65,7 @@
       // distingue a un cupón del mes de uno común con el mismo porcentaje.
       const marcas = [
         c.paraAfiliados ? '<span class="badge bg-success ms-2">Afiliadxs</span>' : '',
-        c.unaEntradaPorCompra ? '<span class="badge bg-secondary ms-1">1 por compra</span>' : '',
+        (c.unaEntradaPorCompra || c.paraAfiliados) ? '<span class="badge bg-secondary ms-1">1 por compra</span>' : '',
       ].join('');
       return `<tr data-cupon-id="${c.id}">
         <td><code style="background:#1a1a1a;padding:3px 8px;border-radius:4px;color:#90cdf4;font-size:.9rem;">${escHtml(c.codigo)}</code>${marcas}</td>
@@ -132,16 +132,18 @@
     document.getElementById('cupon-activo').checked = true;
     document.getElementById('cupon-para-afiliados').checked = false;
     document.getElementById('cupon-una-entrada').checked = false;
+    document.getElementById('cupon-una-entrada').disabled = false;
     showWarnings(null);
   }
 
-  // El cupón de afiliadxs es de una entrada por persona: al marcarlo, se marca
-  // también «una entrada por compra». Se puede desmarcar a mano; desmarcar
-  // «para afiliadxs» no toca la otra (puede servir sola).
+  // El cupón de afiliadxs siempre es de una entrada (lo garantiza `validarCupon`):
+  // al marcarlo, la otra queda prendida y sin poder tocarse, para que la pantalla no
+  // ofrezca algo que no cambia nada. Desmarcarlo la libera, sin apagarla.
   function onParaAfiliadosChange() {
-    if (document.getElementById('cupon-para-afiliados').checked) {
-      document.getElementById('cupon-una-entrada').checked = true;
-    }
+    const paraAfiliados = document.getElementById('cupon-para-afiliados').checked;
+    const unaEntrada = document.getElementById('cupon-una-entrada');
+    if (paraAfiliados) unaEntrada.checked = true;
+    unaEntrada.disabled = paraAfiliados;
   }
 
   function actualizarSufijoValor() {

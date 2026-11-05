@@ -1,5 +1,7 @@
 const prisma = require('../utils/prisma');
-const { TIPO_CUPON, normalizarCodigo, calcularPrecioFinal } = require('../services/precios.service');
+const {
+  TIPO_CUPON, normalizarCodigo, calcularPrecioFinal, cuponEsDeUnaEntrada,
+} = require('../services/precios.service');
 const { getTandaVigente } = require('../services/tandas.service');
 
 function toBool(v) {
@@ -345,7 +347,9 @@ async function validarPublico(req, res) {
         tipo: precio.cupon.tipo,
         valor: precio.cupon.valor,
         // El checkout lo usa para sacar el cupón si después suben la cantidad.
-        unaEntradaPorCompra: precio.cupon.unaEntradaPorCompra,
+        unaEntradaPorCompra: cuponEsDeUnaEntrada(precio.cupon),
+        // Y para avisar que, si el total da $0, no se paga nada y la entrada llega por mail.
+        paraAfiliados: precio.cupon.paraAfiliados,
       },
       precio: {
         base: precio.precioBase,

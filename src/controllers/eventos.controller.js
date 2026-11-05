@@ -870,10 +870,18 @@ async function adminListarInvitaciones(req, res) {
     const eventoId = parseInt(req.params.id);
     const invitaciones = await prisma.compra.findMany({
       where: { eventoId, totalPagado: 0, mpEstado: 'approved' },
-      include: { entradas: { select: { id: true, codigoQR: true, qrImageUrl: true, validada: true, validadaAt: true } } },
+      include: {
+        entradas: { select: { id: true, codigoQR: true, qrImageUrl: true, validada: true, validadaAt: true } },
+        cuponUsos: { select: { cupon: { select: { paraAfiliados: true } } } },
+      },
       orderBy: { createdAt: 'desc' },
     });
-    return res.json(invitaciones);
+    // La entrada incluida en la afiliación cuenta como invitación (no entró plata),
+    // pero en la lista se tiene que poder distinguir de la que mandó el panel.
+    return res.json(invitaciones.map(({ cuponUsos, ...compra }) => ({
+      ...compra,
+      esAfiliadx: cuponUsos.some((u) => u.cupon.paraAfiliados),
+    })));
   } catch (err) {
     console.error('Error en adminListarInvitaciones:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });

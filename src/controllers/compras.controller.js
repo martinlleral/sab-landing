@@ -4,7 +4,9 @@ const config = require('../config');
 const mpService = require('../services/mercadopago.service');
 const brevoService = require('../services/brevo.service');
 const qrService = require('../services/qr.service');
-const { procesarPagoAprobado, procesarPagoCancelado, revertirCompraAprobada } = require('../services/pagos.service');
+const {
+  procesarPagoAprobado, procesarPagoCancelado, revertirCompraAprobada, emitirEntradasFaltantes,
+} = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
 const { calcularTotalCompra, reservarCupon, validarCupon, OFFSET_ART_HORAS } = require('../services/precios.service');
 const { compararPorApellido } = require('../utils/orden');
@@ -149,23 +151,37 @@ async function crearPreferencia(req, res) {
 
     const totalPagado = precioCalc.totalPagado;
 
+    // Con cupón de afiliados el mail es la identidad (un uso por mail en cada show)
+    // y puede ser el único camino del QR. Uno roto consumiría el uso sin entregar
+    // nada, así que acá el servidor lo valida, además del formulario.
+    const conCuponAfiliados = !!precioCalc.cupon?.paraAfiliados;
+    if (conCuponAfiliados && (typeof email !== 'string' || !EMAIL_REGEX.test(email.trim()))) {
+      return res.status(400).json({ error: 'Ingresá un email válido.', code: 'EMAIL_INVALIDO' });
+    }
+    const emailCompra = conCuponAfiliados ? email.trim() : email;
+
     // Tx atómica: si hay cupón, re-validamos dentro de la tx (defensa contra
     // cambios del admin entre cálculo y reserva), reservamos el uso, creamos
     // Compra y CuponUso. Si rompe el tope por race, el rollback deja todo intacto.
     let compra;
     try {
       compra = await prisma.$transaction(async (tx) => {
+        let entradaIncluida = false;
         if (precioCalc.cupon) {
           const cuponActual = await tx.cuponDescuento.findUnique({ where: { id: precioCalc.cupon.id } });
           validarCupon(cuponActual, tandaVigente.eventoId, { cantidad: cant });
           await reservarCupon(tx, precioCalc.cupon.id);
+          if (cuponActual.paraAfiliados) {
+            await precios.verificarMailAfiliados(tx, evento.id, emailCompra);
+          }
+          entradaIncluida = precios.esEntradaIncluida(cuponActual, cant, totalPagado);
         }
 
         const nueva = await tx.compra.create({
           data: {
             eventoId: evento.id,
             tandaId: tandaVigente.id,
-            email,
+            email: emailCompra,
             nombre,
             apellido,
             telefono: telefono || '',
@@ -176,7 +192,7 @@ async function crearPreferencia(req, res) {
             cantidadMenus: precioCalc.cantidadMenus,
             menuUnitario: precioCalc.menuUnitario,
             totalPagado,
-            mpEstado: 'pending',
+            mpEstado: entradaIncluida ? 'approved' : 'pending',
           },
         });
 
@@ -205,11 +221,29 @@ async function crearPreferencia(req, res) {
       throw err;
     }
 
+    // La entrada incluida: la compra ya nació aprobada, no hay nada que cobrar.
+    // Se emite por el mismo camino que una compra pagada, y si falla NO se devuelve
+    // a pending (sin preferencia, el cron no la retomaría): queda aprobada sin
+    // entradas, que es lo que busca `repararComprasSinEntradas` a los pocos minutos.
+    // Por eso la persona recibe el OK igual: su entrada llega por mail.
+    //
+    // La respuesta no trae el QR: si estuviera en pantalla, un mail inventado
+    // alcanzaría y el tope por mail no frenaría nada. `mpPreferenciaId` queda
+    // vacío para que el endpoint público de confirmación no la encuentre.
+    if (compra.mpEstado === 'approved') {
+      try {
+        await emitirEntradasFaltantes({ ...compra, evento });
+      } catch (err) {
+        console.error(`❌ Compra #${compra.id}: falló la emisión de la entrada incluida (${err.message}). La completa el barrido.`);
+      }
+      return res.json({ invitacion: true, compra_id: compra.id, email: compra.email });
+    }
+
     const preferencia = await mpService.crearPreferencia({
       titulo: `${evento.nombre} — ${cant} entrada(s)`,
       precio: precioCalc.precioUnitarioFinal,
       cantidad: cant,
-      email,
+      email: emailCompra,
       // Los datos del comprador salen de la COMPRA, no del body: es lo que
       // efectivamente quedó guardado (con el telefono ya normalizado a ''), así
       // el payer que ve MP y el que ve el backoffice son el mismo. El antifraude

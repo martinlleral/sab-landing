@@ -65,14 +65,20 @@ function construirBodyPreferencia({
     pending: `${base}/?status=pending`,
   };
 
-  const items = [
-    {
-      title: titulo,
-      unit_price: precio,
-      quantity: cantidad,
-      currency_id: 'ARS',
-    },
-  ];
+  // Si las entradas salen $0 y hay otra línea para cobrar (el menú), la de las
+  // entradas no viaja: sólo sumaría a MP un ítem sin precio. La suma sigue dando
+  // `Compra.totalPagado`.
+  const entradasSinPrecioConExtras = !(precio > 0) && (itemsExtra || []).length > 0;
+  const items = entradasSinPrecioConExtras
+    ? []
+    : [
+      {
+        title: titulo,
+        unit_price: precio,
+        quantity: cantidad,
+        currency_id: 'ARS',
+      },
+    ];
   for (const extra of itemsExtra || []) {
     items.push({ currency_id: 'ARS', ...extra });
   }
