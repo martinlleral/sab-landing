@@ -157,7 +157,7 @@ async function crearPreferencia(req, res) {
       compra = await prisma.$transaction(async (tx) => {
         if (precioCalc.cupon) {
           const cuponActual = await tx.cuponDescuento.findUnique({ where: { id: precioCalc.cupon.id } });
-          validarCupon(cuponActual, tandaVigente.eventoId);
+          validarCupon(cuponActual, tandaVigente.eventoId, { cantidad: cant });
           await reservarCupon(tx, precioCalc.cupon.id);
         }
 

@@ -101,7 +101,10 @@ async function adminGetById(req, res) {
 
 async function adminCrear(req, res) {
   try {
-    const { eventoId, codigo, tipo, valor, topeUsos, validoHasta, activo } = req.body;
+    const {
+      eventoId, codigo, tipo, valor, topeUsos, validoHasta, activo,
+      paraAfiliados, unaEntradaPorCompra,
+    } = req.body;
 
     if (!eventoId || !codigo || !tipo || valor === undefined) {
       return res.status(400).json({ error: 'Faltan campos requeridos: eventoId, codigo, tipo, valor' });
@@ -135,6 +138,9 @@ async function adminCrear(req, res) {
           topeUsos: topeInt,
           validoHasta: toDateOrNull(validoHasta),
           activo: activo === undefined ? true : toBool(activo),
+          // Sin el campo, false: el cupón de siempre (descuenta todas las entradas).
+          paraAfiliados: toBool(paraAfiliados),
+          unaEntradaPorCompra: toBool(unaEntradaPorCompra),
         },
       });
       return res.status(201).json({ cupon, warnings });
@@ -150,16 +156,20 @@ async function adminCrear(req, res) {
   }
 }
 
-// Solo permite cambiar `topeUsos`, `validoHasta` y `activo`. Cambiar `codigo`,
-// `tipo`, `valor` o `eventoId` invalidaría la auditoría histórica de los usos
-// ya registrados — para esos casos el admin debe crear un cupón nuevo.
+// Solo permite cambiar `topeUsos`, `validoHasta`, `activo` y los dos campos de
+// afiliados. Cambiar `codigo`, `tipo`, `valor` o `eventoId` invalidaría la
+// auditoría histórica de los usos ya registrados — para esos casos el admin debe
+// crear un cupón nuevo. Los de afiliados no: cada uso guarda su descuento, y
+// marcar un cupón como de una entrada no cambia lo que ya se vendió.
 async function adminActualizar(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
     const existing = await prisma.cuponDescuento.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Cupón no encontrado' });
 
-    const { topeUsos, validoHasta, activo } = req.body;
+    const {
+      topeUsos, validoHasta, activo, paraAfiliados, unaEntradaPorCompra,
+    } = req.body;
     const data = {};
 
     if (topeUsos !== undefined) {
@@ -178,9 +188,13 @@ async function adminActualizar(req, res) {
     }
     if (validoHasta !== undefined) data.validoHasta = toDateOrNull(validoHasta);
     if (activo !== undefined) data.activo = toBool(activo);
+    if (paraAfiliados !== undefined) data.paraAfiliados = toBool(paraAfiliados);
+    if (unaEntradaPorCompra !== undefined) data.unaEntradaPorCompra = toBool(unaEntradaPorCompra);
 
     if (Object.keys(data).length === 0) {
-      return res.status(400).json({ error: 'Nada para actualizar (solo topeUsos, validoHasta y activo son editables)' });
+      return res.status(400).json({
+        error: 'Nada para actualizar (solo topeUsos, validoHasta, activo, paraAfiliados y unaEntradaPorCompra son editables)',
+      });
     }
 
     const cupon = await prisma.cuponDescuento.update({ where: { id }, data });
@@ -228,6 +242,13 @@ function respuestaUsuarioCupon(internalCode) {
       return { code: 'CUPON_VENCIDO', error: 'Este cupón está vencido' };
     case 'CUPON_AGOTADO':
       return { code: 'CUPON_AGOTADO', error: 'Este cupón ya alcanzó su tope de usos' };
+    // Código válido para este evento: decirlo no revela nada que el comprador no
+    // tenga, y es lo que le permite arreglar la compra cambiando la cantidad.
+    case 'CUPON_UNA_ENTRADA':
+      return {
+        code: 'CUPON_UNA_ENTRADA',
+        error: 'Este cupón vale para una sola entrada por compra. Para usarlo, elegí 1 entrada.',
+      };
     case 'APORTE_NO_HABILITADO':
       return { code: 'APORTE_NO_HABILITADO', error: 'Esta tanda no admite entrada con aporte' };
     case 'TIPO_ENTRADA_INVALIDO':
@@ -250,7 +271,9 @@ const CODIGO_MAX_LEN = 50;
 // de ir a MP. Rate-limited (ver middleware/rate-limit.js).
 async function validarPublico(req, res) {
   try {
-    const { eventoId, codigo, tipoEntrada } = req.body || {};
+    const {
+      eventoId, codigo, tipoEntrada, cantidad,
+    } = req.body || {};
 
     // Presencia: distinguir "no vino" de "vino con valor inválido" (ej. 0).
     if (eventoId === undefined || eventoId === null || codigo === undefined || codigo === null || codigo === '') {
@@ -269,6 +292,18 @@ async function validarPublico(req, res) {
       return res.status(400).json({ ok: false, error: 'Código demasiado largo' });
     }
 
+    // Cantidad de entradas: la necesita el cupón de una entrada por compra. Un
+    // checkout viejo (Cloudflare cachea /assets/* unas horas después del deploy)
+    // no la manda: el preview la toma como 1 y la compra, que siempre la manda,
+    // es la que frena. Si viene, tiene que ser un entero positivo.
+    let cantidadNum = 1;
+    if (cantidad !== undefined && cantidad !== null && cantidad !== '') {
+      cantidadNum = Number(cantidad);
+      if (!Number.isInteger(cantidadNum) || cantidadNum < 1) {
+        return res.status(400).json({ ok: false, error: 'cantidad inválida' });
+      }
+    }
+
     const evento = await prisma.evento.findUnique({
       where: { id: eventoIdNum },
       include: { tandas: true },
@@ -284,7 +319,7 @@ async function validarPublico(req, res) {
 
     let precio;
     try {
-      precio = await calcularPrecioFinal(tandaVigente, { tipoEntrada, cuponCodigo: codigo });
+      precio = await calcularPrecioFinal(tandaVigente, { tipoEntrada, cuponCodigo: codigo, cantidad: cantidadNum });
     } catch (err) {
       if (err.code) {
         // Logging interno con el code real para auditar bruteforce/intentos sospechosos.
@@ -309,6 +344,8 @@ async function validarPublico(req, res) {
         codigo: precio.cupon.codigo,
         tipo: precio.cupon.tipo,
         valor: precio.cupon.valor,
+        // El checkout lo usa para sacar el cupón si después suben la cantidad.
+        unaEntradaPorCompra: precio.cupon.unaEntradaPorCompra,
       },
       precio: {
         base: precio.precioBase,

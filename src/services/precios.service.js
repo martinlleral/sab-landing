@@ -60,8 +60,22 @@ function normalizarCodigo(codigo) {
 /**
  * Valida un cupón contra un evento sin mutar estado. Tira Error con .code para
  * que el controller mapee a HTTP 400 con mensaje específico.
+ *
+ * Cupón de una entrada por compra (afiliados, 30/10/2026): sin esta regla el
+ * cupón descuenta TODAS las entradas de la compra (precio unitario × cantidad).
+ * Vive acá y no en cada camino: la usan el cálculo del precio, la compra (antes
+ * y dentro de la transacción) y la validación pública, así que romperla acá los
+ * rompe a los tres. Es fail-closed: si quien llama no pasa la cantidad, el cupón
+ * de una entrada no se puede usar — un camino nuevo que se olvide de mandarla se
+ * entera en el primer test, no en una compra.
+ *
+ * @param {Object} cupon
+ * @param {number} eventoId
+ * @param {Object} [opciones]
+ * @param {number} [opciones.cantidad] - entradas de la compra
+ * @param {Date} [opciones.ahora=new Date()] - reloj, inyectable para tests
  */
-function validarCupon(cupon, eventoId, ahora = new Date()) {
+function validarCupon(cupon, eventoId, { cantidad, ahora = new Date() } = {}) {
   if (!cupon || !cupon.activo) {
     const e = new Error('Cupón inválido o desactivado');
     e.code = 'CUPON_INVALIDO';
@@ -87,6 +101,14 @@ function validarCupon(cupon, eventoId, ahora = new Date()) {
     e.code = 'CUPON_TIPO_INVALIDO';
     throw e;
   }
+  // Va última a propósito: es la única que la persona arregla sola (cambiando la
+  // cantidad). Pedirle que elija 1 entrada para un cupón vencido es mandarla a
+  // arreglar algo que no la va a destrabar.
+  if (cupon.unaEntradaPorCompra && cantidad !== 1) {
+    const e = new Error('Este cupón vale para una sola entrada por compra. Para usarlo, elegí 1 entrada.');
+    e.code = 'CUPON_UNA_ENTRADA';
+    throw e;
+  }
 }
 
 /**
@@ -96,6 +118,8 @@ function validarCupon(cupon, eventoId, ahora = new Date()) {
  * @param {Object} [opciones]
  * @param {string} [opciones.tipoEntrada='base'] - 'base' | 'aporte'
  * @param {string} [opciones.cuponCodigo] - código a aplicar (opcional)
+ * @param {number} [opciones.cantidad] - entradas de la compra (la necesita el
+ *   cupón de una entrada por compra; ver `validarCupon`)
  * @returns {Promise<{
  *   precioUnitarioFinal: number,
  *   precioBase: number,
@@ -135,7 +159,9 @@ async function calcularPrecioFinal(tanda, opciones = {}) {
     cupon = await prisma.cuponDescuento.findUnique({
       where: { codigo: cuponCodigo },
     });
-    validarCupon(cupon, tanda.eventoId);
+    // `opciones.cantidad` llega desde `calcularTotalCompra` (la compra) y desde la
+    // validación pública; sin ella, un cupón de una entrada no pasa.
+    validarCupon(cupon, tanda.eventoId, { cantidad: opciones.cantidad });
 
     // El descuento se aplica SOLO sobre la base, nunca sobre el excedente del aporte.
     if (cupon.tipo === TIPO_CUPON.PORCENTAJE) {

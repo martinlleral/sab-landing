@@ -182,6 +182,16 @@ model CuponDescuento {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   usos          CuponUso[]
+  // Cupón de afiliados. `paraAfiliados` lo marca como beneficio de la afiliación
+  // (lo lista la página de afiliados); `unaEntradaPorCompra` hace que sólo se
+  // pueda usar en compras de UNA entrada. Sin esto el cupón descuenta todas las
+  // entradas de la compra (`calcularTotalCompra`: precio unitario × cantidad).
+  // La regla vive en `validarCupon`. Default false: los cupones existentes no
+  // cambian.
+  // ⚠️ Al final del modelo a propósito: la migración es ALTER TABLE ADD COLUMN,
+  // escrita a mano (en SQLite `migrate dev` reescribe la tabla con DROP TABLE).
+  paraAfiliados       Boolean    @default(false)
+  unaEntradaPorCompra Boolean    @default(false)
 }
 
 model CuponUso {
@@ -225,6 +235,22 @@ model ValidationAccessToken {
   id           Int       @id @default(autoincrement())
   token        String    @unique
   descripcion  String    @default("")
+  activo       Boolean   @default(true)
+  creadoPor    String    @default("")
+  ultimoAcceso DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+// Dirección privada de la página de afiliados (`/afiliados/<token>`). Es una
+// capability URL: quien tiene el link entra, sin login. Se acepta porque la
+// página es igual para todos y no muestra datos de nadie. Se ROTA una vez por mes
+// desde el backoffice: generar una nueva da de baja las anteriores en la misma
+// transacción (una sola activa a la vez), y así quien dejó de pagar pierde el
+// acceso con el cambio. Mismo molde que ValidationAccessToken: global, sin
+// vencimiento, se apaga con `activo`.
+model AccesoAfiliados {
+  id           Int       @id @default(autoincrement())
+  token        String    @unique
   activo       Boolean   @default(true)
   creadoPor    String    @default("")
   ultimoAcceso DateTime?
