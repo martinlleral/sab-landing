@@ -509,6 +509,23 @@
                     <label class="bo-form-label">Tope de usos</label>
                     <input type="number" class="bo-form-control" id="cupon-tope-usos" min="1" placeholder="∞">
                   </div>
+                  <div class="col-12 d-flex flex-wrap gap-4">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="cupon-para-afiliados">
+                      <label class="form-check-label bo-switch-label" for="cupon-para-afiliados">Para afiliadxs</label>
+                    </div>
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="cupon-una-entrada">
+                      <label class="form-check-label bo-switch-label" for="cupon-una-entrada">Una entrada por compra</label>
+                    </div>
+                  </div>
+                  <div class="col-12" style="margin-top:4px;">
+                    <small style="color:#888;">
+                      <strong>Para afiliadxs:</strong> es el beneficio de la afiliación.
+                      <strong>Una entrada por compra:</strong> el cupón sólo se puede usar comprando 1 entrada;
+                      si no, descuenta todas las entradas de la compra.
+                    </small>
+                  </div>
                   <div class="col-md-4">
                     <label class="bo-form-label">Vence (opcional)</label>
                     <input type="datetime-local" class="bo-form-control" id="cupon-valido-hasta">

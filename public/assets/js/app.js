@@ -1161,9 +1161,29 @@ function renderMenuSection() {
   section.style.display = 'block';
 }
 
+// Mismo texto que manda el backend con CUPON_UNA_ENTRADA.
+const MENSAJE_CUPON_UNA_ENTRADA = 'Este cupón vale para una sola entrada por compra. Para usarlo, elegí 1 entrada.';
+
 // Cambiar la cantidad de entradas cambia el techo del menú: hay que repoblar el
 // select antes de recalcular el total, o el máximo queda desfasado un paso.
 function onCantidadEntradasChange() {
+  // El cupón de una entrada por compra no vale con más de 1: se saca y se dice
+  // por qué. Dejarlo puesto mostraría un descuento que la compra después
+  // rechaza; sacarlo sin decir nada deja un total que sube sin explicación.
+  const cant = parseInt(document.getElementById('modal-cantidad')?.value, 10) || 1;
+  if (cuponAplicado?.unaEntradaPorCompra && cant > 1) {
+    const { codigo } = cuponAplicado;
+    quitarCupon();
+    // El código queda escrito: si vuelve a 1 entrada, le alcanza con «Aplicar».
+    const inp = document.getElementById('modal-cupon-codigo');
+    if (inp) inp.value = codigo;
+    const panel = document.getElementById('cupon-panel');
+    if (panel) panel.style.display = 'block';
+    setCuponFeedback(`⚠️ ${MENSAJE_CUPON_UNA_ENTRADA}`, true);
+    // El cartel queda más abajo que el selector de cantidad: en el celular, fuera
+    // de la pantalla. 'nearest' sólo mueve si hace falta.
+    document.getElementById('cupon-feedback')?.scrollIntoView({ block: 'nearest' });
+  }
   renderMenuSection();
   updateTotal();
 }
@@ -1325,6 +1345,8 @@ async function aplicarCupon() {
         eventoId: evento.id,
         codigo,
         tipoEntrada: tipoEntradaSeleccionado,
+        // La necesita el cupón de una entrada por compra.
+        cantidad: parseInt(document.getElementById('modal-cantidad')?.value, 10) || 1,
       }),
     });
     if (!result.ok) throw new Error(result.error || 'Cupón no válido');
@@ -1334,6 +1356,7 @@ async function aplicarCupon() {
       descuentoUnitario: result.precio.descuento,
       tipo: result.cupon.tipo,
       valor: result.cupon.valor,
+      unaEntradaPorCompra: result.cupon.unaEntradaPorCompra === true,
     };
     renderCuponPanel();
     updateTotal();
