@@ -16,6 +16,8 @@ const { serializarCSV, slugArchivo } = require('../utils/csv');
 const precios = require('../services/precios.service');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Los datos de quien compra son texto: ni un nombre ni un mail llevan estos signos.
+const SIGNOS_NO_ADMITIDOS = /[<>]/;
 
 // Verifica la firma HMAC-SHA256 del webhook MP.
 // Manifest: id:<data.id>;request-id:<x-request-id>;ts:<ts>;
@@ -64,6 +66,16 @@ async function crearPreferencia(req, res) {
 
     if (!eventoId || !email || !nombre || !apellido || !cantidad) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ error: 'Ingresá un email válido.', code: 'EMAIL_INVALIDO' });
+    }
+    if ([nombre, apellido, email, telefono].some((dato) => SIGNOS_NO_ADMITIDOS.test(dato))) {
+      return res.status(400).json({
+        error: 'Revisá tus datos: nombre, apellido, mail y teléfono no admiten los signos de menor y mayor.',
+        code: 'DATOS_NO_ADMITIDOS',
+      });
     }
 
     const evento = await prisma.evento.findUnique({
