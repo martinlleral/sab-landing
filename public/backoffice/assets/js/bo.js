@@ -20,6 +20,17 @@ async function boFetch(url, options = {}) {
 }
 
 // ============================================
+// TEXTO DENTRO DE HTML
+// ============================================
+// Todo dato que se pinta con innerHTML o dentro de un atributo pasa por acá: es
+// el único helper del panel, así cada pantalla lo usa igual.
+function esc(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+// ============================================
 // AUTH
 // ============================================
 async function handleLogout() {

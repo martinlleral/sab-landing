@@ -886,10 +886,6 @@
       }
     });
 
-    function esc(s) {
-      return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-
     function showTandasFeedback(msg, isError = false) {
       const el = document.getElementById('tandas-feedback');
       el.style.display = 'block';
@@ -1004,8 +1000,8 @@
           : '<span style="color:#666;">—</span>';
         return `<tr>
           <td>${inv.id}</td>
-          <td>${inv.nombre} ${inv.apellido}</td>
-          <td style="color:#888;">${inv.email}</td>
+          <td>${esc(inv.nombre)} ${esc(inv.apellido)}</td>
+          <td style="color:#888;">${esc(inv.email)}</td>
           <td style="color:#888;">${boFecha(inv.createdAt)}</td>
           <td>${estado}</td>
         </tr>`;
@@ -1222,8 +1218,8 @@
       tbody.innerHTML = compras.map((c) => `
         <tr>
           <td>${c.id}</td>
-          <td>${c.nombre} ${c.apellido}</td>
-          <td style="color:#888;">${c.email}</td>
+          <td>${esc(c.nombre)} ${esc(c.apellido)}</td>
+          <td style="color:#888;">${esc(c.email)}</td>
           <td>${c.cantidadEntradas}</td>
           <td>${boPrecio(c.totalPagado)}</td>
           <td><span class="badge-estado ${c.mpEstado}">${c.mpEstado}</span></td>
