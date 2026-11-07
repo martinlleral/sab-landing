@@ -904,10 +904,6 @@
       }
     });
 
-    function esc(s) {
-      return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-
     function showTandasFeedback(msg, isError = false) {
       const el = document.getElementById('tandas-feedback');
       el.style.display = 'block';
@@ -1240,8 +1236,8 @@
       tbody.innerHTML = compras.map((c) => `
         <tr>
           <td>${c.id}</td>
-          <td>${c.nombre} ${c.apellido}</td>
-          <td style="color:#888;">${c.email}</td>
+          <td>${esc(c.nombre)} ${esc(c.apellido)}</td>
+          <td style="color:#888;">${esc(c.email)}</td>
           <td>${c.cantidadEntradas}</td>
           <td>${boPrecio(c.totalPagado)}</td>
           <td><span class="badge-estado ${c.mpEstado}">${c.mpEstado}</span></td>

@@ -9,11 +9,8 @@
   let _eventoId = null;
   let _cupones = [];
 
-  function escHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => (
-      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    ));
-  }
+  // El helper vive en bo.js, que esta pantalla carga antes que este archivo.
+  const escHtml = esc;
 
   function showFeedback(msg, isError = false) {
     const el = document.getElementById('cupones-feedback');

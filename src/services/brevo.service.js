@@ -372,7 +372,7 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
       <p style="color:#ccc; margin:8px 0 0;">Entrada de invitación</p>
     </div>
     <div style="padding:32px;">
-      <h2 style="color:#111;">¡Hola, ${nombre}!</h2>
+      <h2 style="color:#111;">¡Hola, ${escapeHtml(nombre)}!</h2>
       <p style="color:#444; font-size:16px;">
         Te enviamos una <strong>entrada de invitación</strong> para el siguiente evento. 
         Tu asistencia es completamente gratuita — ¡te esperamos!

@@ -174,14 +174,6 @@
       const el = document.getElementById('aviso-portada');
       if (!el || !portada) return;
 
-      // Escape local: esta página no tiene helper propio y la tabla de abajo
-      // inyecta los nombres crudos (deuda vieja, no se toca acá). El aviso nuevo
-      // no hereda esa costumbre — y sobre todo, no puede tirar ReferenceError por
-      // llamar a un `esc` que en esta página no existe.
-      const esc = (v) => String(v === null || v === undefined ? '' : v)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
       const nombreDe = (ev) => ev ? `${esc(ev.nombre)} (${boFecha(ev.fecha)})` : '—';
 
       if (portada.sinEventos) {
