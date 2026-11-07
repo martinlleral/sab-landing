@@ -136,11 +136,11 @@ Si el deploy aplicó una migración de Prisma que rompió datos:
 ssh sab-droplet
 
 # Último backup del día (ver docs/backups.md para hora exacta)
-ls -lth /opt/sab/backups/*.db | head -5
+ls -lth /opt/sab/backups/auto/*.db | head -5
 
 # Restore
 docker compose -f /opt/sab/app/docker-compose.yml -f /opt/sab/app/docker-compose.prod.yml stop app
-cp /opt/sab/backups/prod-YYYYMMDD-HHMM.db /opt/sab/data/prod.db
+docker run --rm -v app_db-data:/dst -v /opt/sab/backups/auto:/src alpine sh -c 'rm -f /dst/prod.db-wal /dst/prod.db-shm && cp /src/prod-<TS>.db /dst/prod.db'
 docker compose -f /opt/sab/app/docker-compose.yml -f /opt/sab/app/docker-compose.prod.yml up -d app
 ```
 
