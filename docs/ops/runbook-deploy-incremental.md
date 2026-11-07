@@ -215,9 +215,8 @@ ssh sab-droplet "ls -t /tmp/prod-backup-*.db | tail -n +6 | xargs -r rm -v"
 Si el deploy rompió algo y necesitás volver atrás rápido:
 
 ```bash
-# 1. Restaurar DB del backup de Fase 1
-ssh sab-droplet "docker cp /tmp/prod-backup-<FECHA>.db sab-app:/app/prisma/prod.db"
-ssh sab-droplet "docker restart sab-app"
+# 1. Restaurar DB del backup de Fase 1. Frena la app, borra el -wal y el -shm, copia y arranca.
+ssh sab-droplet "docker stop sab-app && docker run --rm -v app_db-data:/dst -v /tmp:/src alpine sh -c 'rm -f /dst/prod.db-wal /dst/prod.db-shm && cp /src/prod-backup-<FECHA>.db /dst/prod.db' && docker start sab-app"
 
 # 2. (Opcional) Revertir código a commit anterior
 # Desde local:
@@ -226,6 +225,9 @@ git push
 
 # Después repetir Fase 3-6 con el commit revertido
 ```
+
+> **El `-wal` se borra siempre.** Si queda al lado de `prod.db`, SQLite vuelve a aplicarlo sobre el backup: la base sigue
+> con lo que se quería deshacer, y no da ningún error.
 
 **Para casos muy graves (container no arranca):**
 

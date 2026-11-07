@@ -173,7 +173,7 @@ docker compose stop sab-app
 docker run --rm \
   -v app_db-data:/dst \
   -v /tmp:/src \
-  alpine sh -c "cp /src/prod-<TS>.db /dst/prod.db"
+  alpine sh -c "rm -f /dst/prod.db-wal /dst/prod.db-shm && cp /src/prod-<TS>.db /dst/prod.db"
 
 # Reiniciar
 docker compose up -d sab-app
