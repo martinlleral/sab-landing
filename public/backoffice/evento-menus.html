@@ -566,10 +566,6 @@
       timeZone: 'UTC', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
     });
 
-    const esc = (s) => String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-
     const plural = (n, sing, plu) => `${n} ${n === 1 ? sing : plu}`;
 
     function render(data) {

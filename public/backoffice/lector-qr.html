@@ -408,12 +408,6 @@
     }
 
     // ─── UI Resultado ─────────────────────────────────
-    function esc(v) {
-      return String(v == null ? '' : v)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
-
     // Franja de menús de Casa Metro (ítem 45). Devuelve '' cuando no hay menús:
     // en la puerta, un "0 menús" es ruido que hay que leer para descartar.
     //

@@ -1545,7 +1545,7 @@ async function checkPaymentReturn() {
   // Promociones/Spam).
   if (status === 'approved' && preferenciaId) {
     try {
-      const resp = await fetch(`/api/compras/check/${preferenciaId}`, { method: 'POST' });
+      const resp = await fetch(`/api/compras/check/${encodeURIComponent(preferenciaId)}`, { method: 'POST' });
       const data = await resp.json().catch(() => ({}));
       renderPaymentStatus(status, preferenciaId, (data && Array.isArray(data.entradas) && data.entradas.length) ? data : null);
     } catch (e) {

@@ -182,7 +182,7 @@
         tbody.innerHTML = comprasRes.compras.map((c) => `
           <tr>
             <td>${c.id}</td>
-            <td>${c.nombre} ${c.apellido}</td>
+            <td>${esc(c.nombre)} ${esc(c.apellido)}</td>
             <td>${c.evento?.nombre || '—'}</td>
             <td>${c.cantidadEntradas}</td>
             <td>$ ${c.totalPagado.toLocaleString('es-AR')}</td>

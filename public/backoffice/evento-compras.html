@@ -668,9 +668,9 @@
       tbody.innerHTML = compras.map((c) => `
         <tr>
           <td style="color:#666;">${c.id}</td>
-          <td style="font-weight:500;">${c.apellido}, ${c.nombre}</td>
-          <td style="color:#888; font-size:0.85rem;">${c.email}</td>
-          <td style="color:#888; font-size:0.85rem;">${c.telefono || '—'}</td>
+          <td style="font-weight:500;">${esc(c.apellido)}, ${esc(c.nombre)}</td>
+          <td style="color:#888; font-size:0.85rem;">${esc(c.email)}</td>
+          <td style="color:#888; font-size:0.85rem;">${esc(c.telefono) || '—'}</td>
           <td style="text-align:center;">
             <span style="font-weight:700; font-size:1.1rem; color:#f6c90e;">${c.cantidadEntradas}</span>
           </td>
@@ -688,7 +688,7 @@
           </td>
           <td>
             ${c.mpEstado === 'approved'
-              ? `<button class="btn-bo-secondary" style="padding:4px 8px; font-size:0.8rem;" onclick="reenviarMail(${c.id}, ${JSON.stringify(c.email).replace(/"/g, '&quot;')})" title="Reenviar mail con QR">
+              ? `<button class="btn-bo-secondary" style="padding:4px 8px; font-size:0.8rem;" data-email="${esc(c.email)}" onclick="reenviarMail(${c.id}, this.dataset.email)" title="Reenviar mail con QR">
                    <i class="bi bi-envelope-arrow-up"></i> Reenviar
                  </button>
                  <button class="btn-bo-secondary" style="color:#f6ad55; border-color:#f6ad55; padding:4px 8px; font-size:0.8rem; margin-left:4px;" onclick="devolverCompra(${c.id})" title="Marcar como devuelta (tras un refund en Mercado Pago)">
@@ -720,7 +720,7 @@
 
         content.innerHTML = `
           <p style="color:#888; margin-bottom:16px; font-size:0.9rem;">
-            Compra #${compra.id} — ${compra.nombre} ${compra.apellido} — ${compra.email}
+            Compra #${compra.id} — ${esc(compra.nombre)} ${esc(compra.apellido)} — ${esc(compra.email)}
           </p>
           <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:12px;">
             ${entradas.map((e, i) => `
@@ -803,7 +803,7 @@
     async function devolverCompra(id) {
       const motivo = prompt(
         `Marcar la compra #${id} como DEVUELTA.\n\n` +
-        `Usalo cuando Euge YA hizo el reintegro en Mercado Pago. Esto:\n` +
+        `Usalo cuando quien maneja Mercado Pago YA hizo el reintegro. Esto:\n` +
         `  • invalida las entradas (dejan de servir en la puerta),\n` +
         `  • libera el lugar (vuelve al stock) y el cupón si usó,\n` +
         `  • saca la venta de la recaudación y los reportes.\n\n` +

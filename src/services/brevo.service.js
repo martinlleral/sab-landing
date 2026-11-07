@@ -201,6 +201,12 @@ async function resolverDireccion(evento) {
   return [sede, ciudad].filter(Boolean).join(', ');
 }
 
+function escapeHtml(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 function buildHtml({ nombre, evento, entradas, compra, direccionLinea }) {
   const esSingular = entradas.length === 1;
   const aporteBlock = buildAporteBlock(compra);
@@ -230,7 +236,7 @@ function buildHtml({ nombre, evento, entradas, compra, direccionLinea }) {
       <p style="color:#ccc; margin:8px 0 0;">Confirmación de compra</p>
     </div>
     <div style="padding:32px;">
-      <h2 style="color:#111;">¡Hola, ${nombre}!</h2>
+      <h2 style="color:#111;">¡Hola, ${escapeHtml(nombre)}!</h2>
       <p style="color:#444; font-size:16px;">Tu compra fue confirmada. A continuación encontrás ${esSingular ? 'tu entrada con el código QR' : 'tus entradas con los códigos QR'} para ingresar al evento.</p>
 
       <div style="background:#f9f9f9; border-radius:8px; padding:16px; margin:24px 0;">
@@ -359,7 +365,7 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
       <p style="color:#ccc; margin:8px 0 0;">Entrada de invitación</p>
     </div>
     <div style="padding:32px;">
-      <h2 style="color:#111;">¡Hola, ${nombre}!</h2>
+      <h2 style="color:#111;">¡Hola, ${escapeHtml(nombre)}!</h2>
       <p style="color:#444; font-size:16px;">
         Te enviamos una <strong>entrada de invitación</strong> para el siguiente evento. 
         Tu asistencia es completamente gratuita — ¡te esperamos!
