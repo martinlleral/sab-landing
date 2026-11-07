@@ -32,15 +32,19 @@ Antes de empezar, identificar **qué tipo** de cambios incluye este deploy. El f
 ## Fase 1 — Backup pre-deploy
 
 ```bash
-# Backup de la DB de prod antes de tocar nada
-ssh sab-droplet "docker cp sab-app:/app/prisma/prod.db /tmp/prod-backup-$(date +%Y%m%d-%H%M).db"
+# Backup de la DB de prod antes de tocar nada. Imprime dos líneas: la base viva y el backup.
+NOMBRE="prod-backup-$(date +%Y%m%d-%H%M).db"
+ssh sab-droplet "docker run --rm -v app_db-data:/src -v /tmp:/dst alpine sh -c \"apk add --no-cache sqlite >/dev/null 2>&1 && sqlite3 /src/prod.db '.backup /dst/$NOMBRE' && sqlite3 /src/prod.db 'select count(*), max(id) from Compra;' && sqlite3 /dst/$NOMBRE 'select count(*), max(id) from Compra;' && chown \$(id -u):\$(id -g) /dst/$NOMBRE\""
 
 # Bajar copia a local (defensa en profundidad)
 mkdir -p backups
-rsync -avz sab-droplet:/tmp/prod-backup-*.db backups/
+rsync -avz "sab-droplet:/tmp/$NOMBRE" backups/
 ```
 
-**Checkpoint:** backup en `/tmp/` del droplet Y en `backups/` local.
+**Checkpoint:** las dos líneas son iguales, y el backup está en `/tmp/` del droplet Y en `backups/` local.
+
+> **No usar `docker cp` de `prod.db`.** La base está en modo WAL: lo más reciente vive en `prod.db-wal`, así que esa
+> copia sale vieja y sin ningún error, y hasta pasa `PRAGMA integrity_check`. `.backup` trae todo, como `scripts/backup.sh`.
 
 ---
 
