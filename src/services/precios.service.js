@@ -97,6 +97,12 @@ function esEntradaIncluida(cupon, cantidad, totalPagado) {
  * primero. La comparación va en memoria porque SQLite compara mails con
  * mayúsculas tal como se escribieron; son pocas compras por show.
  *
+ * Lo que se le dice depende de cómo está esa compra, porque a quien no tiene la
+ * entrada no se le puede decir que la tiene: aprobada → «ya tiene su entrada»;
+ * pendiente con un pago en curso en MP → que espere la acreditación; pendiente
+ * sin pago (volvió de MP sin pagar, o MP no llegó a abrir) → cuántos minutos
+ * faltan para que la reserva venza sola. La reserva es la misma en los tres casos.
+ *
  * @param {Object} tx - cliente Prisma de la transacción
  * @param {number} eventoId
  * @param {string} email
@@ -109,14 +115,40 @@ async function verificarMailAfiliados(tx, eventoId, email, ahora = new Date()) {
       ...whereMenuOcupado(ahora),
       cuponUsos: { some: { cupon: { paraAfiliados: true } } },
     },
-    select: { email: true },
+    select: { email: true, mpEstado: true, mpPagoId: true, createdAt: true, _count: { select: { entradas: true } } },
   });
   const buscado = normalizarEmail(email);
-  if (vivas.some((c) => normalizarEmail(c.email) === buscado)) {
-    const e = new Error('Este mail ya tiene su entrada de afiliadx para este show. Si no te llegó, escribinos por WhatsApp.');
+  const delMail = vivas.filter((c) => normalizarEmail(c.email) === buscado);
+  if (delMail.length === 0) return;
+
+  const aprobadas = delMail.filter((c) => c.mpEstado === 'approved');
+  if (aprobadas.length > 0) {
+    // Aprobada no alcanza para decir «ya la tiene»: si la emisión falló, la
+    // entrada todavía no existe y la completa el barrido en unos minutos.
+    const conEntrada = aprobadas.some((c) => c._count.entradas > 0);
+    const e = new Error(conEntrada
+      ? 'Este mail ya tiene su entrada de afiliadx para este show. Si no te llegó, escribinos por WhatsApp.'
+      : 'Ya pediste la entrada de afiliadx para este show con este mail, y te llega por mail en unos minutos. '
+        + 'Si en 10 minutos no te llegó, escribinos por WhatsApp.');
     e.code = 'CUPON_MAIL_YA_USADO';
     throw e;
   }
+
+  let e;
+  if (delMail.some((c) => c.mpPagoId)) {
+    e = new Error('Este mail tiene un pago en curso para este show. Cuando se acredite, la entrada te llega por mail. '
+      + 'Si tenés dudas, escribinos por WhatsApp.');
+  } else {
+    // La más nueva es la que más tarda en vencer.
+    const ultima = Math.max(...delMail.map((c) => new Date(c.createdAt).getTime()));
+    const vence = ultima + MENU_RESERVA_MINUTOS * 60 * 1000;
+    const minutos = Math.max(1, Math.ceil((vence - ahora.getTime()) / 60000));
+    e = new Error('Este mail tiene una compra con el cupón de afiliadxs para este show que todavía no se pagó. '
+      + `Si saliste de Mercado Pago sin pagar, vas a poder usar el cupón de nuevo en ${minutos === 1 ? '1 minuto' : `${minutos} minutos`}. `
+      + 'Si ya pagaste, la entrada te llega por mail.');
+  }
+  e.code = 'CUPON_MAIL_PENDIENTE';
+  throw e;
 }
 
 /**

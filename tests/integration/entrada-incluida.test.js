@@ -464,10 +464,36 @@ async function main() {
     const rC8a = await comprar(evC8.id, cupC8, { email: mailC8 });
     const rC8b = await comprar(evC8.id, cupC8, { email: mailC8 });
     check(
-      'C8) con descuento parcial: un pendiente de menos de 30 minutos traba',
-      rC8a.statusCode === 200 && rC8b.statusCode === 400 && rC8b.body?.code === 'CUPON_MAIL_YA_USADO',
-      `primera=${rC8a.statusCode} segunda=${rC8b.statusCode} code=${rC8b.body?.code}`
+      '🎯 C8) un pendiente de menos de 30 minutos traba, sin decir que ya tiene la entrada',
+      rC8a.statusCode === 200 && rC8b.statusCode === 400 && rC8b.body?.code === 'CUPON_MAIL_PENDIENTE'
+        && /todavía no se pagó/.test(rC8b.body?.error || '') && /en 30 minutos/.test(rC8b.body?.error || '')
+        && !/ya tiene su entrada/.test(rC8b.body?.error || ''),
+      `primera=${rC8a.statusCode} segunda=${rC8b.statusCode} code=${rC8b.body?.code} error=${rC8b.body?.error}`
     );
+    await envejecer(rC8a.body?.compra_id ?? -1, 'createdAt', 18);
+    const rC8c = await comprar(evC8.id, cupC8, { email: mailC8 });
+    await envejecer(rC8a.body?.compra_id ?? -1, 'createdAt', 29.5);
+    const rC8d = await comprar(evC8.id, cupC8, { email: mailC8 });
+    check(
+      'C8b) dice cuánto falta para volver a usar el cupón: 12 minutos, y «1 minuto» en singular',
+      /en 12 minutos\./.test(rC8c.body?.error || '') && /en 1 minuto\./.test(rC8d.body?.error || ''),
+      `a los 18: «${rC8c.body?.error}» · a los 29,5: «${rC8d.body?.error}»`
+    );
+
+    // Gemelo de C8 con la compra aprobada: el texto de hoy no cambia.
+    const evC8e = await setupEvento('mail-pendiente-pagada');
+    const cupC8e = await crearCupon(evC8e.id, { valor: 25 });
+    const mailC8e = mailUnico();
+    const rC8e1 = await comprar(evC8e.id, cupC8e, { email: mailC8e });
+    if (rC8e1.body?.compra_id) await pagos.procesarPagoAprobado(rC8e1.body.compra_id, 'mock-pago-parcial');
+    const rC8e = await comprar(evC8e.id, cupC8e, { email: mailC8e });
+    check(
+      'regresión C8c) la misma compra, ya pagada: sigue diciendo que ya tiene su entrada',
+      rC8e.statusCode === 400 && rC8e.body?.code === 'CUPON_MAIL_YA_USADO'
+        && /ya tiene su entrada/.test(rC8e.body?.error || ''),
+      `status=${rC8e.statusCode} code=${rC8e.body?.code} error=${rC8e.body?.error}`
+    );
+
     await envejecer(rC8a.body?.compra_id ?? -1, 'createdAt', 31);
     const rC9 = await comprar(evC8.id, cupC8, { email: mailC8 });
     check(
@@ -479,9 +505,10 @@ async function main() {
     await envejecer(rC9.body?.compra_id ?? -1, 'createdAt', 120);
     const rC10 = await comprar(evC8.id, cupC8, { email: mailC8 });
     check(
-      'C10) con un pago en curso en MP traba aunque sea viejo (Rapipago)',
-      rC10.statusCode === 400 && rC10.body?.code === 'CUPON_MAIL_YA_USADO',
-      `status=${rC10.statusCode} code=${rC10.body?.code}`
+      'C10) con un pago en curso en MP traba aunque sea viejo (Rapipago), y lo dice',
+      rC10.statusCode === 400 && rC10.body?.code === 'CUPON_MAIL_PENDIENTE'
+        && /pago en curso/.test(rC10.body?.error || '') && !/ya tiene su entrada|minuto/.test(rC10.body?.error || ''),
+      `status=${rC10.statusCode} code=${rC10.body?.code} error=${rC10.body?.error}`
     );
 
     const evC11 = await setupEvento('mail-carrera');
@@ -519,6 +546,15 @@ async function main() {
       rD.statusCode === 200 && rD.body?.invitacion === true
         && compraD?.mpEstado === 'approved' && compraD?.entradas.length === 0,
       `status=${rD.statusCode} estado=${compraD?.mpEstado} entradas=${compraD?.entradas.length}`
+    );
+    // Reintenta con el mismo mail antes de que el barrido la complete: el uso
+    // sigue tomado, pero la entrada todavía no existe y no se le dice que la tiene.
+    const rD1c = compraD ? await comprar(evD.id, cupD, { email: compraD.email }) : null;
+    check(
+      '🎯 D1c) aprobada y todavía sin entrada: traba, pero no dice que ya la tiene',
+      rD1c?.statusCode === 400 && rD1c.body?.code === 'CUPON_MAIL_YA_USADO'
+        && /te llega por mail en unos minutos/.test(rD1c.body?.error || '') && !/ya tiene su entrada/.test(rD1c.body?.error || ''),
+      `status=${rD1c?.statusCode} code=${rD1c?.body?.code} error=${rD1c?.body?.error}`
     );
 
     const antes = compraD ? await pagos.repararComprasSinEntradas({ limite: 50 }) : [];
