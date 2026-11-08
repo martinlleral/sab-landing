@@ -580,8 +580,9 @@ async function main() {
     check(
       '🎯 E2) la devolución revierte estado, cupo y uso del cupón',
       rE2.statusCode === 200 && rE2.body?.libero_cupon === true && compraE2?.mpEstado === 'refunded'
-        && tE.cantidadVendida === 0 && cE.usosActuales === 0,
-      `status=${rE2.statusCode} estado=${compraE2?.mpEstado} cupo=${tE.cantidadVendida} usos=${cE.usosActuales}`
+        && tE.cantidadVendida === 0 && cE.usosActuales === 0 && rE2.body?.stock_devuelto === 1,
+      `status=${rE2.statusCode} estado=${compraE2?.mpEstado} cupo=${tE.cantidadVendida} usos=${cE.usosActuales} `
+        + `stock_devuelto=${rE2.body?.stock_devuelto}`
     );
     const rE3 = await call(entradasCtrl.validarPorQR, { body: { codigoQR: qrE } });
     check(
@@ -596,6 +597,59 @@ async function main() {
       'E4) devolver dos veces no descuenta dos veces',
       rE4.statusCode === 400 && (await tandaDe(evE)).cantidadVendida === 0,
       `status=${rE4.statusCode} cupo=${(await tandaDe(evE)).cantidadVendida}`
+    );
+
+    // La emisión falló y todavía no la completó nadie: la compra está aprobada y
+    // sin entrada, y la tanda nunca sumó ese lugar. Devolverla no puede restarlo.
+    const evE5 = await setupEvento('devolver-sin-entrada');
+    const cupE5 = await crearCupon(evE5.id);
+    qrService.generarQR = async () => { throw new Error('disco simulado'); };
+    console.error = () => {};
+    const rE5a = await comprar(evE5.id, cupE5);
+    console.error = errorOriginal;
+    qrService.generarQR = original.generarQR;
+    const rE5 = await call(compras.adminDevolver, {
+      ...admin, params: { id: String(rE5a.body?.compra_id) }, body: {},
+    });
+    const tE5 = await tandaDe(evE5);
+    const cE5 = await cuponDe(cupE5);
+    // La carrera: el barrido ya leyó la compra (aprobada, sin entrada) y, mientras
+    // arma el QR, alguien la devuelve. La emisión no puede seguir sobre una devuelta.
+    const evE6 = await setupEvento('barrido-y-devolucion');
+    const cupE6 = await crearCupon(evE6.id);
+    qrService.generarQR = async () => { throw new Error('disco simulado'); };
+    console.error = () => {};
+    const rE6a = await comprar(evE6.id, cupE6);
+    console.error = errorOriginal;
+    const leidaPorElBarrido = await prisma.compra.findUnique({
+      where: { id: rE6a.body?.compra_id ?? -1 }, include: { evento: true },
+    });
+    qrService.generarQR = async (codigo) => {
+      qrService.generarQR = original.generarQR;
+      await pagos.revertirCompraAprobada(leidaPorElBarrido.id, { revertidaPor: 'test' });
+      return original.generarQR(codigo);
+    };
+    mailsConfirmacion = [];
+    const emE6 = leidaPorElBarrido
+      ? await pagos.emitirEntradasFaltantes(leidaPorElBarrido).catch((e) => ({ error: e.message }))
+      : null;
+    qrService.generarQR = original.generarQR;
+    const compraE6 = await prisma.compra.findUnique({ where: { id: leidaPorElBarrido?.id ?? -1 }, include: { entradas: true } });
+    const tE6 = await tandaDe(evE6);
+    check(
+      '🎯 E6) el barrido en curso y una devolución en el medio: no crea la entrada, no suma cupo y no manda el mail',
+      compraE6?.mpEstado === 'refunded' && compraE6?.entradas.length === 0 && tE6.cantidadVendida === 0
+        && mailsConfirmacion.length === 0 && emE6?.creadas === 0,
+      `estado=${compraE6?.mpEstado} entradas=${compraE6?.entradas.length} cupo=${tE6.cantidadVendida} `
+        + `mails=${mailsConfirmacion.length} emision=${JSON.stringify(emE6)}`
+    );
+
+    check(
+      '🎯 E5) devolver una compra que no llegó a tener entrada: el cupo no cambia y stock_devuelto da 0',
+      rE5a.body?.invitacion === true && rE5.statusCode === 200 && rE5.body?.stock_devuelto === 0
+        && tE5.cantidadVendida === 0 && cE5.usosActuales === 0,
+      `compra=${rE5a.statusCode} devolver=${rE5.statusCode} stock_devuelto=${rE5.body?.stock_devuelto} `
+        + `cupo=${tE5.cantidadVendida} usos=${cE5.usosActuales}`
     );
 
     // ============================================

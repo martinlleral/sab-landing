@@ -55,6 +55,13 @@ async function emitirEntradasFaltantes(compra, { enviarMail = true } = {}) {
   }
 
   const entradas = await prisma.$transaction(async (tx) => {
+    // La compra se leyó antes, fuera de esta transacción (el barrido la elige
+    // minutos después de que falló). Si en el medio la devolvieron, no se emite:
+    // sumaría cupo a una compra devuelta y mandaría un QR que no entra. La
+    // devolución también es una transacción, así que esta lectura ya la ve.
+    const vigente = await tx.compra.findUnique({ where: { id: compra.id }, select: { mpEstado: true } });
+    if (vigente?.mpEstado !== 'approved') return null;
+
     // MENÚ DE CASA METRO: acá NO se genera nada por menú. Los menús no son
     // entradas — no tienen QR ni fila en `Entrada`, y no cuentan contra el aforo
     // de la tanda. Viven como cantidad en la compra (`Compra.cantidadMenus`), y el
@@ -83,6 +90,11 @@ async function emitirEntradasFaltantes(compra, { enviarMail = true } = {}) {
       orderBy: { id: 'asc' },
     });
   }, TX_OPTS);
+
+  if (entradas === null) {
+    console.error(`⚠️ Compra #${compra.id}: dejó de estar aprobada antes de emitir (devuelta o cancelada). No se emite nada.`);
+    return { creadas: 0, entradas: [] };
+  }
 
   if (!enviarMail) return { creadas: qrFiles.length, entradas };
 
@@ -338,15 +350,20 @@ async function revertirCompraAprobada(compraId, { revertidaPor = null, motivo = 
       include: { entradas: { select: { validada: true } } },
     });
 
-    // Devolver stock: opuesto exacto al increment de procesarPagoAprobado. Si la
-    // compra es legacy sin tanda (tandaId null), se saltea — nunca contó stock.
+    // Devolver stock: opuesto exacto al increment de la emisión. Se devuelven las
+    // entradas que EXISTEN, no `cantidadEntradas`: `emitirEntradasFaltantes` suma
+    // el cupo y crea las entradas en la misma transacción y por la misma cantidad,
+    // así que contarlas es contar lo que se sumó. Una compra aprobada cuya
+    // emisión falló todavía no sumó nada, y devolverla no puede restar.
+    // Si la compra es legacy sin tanda (tandaId null), se saltea — nunca contó stock.
     let stockDevuelto = 0;
-    if (compra.tandaId) {
+    const emitidas = compra.entradas.length;
+    if (compra.tandaId && emitidas > 0) {
       await tx.tanda.update({
         where: { id: compra.tandaId },
-        data: { cantidadVendida: { decrement: compra.cantidadEntradas } },
+        data: { cantidadVendida: { decrement: emitidas } },
       });
-      stockDevuelto = compra.cantidadEntradas;
+      stockDevuelto = emitidas;
     }
 
     // Liberar el cupón si lo usó (CuponUso tiene @@unique([compraId])).
