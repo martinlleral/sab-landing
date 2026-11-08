@@ -496,7 +496,9 @@ async function adminEnviarInvitacion(req, res) {
         precioUnitario: 0,
         totalPagado: 0,
         mpEstado: 'approved',
-        mpPreferenciaId: `inv-${Date.now()}`,
+        // Aleatorio, no la hora: con este identificador la confirmación pública
+        // (/api/compras/check) devuelve el QR. El prefijo es sólo para leer la base.
+        mpPreferenciaId: `inv-${uuidv4()}`,
       },
     });
 

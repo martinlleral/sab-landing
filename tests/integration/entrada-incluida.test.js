@@ -692,10 +692,12 @@ async function main() {
     const evF = await setupEvento('panel');
     const cupF = await crearCupon(evF.id);
     const rF = await comprar(evF.id, cupF);
+    const antesInv = Date.now();
     await call(eventos.adminEnviarInvitacion, {
       params: { id: String(evF.id) },
       body: { email: mailUnico(), nombre: 'Invitada', apellido: 'Ejemplo' },
     });
+    const despuesInv = Date.now();
     const rF3 = await call(eventos.adminListarInvitaciones, { params: { id: String(evF.id) } });
     const filaAfi = (rF3.body || []).find((c) => c.id === rF.body?.compra_id);
     const filaInv = (rF3.body || []).find((c) => c.id !== rF.body?.compra_id);
@@ -709,6 +711,22 @@ async function main() {
       'F4) las estadísticas la cuentan en «Invitaciones» y no suma a lo recaudado',
       rF4.body?.compras?.invitaciones === 2 && rF4.body?.recaudado === 0,
       `invitaciones=${rF4.body?.compras?.invitaciones} recaudado=${rF4.body?.recaudado}`
+    );
+
+    // El identificador de la invitación del panel no sale de la hora: probar cada
+    // milisegundo de la ventana en que se emitió no devuelve su QR.
+    const conQR = [];
+    for (let t = antesInv; t <= despuesInv; t++) {
+      const r = await call(compras.checkAndProcess, { params: { preferenciaId: `inv-${t}` } });
+      if (r.body?.entradas?.length) conQR.push(t);
+    }
+    const prefInv = filaInv
+      ? (await prisma.compra.findUnique({ where: { id: filaInv.id }, select: { mpPreferenciaId: true } }))?.mpPreferenciaId
+      : null;
+    check(
+      '🔒 F5) la invitación del panel no se encuentra con la hora en que se emitió',
+      conQR.length === 0 && !!prefInv && prefInv.startsWith('inv-'),
+      `ventana=${despuesInv - antesInv + 1} ms encontradas=${conQR.length} prefijo=${prefInv?.slice(0, 4)}`
     );
 
     // ============================================
