@@ -42,6 +42,7 @@ const original = {
   enviarConfirmacion: brevoService.enviarConfirmacion,
   enviarInvitacion: brevoService.enviarInvitacion,
   generarQR: qrService.generarQR,
+  generarQRBase64: qrService.generarQRBase64,
 };
 mpService.crearPreferencia = async (args) => {
   mpCalls.push(args);
@@ -116,6 +117,16 @@ const comprar = (eventoId, cupon, overrides = {}) => call(compras.crearPreferenc
     ...overrides,
   },
 });
+
+// El mail sale en segundo plano: su marca puede llegar después de la respuesta.
+async function marcaDe(compraId, esperarMs = 1000) {
+  const hasta = Date.now() + esperarMs;
+  for (;;) {
+    const c = await prisma.compra.findUnique({ where: { id: compraId }, select: { mailFallidoAt: true } });
+    if (c?.mailFallidoAt || Date.now() > hasta) return c?.mailFallidoAt ?? null;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
 
 const tandaDe = (ev) => prisma.tanda.findUnique({ where: { id: ev.tandas[0].id } });
 const cuponDe = (c) => prisma.cuponDescuento.findUnique({ where: { id: c.id } });
@@ -534,7 +545,8 @@ async function main() {
     qrService.generarQR = async () => { throw new Error('disco simulado'); };
     mailsConfirmacion = [];
     const errorOriginal = console.error;
-    console.error = () => {};
+    const logD = [];
+    console.error = (...a) => logD.push(a.map(String).join(' '));
     const rD = await comprar(evD.id, cupD);
     console.error = errorOriginal;
     qrService.generarQR = original.generarQR;
@@ -546,6 +558,11 @@ async function main() {
       rD.statusCode === 200 && rD.body?.invitacion === true
         && compraD?.mpEstado === 'approved' && compraD?.entradas.length === 0,
       `status=${rD.statusCode} estado=${compraD?.mpEstado} entradas=${compraD?.entradas.length}`
+    );
+    check(
+      'D1b) el log de esa falla dice que quedó sin entrada y que la completa el barrido (acá es cierto)',
+      logD.some((l) => l.includes(`#${compraD?.id}`) && /sin entrada: la completa el barrido/.test(l)),
+      JSON.stringify(logD)
     );
     // Reintenta con el mismo mail antes de que el barrido la complete: el uso
     // sigue tomado, pero la entrada todavía no existe y no se le dice que la tiene.
@@ -766,6 +783,200 @@ async function main() {
     );
 
     // ============================================
+    // G — El mail que no sale
+    // ============================================
+
+    const confirmacionMock = brevoService.enviarConfirmacion;
+    const brevoCae = async () => { throw new Error('brevo simulado'); };
+    const conLog = async (fn) => {
+      const log = [];
+      const antes = console.error;
+      console.error = (...a) => log.push(a.map(String).join(' '));
+      try { await fn(); } finally { console.error = antes; }
+      return log;
+    };
+    const compraCon = (id) => prisma.compra.findUnique({ where: { id: id ?? -1 }, include: { entradas: true } });
+
+    const evG = await setupEvento('mail-no-sale');
+    const cupG = await crearCupon(evG.id);
+    let rG1; let marcaG1;
+    const logG1 = await conLog(async () => {
+      brevoService.enviarConfirmacion = brevoCae;
+      rG1 = await comprar(evG.id, cupG);
+      marcaG1 = rG1.body?.compra_id ? await marcaDe(rG1.body.compra_id) : null;
+      brevoService.enviarConfirmacion = confirmacionMock;
+    });
+    const idG1 = rG1.body?.compra_id;
+    const compraG1 = await compraCon(idG1);
+    check(
+      '🎯 G1) Brevo cae en la entrada incluida: la compra queda con su entrada y marcada',
+      rG1.body?.invitacion === true && compraG1?.entradas.length === 1 && !!marcaG1,
+      `invitacion=${rG1.body?.invitacion} entradas=${compraG1?.entradas.length} marca=${marcaG1}`
+    );
+    check(
+      'G1b) el log dice qué compra, que la entrada está creada y que se reenvía desde Compras',
+      logG1.some((l) => l.includes(`#${idG1}`) && /entrada está creada/.test(l) && /Reenviar/.test(l)),
+      JSON.stringify(logG1)
+    );
+
+    const evG2 = await setupEvento('qr-mail-no-sale');
+    const cupG2 = await crearCupon(evG2.id);
+    let rG2;
+    const logG2 = await conLog(async () => {
+      qrService.generarQRBase64 = async () => { throw new Error('qr simulado'); };
+      rG2 = await comprar(evG2.id, cupG2);
+      qrService.generarQRBase64 = original.generarQRBase64;
+    });
+    const compraG2 = await compraCon(rG2.body?.compra_id);
+    const marcaG2 = compraG2 ? await marcaDe(compraG2.id) : null;
+    check(
+      '🎯 G2) falla armar el QR del mail con la entrada ya guardada: marcada, y el log no promete el barrido',
+      rG2.body?.invitacion === true && compraG2?.entradas.length === 1 && !!marcaG2
+        && logG2.some((l) => l.includes(`#${compraG2?.id}`) && /entrada está creada/.test(l))
+        && !logG2.some((l) => /barrido/.test(l)),
+      `entradas=${compraG2?.entradas.length} marca=${marcaG2} log=${JSON.stringify(logG2)}`
+    );
+
+    const rGok = await comprar(evG.id, cupG);
+    const marcaOk = rGok.body?.compra_id ? await marcaDe(rGok.body.compra_id, 200) : 'sin compra';
+    const marcaA = compraA ? (await prisma.compra.findUnique({ where: { id: compraA.id } }))?.mailFallidoAt : 'sin compra';
+    check(
+      'regresión G3) control: con el mail que sale, la compra no queda marcada',
+      marcaOk === null && marcaA === null && (await compraCon(rGok.body?.compra_id))?.entradas.length === 1,
+      `ok=${marcaOk} A=${marcaA}`
+    );
+
+    const rG6 = await call(compras.adminListar, { query: { eventoId: String(evG.id), limit: '50' } });
+    const rG6f = await call(compras.adminListar, { query: { eventoId: String(evG.id), mpEstado: 'mail_fallido' } });
+    const filaG1 = (rG6.body?.compras || []).find((c) => c.id === idG1);
+    const filaOk = (rG6.body?.compras || []).find((c) => c.id === rGok.body?.compra_id);
+    check(
+      '🎯 G4) Compras trae la marca, y el filtro «Mail sin salir» deja sólo la marcada',
+      !!filaG1?.mailFallidoAt && filaOk && !filaOk.mailFallidoAt
+        && rG6f.body?.compras?.length === 1 && rG6f.body.compras[0].id === idG1 && rG6f.body?.total === 1,
+      `marca=${filaG1?.mailFallidoAt} ok=${filaOk?.mailFallidoAt} filtradas=${JSON.stringify((rG6f.body?.compras || []).map((c) => c.id))}`
+    );
+    const rG7 = await call(eventos.adminEventoStats, { params: { id: String(evG.id) } });
+    const rG7c = await call(eventos.adminEventoStats, { params: { id: String(evA.id) } });
+    check(
+      'G5) las estadísticas del evento cuentan las compras con el mail sin salir (control: 0 donde salió)',
+      rG7.body?.compras?.mailSinSalir === 1 && rG7c.body?.compras?.mailSinSalir === 0,
+      `evento con falla=${rG7.body?.compras?.mailSinSalir} sin falla=${rG7c.body?.compras?.mailSinSalir}`
+    );
+
+    let rG8;
+    await conLog(async () => {
+      brevoService.enviarConfirmacion = brevoCae;
+      rG8 = await call(compras.adminReenviarMail, { ...admin, params: { id: String(rGok.body?.compra_id) }, body: {} });
+      brevoService.enviarConfirmacion = confirmacionMock;
+    });
+    const marcaG8 = rGok.body?.compra_id ? await marcaDe(rGok.body.compra_id, 200) : null;
+    check(
+      'G6) un Reenviar que falla: da error y la compra queda marcada',
+      rG8.statusCode === 500 && !!marcaG8,
+      `status=${rG8.statusCode} marca=${marcaG8}`
+    );
+
+    mailsConfirmacion = [];
+    const rG9 = await call(compras.adminReenviarMail, { ...admin, params: { id: String(idG1) }, body: {} });
+    const marcaG9 = (await prisma.compra.findUnique({ where: { id: idG1 ?? -1 } }))?.mailFallidoAt;
+    check(
+      '🎯 G7) un Reenviar que sale bien limpia la marca',
+      rG9.statusCode === 200 && mailsConfirmacion.length === 1 && marcaG9 === null,
+      `status=${rG9.statusCode} mails=${mailsConfirmacion.length} marca=${marcaG9}`
+    );
+
+    // La planilla bajada con ese filtro dice que es ese recorte, no «solo aprobadas».
+    const bajar = async (query) => {
+      const r = {
+        headers: {}, statusCode: 200, body: '',
+        setHeader(k, v) { this.headers[k.toLowerCase()] = v; },
+        status(c) { this.statusCode = c; return this; },
+        json(p) { this.body = JSON.stringify(p); return this; },
+        send(b) { this.body = b; return this; },
+      };
+      await compras.adminExportar({ ...admin, query }, r);
+      const incluye = (r.body.split('\n').find((l) => l.startsWith('Incluye')) || '');
+      return { archivo: r.headers['content-disposition'] || '', incluye, filas: r.headers['x-filas-export'] };
+    };
+    // A esta altura G1 ya se reenvió bien; la de G6 (Reenviar que falló) es la marcada.
+    const csvMail = await bajar({ eventoId: String(evG.id), mpEstado: 'mail_fallido' });
+    const csvTodas = await bajar({ eventoId: String(evG.id) });
+    check(
+      '🎯 G9) la planilla con «Mail sin salir» lo dice en el nombre y en el pie (control: sin filtro, «solo aprobadas»)',
+      /-aprobadas-mail-sin-salir-/.test(csvMail.archivo) && /mail sin salir/.test(csvMail.incluye) && csvMail.filas === '1'
+        && /-aprobadas-\d/.test(csvTodas.archivo) && /solo aprobadas/.test(csvTodas.incluye) && !/mail/.test(csvTodas.incluye),
+      `filtrada: ${csvMail.archivo} «${csvMail.incluye}» filas=${csvMail.filas} · sin filtro: ${csvTodas.archivo} «${csvTodas.incluye}»`
+    );
+
+    // La invitación del panel: si su mail no sale, también queda marcada, y el panel lo dice.
+    const evG11 = await setupEvento('invitacion-mail-no-sale');
+    const invitacionMock = brevoService.enviarInvitacion;
+    let rG11; let rG11ok;
+    await conLog(async () => {
+      brevoService.enviarInvitacion = brevoCae;
+      rG11 = await call(eventos.adminEnviarInvitacion, {
+        params: { id: String(evG11.id) }, body: { email: mailUnico(), nombre: 'Invitada', apellido: 'Ejemplo' },
+      });
+      brevoService.enviarInvitacion = invitacionMock;
+    });
+    rG11ok = await call(eventos.adminEnviarInvitacion, {
+      params: { id: String(evG11.id) }, body: { email: mailUnico(), nombre: 'Invitada', apellido: 'Ejemplo' },
+    });
+    const marcaG11 = rG11.body?.compra?.id ? await marcaDe(rG11.body.compra.id) : null;
+    const marcaG11ok = rG11ok.body?.compra?.id ? await marcaDe(rG11ok.body.compra.id, 200) : 'sin compra';
+    check(
+      '🎯 G10) invitación del panel con el mail caído: queda marcada y la respuesta lo dice (control: la que sale, no)',
+      rG11.statusCode === 201 && !!marcaG11 && rG11.body?.mailEnviado === false
+        && rG11ok.statusCode === 201 && marcaG11ok === null && rG11ok.body?.mailEnviado === true,
+      `caída: ${rG11.statusCode} marca=${!!marcaG11} mailEnviado=${rG11.body?.mailEnviado} · `
+        + `ok: ${rG11ok.statusCode} marca=${marcaG11ok} mailEnviado=${rG11ok.body?.mailEnviado}`
+    );
+
+    // Lo mismo si lo que falla es armar el QR del mail, con la entrada ya creada.
+    const mailInvQr = mailUnico();
+    let rInvQr;
+    await conLog(async () => {
+      qrService.generarQRBase64 = async () => { throw new Error('qr simulado'); };
+      rInvQr = await call(eventos.adminEnviarInvitacion, {
+        params: { id: String(evG11.id) }, body: { email: mailInvQr, nombre: 'Invitada', apellido: 'Ejemplo' },
+      });
+      qrService.generarQRBase64 = original.generarQRBase64;
+    });
+    const comprasInvQr = await prisma.compra.findMany({ where: { eventoId: evG11.id, email: mailInvQr }, include: { entradas: true } });
+    check(
+      'G10b) invitación del panel con el QR del mail caído: 201, avisa, queda marcada y es una sola',
+      rInvQr.statusCode === 201 && rInvQr.body?.mailEnviado === false && comprasInvQr.length === 1
+        && comprasInvQr[0].entradas.length === 1 && !!comprasInvQr[0].mailFallidoAt,
+      `status=${rInvQr.statusCode} mailEnviado=${rInvQr.body?.mailEnviado} compras=${comprasInvQr.length} `
+        + `marca=${!!comprasInvQr[0]?.mailFallidoAt}`
+    );
+
+    // Una compra pagada: la emisión es la misma, y la marca también.
+    const evG10 = await setupEvento('pagada-mail-no-sale');
+    const rG10a = await comprar(evG10.id, null);
+    const rG10b = await comprar(evG10.id, null);
+    let pG10a; let pG10b; let errG10b = null;
+    await conLog(async () => {
+      brevoService.enviarConfirmacion = brevoCae;
+      pG10a = await pagos.procesarPagoAprobado(rG10a.body?.compra_id ?? -1, 'mock-pago-g10a');
+      brevoService.enviarConfirmacion = confirmacionMock;
+      qrService.generarQRBase64 = async () => { throw new Error('qr simulado'); };
+      pG10b = await pagos.procesarPagoAprobado(rG10b.body?.compra_id ?? -1, 'mock-pago-g10b').catch((e) => { errG10b = e.message; });
+      qrService.generarQRBase64 = original.generarQRBase64;
+    });
+    const marcaG10a = rG10a.body?.compra_id ? await marcaDe(rG10a.body.compra_id) : null;
+    const marcaG10b = rG10b.body?.compra_id ? await marcaDe(rG10b.body.compra_id) : null;
+    const entG10b = await prisma.entrada.count({ where: { compraId: rG10b.body?.compra_id ?? -1 } });
+    check(
+      'G8) en una compra pagada también: el mail que no sale queda marcado y la emisión no se corta',
+      pG10a?.procesada === true && !!marcaG10a && pG10b?.procesada === true && !errG10b && entG10b === 1 && !!marcaG10b
+        && (await tandaDe(evG10)).cantidadVendida === 2,
+      `brevo: ${JSON.stringify(pG10a)} marca=${!!marcaG10a} · qr: ${JSON.stringify(pG10b)} err=${errG10b} `
+        + `entradas=${entG10b} marca=${!!marcaG10b} cupo=${(await tandaDe(evG10)).cantidadVendida}`
+    );
+
+    // ============================================
     // REPORT
     // ============================================
 
@@ -804,6 +1015,7 @@ async function main() {
     brevoService.enviarConfirmacion = original.enviarConfirmacion;
     brevoService.enviarInvitacion = original.enviarInvitacion;
     qrService.generarQR = original.generarQR;
+    qrService.generarQRBase64 = original.generarQRBase64;
     await prisma.$disconnect();
     process.exit(process.exitCode || 0);
   }

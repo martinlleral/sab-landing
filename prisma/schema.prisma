@@ -140,6 +140,11 @@ model Compra {
   // de la plata y nunca fue reescrita en producción.
   cantidadMenus      Int         @default(0)
   menuUnitario       Int         @default(0)
+  // Cuándo el mail con el QR no salió (Brevo lo rechazó o no se pudo armar). Se
+  // limpia con un Reenviar que sale bien. Es lo que deja ver en Compras a quién
+  // hay que reenviárselo: en la entrada incluida el mail es el único camino del QR.
+  // ⚠️ Al final del modelo y con la migración escrita a mano (un ADD COLUMN).
+  mailFallidoAt      DateTime?
   entradas           Entrada[]
   cuponUsos          CuponUso[]
 }

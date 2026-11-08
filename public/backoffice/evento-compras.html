@@ -139,6 +139,7 @@
                 <option value="pending">Pendientes</option>
                 <option value="rejected">Rechazados</option>
                 <option value="cancelled">Cancelados</option>
+                <option value="mail_fallido">Mail sin salir</option>
               </select>
               <button class="btn-bo-secondary" onclick="loadCompras(currentPage); refreshStats();" title="Recargar">
                 <i class="bi bi-arrow-clockwise"></i>
@@ -150,6 +151,17 @@
                 <i class="bi bi-trash me-1"></i> Limpiar pendientes
               </button>
             </div>
+          </div>
+
+          <!-- Compras cuyo mail con el QR no salió. Sólo aparece cuando hay alguna:
+               en la entrada incluida el mail es el único camino del QR, y si no se
+               ve acá, quien atiende se entera en la puerta. -->
+          <div id="aviso-mail-sin-salir" style="display:none; padding:10px 20px; border-bottom:1px solid #1e1e1e; background:#2b1a0d; color:#f6ad55; font-size:0.85rem;">
+            <i class="bi bi-envelope-exclamation me-1"></i>
+            <span id="aviso-mail-sin-salir-texto"></span>
+            <button class="btn-bo-secondary" style="padding:2px 8px; font-size:0.8rem; margin-left:8px; color:#f6ad55; border-color:#f6ad55;" onclick="verMailSinSalir()">
+              Ver
+            </button>
           </div>
 
           <!-- Fila de búsqueda + filtros adicionales (control de acceso en puerta del evento) -->
@@ -344,8 +356,8 @@
     }
 
     // Recarga sólo las stats (boxes del header) sin reconsultar el evento entero.
-    // Se llama después de acciones que las pueden mover (eliminar pendientes, reenviar mail no
-    // las mueve, eliminar compra rechazada/pendiente sí cambia el conteo).
+    // Se llama después de acciones que las pueden mover (eliminar pendientes, eliminar
+    // compra rechazada/pendiente, y reenviar mail, que pone o saca el «mail sin salir»).
     async function refreshStats() {
       try {
         const stats = await boFetch(`/api/admin/eventos/${eventoId}/stats`);
@@ -356,6 +368,13 @@
     }
 
     function renderStats(stats) {
+      // El aviso de mails sin salir: número que arma el propio código, sin datos de compradores.
+      const sinMail = stats.compras?.mailSinSalir || 0;
+      document.getElementById('aviso-mail-sin-salir').style.display = sinMail > 0 ? '' : 'none';
+      document.getElementById('aviso-mail-sin-salir-texto').textContent = sinMail === 1
+        ? '1 compra aprobada no recibió el mail con su QR. Reenviáselo desde su fila.'
+        : `${sinMail} compras aprobadas no recibieron el mail con su QR. Reenviáselo a cada una desde su fila.`;
+
       document.getElementById('stat-vendidas').textContent = stats.entradas.vendidas;
       document.getElementById('stat-invitaciones').textContent = stats.entradas.invitaciones;
       document.getElementById('stat-pendientes').textContent = stats.entradas.pendientes;
@@ -453,7 +472,7 @@
 
         // Etiqueta humana del filtro para el card-header. Si hay búsqueda activa,
         // mostrar también la cantidad de resultados encontrados.
-        const ETIQUETAS = { approved: 'Aprobados', pending: 'Pendientes', rejected: 'Rechazados', cancelled: 'Cancelados' };
+        const ETIQUETAS = { approved: 'Aprobados', pending: 'Pendientes', rejected: 'Rechazados', cancelled: 'Cancelados', mail_fallido: 'Mail sin salir' };
         const etiqueta = filtro ? ` — ${ETIQUETAS[filtro]}` : '';
         const sufijoBusqueda = q ? ` · "${q}"` : '';
         document.getElementById('card-total-compras').textContent = `${etiqueta}${sufijoBusqueda} (${data.total})`;
@@ -540,7 +559,7 @@
       // vacía, justo lo que esa guarda existe para evitar.
       if (typeof total === 'number') filasEnPantalla = total;
       const { filtro, validacion, q, todos } = paramsExport();
-      const ETIQUETAS = { approved: 'aprobadas', pending: 'pendientes', rejected: 'rechazadas', cancelled: 'canceladas' };
+      const ETIQUETAS = { approved: 'aprobadas', pending: 'pendientes', rejected: 'rechazadas', cancelled: 'canceladas', mail_fallido: 'aprobadas con el mail sin salir' };
       const chk = document.getElementById('export-todos-estados');
       // Con un estado elegido a mano, el switch no cambia nada: el filtro de
       // pantalla manda. Se apaga y se aclara, en vez de mentir prendido.
@@ -675,7 +694,12 @@
             <span style="font-weight:700; font-size:1.1rem; color:#f6c90e;">${c.cantidadEntradas}</span>
           </td>
           <td style="font-weight:600;">${boPrecio(c.totalPagado)}</td>
-          <td><span class="badge-estado ${c.mpEstado}">${c.mpEstado}</span></td>
+          <td>
+            <span class="badge-estado ${c.mpEstado}">${c.mpEstado}</span>
+            ${c.mpEstado === 'approved' && c.mailFallidoAt
+              ? `<span class="mail-sin-salir" style="display:inline-block; margin-top:4px; background:#2b1a0d; border:1px solid #6b3a00; color:#f6ad55; padding:2px 8px; border-radius:999px; font-size:0.72rem; font-weight:600; white-space:nowrap;" title="El mail con el QR no salió (${boFechaHora(c.mailFallidoAt)}). Reenviar lo manda de nuevo.">Mail sin salir</span>`
+              : ''}
+          </td>
           <td>${pildoraValidacion(c)}</td>
           <td style="color:#888; font-size:0.85rem;">${boFechaHora(c.createdAt)}</td>
           <td>
@@ -791,10 +815,19 @@
           ? `Mail enviado a ${data.emailEnviado} (email del comprador actualizado)`
           : `Mail enviado a ${data.emailEnviado}`;
         boAlert(msg, 'success');
-        if (data.emailActualizado) loadCompras(currentPage);
       } catch (err) {
         boAlert('Error al reenviar: ' + err.message, 'error');
       }
+      // Siempre: el reenvío pone o saca la marca de «mail sin salir» (y puede haber
+      // corregido el mail del comprador).
+      loadCompras(currentPage);
+      refreshStats();
+    }
+
+    // El botón del aviso: deja en la tabla sólo las compras con el mail sin salir.
+    function verMailSinSalir() {
+      document.getElementById('filtro-estado').value = 'mail_fallido';
+      loadCompras(1);
     }
 
     // US-A: marca una compra aprobada como devuelta tras un refund en MP. El

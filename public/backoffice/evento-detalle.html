@@ -1044,7 +1044,7 @@
       feedback.style.display = 'none';
 
       try {
-        await boFetch(`/api/admin/eventos/${eventoId}/invitacion`, {
+        const resp = await boFetch(`/api/admin/eventos/${eventoId}/invitacion`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, nombre, apellido }),
@@ -1055,10 +1055,15 @@
         document.getElementById('inv-apellido').value = '';
 
         feedback.style.display = 'block';
-        feedback.innerHTML = `<span style="color:#48bb78;">✅ Invitación enviada a <strong>${email}</strong>.</span>`;
+        // Si el mail no salió, la invitación quedó creada y marcada en Compras: se
+        // dice acá y no se esconde, porque el mail es el único camino del QR.
+        const mailCaido = resp && resp.mailEnviado === false;
+        feedback.innerHTML = mailCaido
+          ? `<span style="color:#f6ad55;">⚠️ La invitación quedó creada, pero el mail a <strong>${esc(email)}</strong> no salió: reenviala desde Compras.</span>`
+          : `<span style="color:#48bb78;">✅ Invitación enviada a <strong>${esc(email)}</strong>.</span>`;
 
         await cargarInvitaciones();
-        setTimeout(() => { feedback.style.display = 'none'; }, 4000);
+        if (!mailCaido) setTimeout(() => { feedback.style.display = 'none'; }, 4000);
       } catch (err) {
         feedback.style.display = 'block';
         feedback.innerHTML = `<span style="color:#fc8181;">❌ Error: ${err.message}</span>`;
