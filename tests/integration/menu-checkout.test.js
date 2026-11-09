@@ -486,7 +486,12 @@ async function main() {
     await setPrecioMenu(PRECIO_MENU);
 
     // Aprobar a mano (como hace compras-devolucion.test.js: sin QR ni mail) y devolver.
+    // Con sus 2 entradas: la emisión suma el cupo y crea las entradas juntas, y la
+    // devolución resta las que existen.
     await prisma.compra.update({ where: { id: compraId }, data: { mpEstado: 'approved' } });
+    await prisma.entrada.createMany({
+      data: [0, 1].map((i) => ({ compraId, codigoQR: `menu-flujo-${compraId}-${i}-${Date.now()}`, qrImageUrl: '' })),
+    });
     await prisma.tanda.update({ where: { id: tFlujo.id }, data: { cantidadVendida: 2 } });
 
     const menusAprobadosAntes = await prisma.compra.aggregate({

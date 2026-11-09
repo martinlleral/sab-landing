@@ -959,6 +959,12 @@ function updateTotal() {
 
   totalEl.textContent = `$ ${formatPrecio(total)}`;
 
+  // La entrada incluida: en $0 con cupón de afiliadxs no hay paso por MP.
+  const incluidaNota = document.getElementById('modal-incluida-nota');
+  if (incluidaNota) {
+    incluidaNota.style.display = (cuponAplicado?.paraAfiliados && total === 0) ? 'block' : 'none';
+  }
+
   // Breakdown visible cuando hay descuento, excedente por aporte O menú: en los
   // tres casos el total deja de ser "cantidad × precio de la card".
   const breakdown = document.getElementById('modal-breakdown');
@@ -1161,9 +1167,29 @@ function renderMenuSection() {
   section.style.display = 'block';
 }
 
+// Mismo texto que manda el backend con CUPON_UNA_ENTRADA.
+const MENSAJE_CUPON_UNA_ENTRADA = 'Este cupón vale para una sola entrada por compra. Para usarlo, elegí 1 entrada.';
+
 // Cambiar la cantidad de entradas cambia el techo del menú: hay que repoblar el
 // select antes de recalcular el total, o el máximo queda desfasado un paso.
 function onCantidadEntradasChange() {
+  // El cupón de una entrada por compra no vale con más de 1: se saca y se dice
+  // por qué. Dejarlo puesto mostraría un descuento que la compra después
+  // rechaza; sacarlo sin decir nada deja un total que sube sin explicación.
+  const cant = parseInt(document.getElementById('modal-cantidad')?.value, 10) || 1;
+  if (cuponAplicado?.unaEntradaPorCompra && cant > 1) {
+    const { codigo } = cuponAplicado;
+    quitarCupon();
+    // El código queda escrito: si vuelve a 1 entrada, le alcanza con «Aplicar».
+    const inp = document.getElementById('modal-cupon-codigo');
+    if (inp) inp.value = codigo;
+    const panel = document.getElementById('cupon-panel');
+    if (panel) panel.style.display = 'block';
+    setCuponFeedback(`⚠️ ${MENSAJE_CUPON_UNA_ENTRADA}`, true);
+    // El cartel queda más abajo que el selector de cantidad: en el celular, fuera
+    // de la pantalla. 'nearest' sólo mueve si hace falta.
+    document.getElementById('cupon-feedback')?.scrollIntoView({ block: 'nearest' });
+  }
   renderMenuSection();
   updateTotal();
 }
@@ -1325,6 +1351,8 @@ async function aplicarCupon() {
         eventoId: evento.id,
         codigo,
         tipoEntrada: tipoEntradaSeleccionado,
+        // La necesita el cupón de una entrada por compra.
+        cantidad: parseInt(document.getElementById('modal-cantidad')?.value, 10) || 1,
       }),
     });
     if (!result.ok) throw new Error(result.error || 'Cupón no válido');
@@ -1334,9 +1362,17 @@ async function aplicarCupon() {
       descuentoUnitario: result.precio.descuento,
       tipo: result.cupon.tipo,
       valor: result.cupon.valor,
+      unaEntradaPorCompra: result.cupon.unaEntradaPorCompra === true,
+      paraAfiliados: result.cupon.paraAfiliados === true,
     };
     renderCuponPanel();
     updateTotal();
+    // En el celular el total y la nota quedan más abajo que el cupón, tapados por
+    // el pie del modal. 'nearest' sólo mueve si hace falta.
+    const incluidaNota = document.getElementById('modal-incluida-nota');
+    if (incluidaNota && incluidaNota.style.display !== 'none') {
+      incluidaNota.scrollIntoView({ block: 'nearest' });
+    }
   } catch (err) {
     cuponAplicado = null;
     setCuponFeedback(`❌ ${err.message}`, true);
@@ -1425,7 +1461,9 @@ async function handleComprar() {
       body: JSON.stringify(body),
     });
 
-    if (result.init_point) {
+    if (result.invitacion) {
+      mostrarEntradaEnCamino(result.email);
+    } else if (result.init_point) {
       window.location.href = result.init_point;
     } else {
       throw new Error('No se recibió link de pago');
@@ -1462,6 +1500,20 @@ async function handleComprar() {
     btn.disabled = false;
     if (spinner) spinner.style.display = 'none';
   }
+}
+
+// La entrada incluida no pasa por MP, así que no hay vuelta con ?status=: se cierra
+// el modal y se muestra acá mismo, en la misma pantalla que el resultado de un pago.
+function mostrarEntradaEnCamino(email) {
+  const modalEl = document.getElementById('modalCompra');
+  if (modalEl && typeof bootstrap !== 'undefined') bootstrap.Modal.getInstance(modalEl)?.hide();
+
+  const mainContent = document.getElementById('main-content');
+  const statusSection = document.getElementById('pago-status');
+  if (mainContent) mainContent.style.display = 'none';
+  if (statusSection) statusSection.style.display = 'flex';
+  renderPaymentStatus('incluida', null, { email });
+  window.scrollTo(0, 0);
 }
 
 // Traduce los `code` de las reglas duras del backend a algo que se entienda en el
@@ -1624,6 +1676,20 @@ function renderPaymentStatus(status, preferenciaId, data) {
   }
 
   const states = {
+    incluida: {
+      icon: '🎟️',
+      title: '¡Tu entrada está en camino!',
+      color: '#48bb78',
+      html: `
+        <p class="pago-status-msg">
+          No tenés nada que pagar. Te la mandamos a <strong>${escapeHtml(data?.email || 'tu mail')}</strong> con su código QR.
+        </p>
+        ${avisoMail}
+        <p style="color:#888;font-size:.85rem;">
+          Si en 10 minutos no te llegó, escribinos por
+          <a href="https://wa.me/5492215917409" target="_blank" rel="noopener" style="color:#48bb78;">WhatsApp</a>.
+        </p>`,
+    },
     approved: {
       icon: '🎉',
       title: '¡Tu compra fue recibida!',

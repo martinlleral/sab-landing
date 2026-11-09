@@ -509,6 +509,24 @@
                     <label class="bo-form-label">Tope de usos</label>
                     <input type="number" class="bo-form-control" id="cupon-tope-usos" min="1" placeholder="∞">
                   </div>
+                  <div class="col-12 d-flex flex-wrap gap-4">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="cupon-para-afiliados">
+                      <label class="form-check-label bo-switch-label" for="cupon-para-afiliados">Para afiliadxs</label>
+                    </div>
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="cupon-una-entrada">
+                      <label class="form-check-label bo-switch-label" for="cupon-una-entrada">Una entrada por compra</label>
+                    </div>
+                  </div>
+                  <div class="col-12" style="margin-top:4px;">
+                    <small style="color:#888;">
+                      <strong>Para afiliadxs:</strong> es el beneficio de la afiliación: vale para 1 entrada y una vez
+                      por mail en cada show. Al 100 %, la entrada sale sin pasar por Mercado Pago y llega por mail.
+                      <strong>Una entrada por compra:</strong> el cupón sólo se puede usar comprando 1 entrada;
+                      si no, descuenta todas las entradas de la compra.
+                    </small>
+                  </div>
                   <div class="col-md-4">
                     <label class="bo-form-label">Vence (opcional)</label>
                     <input type="datetime-local" class="bo-form-control" id="cupon-valido-hasta">
@@ -1000,7 +1018,7 @@
           : '<span style="color:#666;">—</span>';
         return `<tr>
           <td>${inv.id}</td>
-          <td>${esc(inv.nombre)} ${esc(inv.apellido)}</td>
+          <td>${esc(inv.nombre)} ${esc(inv.apellido)}${inv.esAfiliadx ? ' <span class="badge bg-success ms-1">Afiliadx</span>' : ''}</td>
           <td style="color:#888;">${esc(inv.email)}</td>
           <td style="color:#888;">${boFecha(inv.createdAt)}</td>
           <td>${estado}</td>
@@ -1026,7 +1044,7 @@
       feedback.style.display = 'none';
 
       try {
-        await boFetch(`/api/admin/eventos/${eventoId}/invitacion`, {
+        const resp = await boFetch(`/api/admin/eventos/${eventoId}/invitacion`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, nombre, apellido }),
@@ -1037,10 +1055,15 @@
         document.getElementById('inv-apellido').value = '';
 
         feedback.style.display = 'block';
-        feedback.innerHTML = `<span style="color:#48bb78;">✅ Invitación enviada a <strong>${email}</strong>.</span>`;
+        // Si el mail no salió, la invitación quedó creada y marcada en Compras: se
+        // dice acá y no se esconde, porque el mail es el único camino del QR.
+        const mailCaido = resp && resp.mailEnviado === false;
+        feedback.innerHTML = mailCaido
+          ? `<span style="color:#f6ad55;">⚠️ La invitación quedó creada, pero el mail a <strong>${esc(email)}</strong> no salió: reenviala desde Compras.</span>`
+          : `<span style="color:#48bb78;">✅ Invitación enviada a <strong>${esc(email)}</strong>.</span>`;
 
         await cargarInvitaciones();
-        setTimeout(() => { feedback.style.display = 'none'; }, 4000);
+        if (!mailCaido) setTimeout(() => { feedback.style.display = 'none'; }, 4000);
       } catch (err) {
         feedback.style.display = 'block';
         feedback.innerHTML = `<span style="color:#fc8181;">❌ Error: ${err.message}</span>`;

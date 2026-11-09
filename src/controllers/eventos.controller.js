@@ -8,6 +8,7 @@ const {
   menuVentaCerrada, calcularCorteMenu,
 } = require('../services/precios.service');
 const { compararPorApellido } = require('../utils/orden');
+const { marcarMailFallido } = require('../services/pagos.service');
 
 // Adjunta al evento la tandaVigente calculada + precio/stock derivados para el
 // frontend público. No reemplaza los campos legacy del evento (ese cleanup es
@@ -496,7 +497,9 @@ async function adminEnviarInvitacion(req, res) {
         precioUnitario: 0,
         totalPagado: 0,
         mpEstado: 'approved',
-        mpPreferenciaId: `inv-${Date.now()}`,
+        // Aleatorio, no la hora: con este identificador la confirmación pública
+        // (/api/compras/check) devuelve el QR. El prefijo es sólo para leer la base.
+        mpPreferenciaId: `inv-${uuidv4()}`,
       },
     });
 
@@ -511,9 +514,11 @@ async function adminEnviarInvitacion(req, res) {
     const entrada = await prisma.entrada.create({
       data: { compraId: compra.id, codigoQR: codigo, qrImageUrl },
     });
-    const qrBase64 = await qrService.generarQRBase64(codigo);
-
+    let mailEnviado = true;
     try {
+      // Armar el QR del mail va acá adentro: la entrada ya existe, y si esto falla
+      // lo que falta es el mail, no la invitación (un 500 haría que la manden dos veces).
+      const qrBase64 = await qrService.generarQRBase64(codigo);
       // Timeout de 15s para envío de email
       await Promise.race([
         brevoService.enviarInvitacion({
@@ -528,11 +533,15 @@ async function adminEnviarInvitacion(req, res) {
       ]);
       console.log(`✅ Invitación enviada a ${email}`);
     } catch (mailErr) {
-      console.error('❌ Error al enviar email invitación:', mailErr.message);
-      // No crítico - la entrada ya fue creada
+      // La entrada ya está creada: lo que falta es el mail, el único camino del QR
+      // para quien recibe la invitación. Queda marcada en Compras, como cualquier
+      // otra, y el panel se lo dice a quien la mandó. (Si Brevo sólo tardó más de
+      // 15 s, puede llegar igual: un Reenviar que sale bien limpia la marca.)
+      mailEnviado = false;
+      await marcarMailFallido(compra.id, mailErr);
     }
 
-    return res.status(201).json({ compra, entrada });
+    return res.status(201).json({ compra, entrada, mailEnviado });
   } catch (err) {
     console.error('Error en adminEnviarInvitacion:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -556,7 +565,7 @@ async function adminEventoStats(req, res) {
     });
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado' });
 
-    const [vendidasAgg, invitacionesAgg, pendientesAgg, rechazadasAgg, canceladasAgg] = await Promise.all([
+    const [vendidasAgg, invitacionesAgg, pendientesAgg, rechazadasAgg, canceladasAgg, mailSinSalir] = await Promise.all([
       prisma.compra.aggregate({
         where: { eventoId, mpEstado: 'approved', totalPagado: { gt: 0 } },
         _sum: { cantidadEntradas: true, totalPagado: true },
@@ -574,6 +583,9 @@ async function adminEventoStats(req, res) {
       }),
       prisma.compra.count({ where: { eventoId, mpEstado: 'rejected' } }),
       prisma.compra.count({ where: { eventoId, mpEstado: 'cancelled' } }),
+      // Aprobadas cuyo mail con el QR no salió: el aviso de Compras (mismo filtro
+      // que «Mail sin salir» en el listado).
+      prisma.compra.count({ where: { eventoId, mpEstado: 'approved', mailFallidoAt: { not: null } } }),
     ]);
 
     const entradasVendidas = vendidasAgg._sum.cantidadEntradas || 0;
@@ -644,6 +656,7 @@ async function adminEventoStats(req, res) {
         pendientes: pendientesAgg._count._all,
         rechazadas: rechazadasAgg,
         canceladas: canceladasAgg,
+        mailSinSalir,
       },
       entradas: {
         vendidas: entradasVendidas,
@@ -870,10 +883,18 @@ async function adminListarInvitaciones(req, res) {
     const eventoId = parseInt(req.params.id);
     const invitaciones = await prisma.compra.findMany({
       where: { eventoId, totalPagado: 0, mpEstado: 'approved' },
-      include: { entradas: { select: { id: true, codigoQR: true, qrImageUrl: true, validada: true, validadaAt: true } } },
+      include: {
+        entradas: { select: { id: true, codigoQR: true, qrImageUrl: true, validada: true, validadaAt: true } },
+        cuponUsos: { select: { cupon: { select: { paraAfiliados: true } } } },
+      },
       orderBy: { createdAt: 'desc' },
     });
-    return res.json(invitaciones);
+    // La entrada incluida en la afiliación cuenta como invitación (no entró plata),
+    // pero en la lista se tiene que poder distinguir de la que mandó el panel.
+    return res.json(invitaciones.map(({ cuponUsos, ...compra }) => ({
+      ...compra,
+      esAfiliadx: cuponUsos.some((u) => u.cupon.paraAfiliados),
+    })));
   } catch (err) {
     console.error('Error en adminListarInvitaciones:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });

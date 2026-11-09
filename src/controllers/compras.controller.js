@@ -4,7 +4,9 @@ const config = require('../config');
 const mpService = require('../services/mercadopago.service');
 const brevoService = require('../services/brevo.service');
 const qrService = require('../services/qr.service');
-const { procesarPagoAprobado, procesarPagoCancelado, revertirCompraAprobada } = require('../services/pagos.service');
+const {
+  procesarPagoAprobado, procesarPagoCancelado, revertirCompraAprobada, emitirEntradasFaltantes,
+} = require('../services/pagos.service');
 const { getTandaVigente } = require('../services/tandas.service');
 const { calcularTotalCompra, reservarCupon, validarCupon, OFFSET_ART_HORAS } = require('../services/precios.service');
 const { compararPorApellido } = require('../utils/orden');
@@ -68,7 +70,7 @@ async function crearPreferencia(req, res) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
     }
 
-    if (!EMAIL_REGEX.test(email)) {
+    if (!EMAIL_REGEX.test(String(email).trim())) {
       return res.status(400).json({ error: 'Ingresá un email válido.', code: 'EMAIL_INVALIDO' });
     }
     if ([nombre, apellido, email, telefono].some((dato) => SIGNOS_NO_ADMITIDOS.test(dato))) {
@@ -161,23 +163,37 @@ async function crearPreferencia(req, res) {
 
     const totalPagado = precioCalc.totalPagado;
 
+    // Con cupón de afiliados el mail es la identidad (un uso por mail en cada show)
+    // y puede ser el único camino del QR. Uno roto consumiría el uso sin entregar
+    // nada, así que acá el servidor lo valida, además del formulario.
+    const conCuponAfiliados = !!precioCalc.cupon?.paraAfiliados;
+    if (conCuponAfiliados && (typeof email !== 'string' || !EMAIL_REGEX.test(email.trim()))) {
+      return res.status(400).json({ error: 'Ingresá un email válido.', code: 'EMAIL_INVALIDO' });
+    }
+    const emailCompra = conCuponAfiliados ? email.trim() : email;
+
     // Tx atómica: si hay cupón, re-validamos dentro de la tx (defensa contra
     // cambios del admin entre cálculo y reserva), reservamos el uso, creamos
     // Compra y CuponUso. Si rompe el tope por race, el rollback deja todo intacto.
     let compra;
     try {
       compra = await prisma.$transaction(async (tx) => {
+        let entradaIncluida = false;
         if (precioCalc.cupon) {
           const cuponActual = await tx.cuponDescuento.findUnique({ where: { id: precioCalc.cupon.id } });
-          validarCupon(cuponActual, tandaVigente.eventoId);
+          validarCupon(cuponActual, tandaVigente.eventoId, { cantidad: cant });
           await reservarCupon(tx, precioCalc.cupon.id);
+          if (cuponActual.paraAfiliados) {
+            await precios.verificarMailAfiliados(tx, evento.id, emailCompra);
+          }
+          entradaIncluida = precios.esEntradaIncluida(cuponActual, cant, totalPagado);
         }
 
         const nueva = await tx.compra.create({
           data: {
             eventoId: evento.id,
             tandaId: tandaVigente.id,
-            email,
+            email: emailCompra,
             nombre,
             apellido,
             telefono: telefono || '',
@@ -188,7 +204,7 @@ async function crearPreferencia(req, res) {
             cantidadMenus: precioCalc.cantidadMenus,
             menuUnitario: precioCalc.menuUnitario,
             totalPagado,
-            mpEstado: 'pending',
+            mpEstado: entradaIncluida ? 'approved' : 'pending',
           },
         });
 
@@ -217,11 +233,37 @@ async function crearPreferencia(req, res) {
       throw err;
     }
 
+    // La entrada incluida: la compra ya nació aprobada, no hay nada que cobrar.
+    // Se emite por el mismo camino que una compra pagada, y si falla NO se devuelve
+    // a pending (sin preferencia, el cron no la retomaría): queda aprobada sin
+    // entradas, que es lo que busca `repararComprasSinEntradas` a los pocos minutos.
+    // Por eso la persona recibe el OK igual: su entrada llega por mail.
+    //
+    // La respuesta no trae el QR: si estuviera en pantalla, un mail inventado
+    // alcanzaría y el tope por mail no frenaría nada. `mpPreferenciaId` queda
+    // vacío para que el endpoint público de confirmación no la encuentre.
+    if (compra.mpEstado === 'approved') {
+      try {
+        await emitirEntradasFaltantes({ ...compra, evento });
+      } catch (err) {
+        // La emisión sólo tira antes de guardar la entrada (después, lo que falla
+        // es el mail, y queda marcado). El log lo comprueba en vez de suponerlo: el
+        // barrido retoma una compra aprobada SIN entradas, y ninguna otra.
+        const yaCreadas = await prisma.entrada.count({ where: { compraId: compra.id } }).catch(() => null);
+        console.error(yaCreadas === 0
+          ? `❌ Compra #${compra.id}: falló la emisión de la entrada incluida (${err.message}). `
+            + 'Quedó aprobada y sin entrada: la completa el barrido en unos minutos.'
+          : `❌ Compra #${compra.id}: falló la emisión de la entrada incluida (${err.message}) y no se pudo `
+            + `confirmar si quedó sin entrada (${yaCreadas ?? 'sin conteo'}). Revisarla en Compras.`);
+      }
+      return res.json({ invitacion: true, compra_id: compra.id, email: compra.email });
+    }
+
     const preferencia = await mpService.crearPreferencia({
       titulo: `${evento.nombre} — ${cant} entrada(s)`,
       precio: precioCalc.precioUnitarioFinal,
       cantidad: cant,
-      email,
+      email: emailCompra,
       // Los datos del comprador salen de la COMPRA, no del body: es lo que
       // efectivamente quedó guardado (con el telefono ya normalizado a ''), así
       // el payer que ve MP y el que ve el backoffice son el mismo. El antifraude
@@ -420,6 +462,13 @@ function construirFiltroCompras(query) {
   // BD filtra y el total devuelto refleja el filtro.
   if (query.mpEstado && ESTADOS_VALIDOS.includes(query.mpEstado)) {
     where.mpEstado = query.mpEstado;
+  }
+  // «Mail sin salir»: aprobadas cuyo mail con el QR no salió y nadie reenvió
+  // todavía. Va en el mismo selector que el estado porque es lo que quien atiende
+  // busca: a quién hay que reenviarle.
+  if (query.mpEstado === 'mail_fallido') {
+    where.mpEstado = 'approved';
+    where.mailFallidoAt = { not: null };
   }
 
   // Búsqueda libre por nombre/apellido/email del comprador. SQLite + Prisma
@@ -669,6 +718,7 @@ const ALCANCE_ARCHIVO = {
 // que una persona pueda leer dentro de la hoja.
 const ALCANCE_LEGIBLE = {
   aprobadas: 'solo aprobadas',
+  'aprobadas-mail-sin-salir': 'solo aprobadas con el mail sin salir',
   pendientes: 'solo pendientes',
   rechazadas: 'solo rechazadas',
   canceladas: 'solo canceladas',
@@ -769,7 +819,11 @@ async function adminExportar(req, res) {
     // El nombre del archivo dice QUÉ trae. Sin eso, dos descargas del mismo
     // evento con filtros distintos quedan en Descargas como "compradores.csv" y
     // "compradores (1).csv", y no hay forma de saber cuál era cuál.
-    const alcance = where.mpEstado ? (ALCANCE_ARCHIVO[where.mpEstado] || slugArchivo(where.mpEstado)) : 'todos-los-estados';
+    // «Mail sin salir» es un recorte de las aprobadas: si el archivo dijera sólo
+    // «aprobadas», sus totales se leerían como los del evento entero.
+    const alcance = req.query.mpEstado === 'mail_fallido'
+      ? 'aprobadas-mail-sin-salir'
+      : (where.mpEstado ? (ALCANCE_ARCHIVO[where.mpEstado] || slugArchivo(where.mpEstado)) : 'todos-los-estados');
     const filtrado = (q || req.query.validacion) ? '-filtrado' : '';
     const sello = fechaHoraArgentina(new Date()).replace(/[/ :]/g, '').slice(0, 12);
     const nombreArchivo = `compradores-${slugArchivo(evento.nombre)}-${alcance}${filtrado}-${sello}.csv`;
@@ -943,22 +997,32 @@ async function adminReenviarMail(req, res) {
       await prisma.compra.update({ where: { id }, data: { email: emailOverride } });
     }
 
-    const entradasParaMail = [];
-    for (const entrada of compra.entradas) {
-      const qrBase64 = await qrService.generarQRBase64(entrada.codigoQR);
-      entradasParaMail.push({ ...entrada, qrBase64: qrBase64.split(',')[1] });
-    }
-
     const adminEmail = req.session?.usuario?.email || 'admin';
     console.log(`📧 [REENVIO] Admin=${adminEmail} compra=#${id} → ${emailDestino}${emailCambio ? ` (cambió de ${compra.email})` : ''}`);
 
-    await brevoService.enviarConfirmacion({
-      email: emailDestino,
-      nombre: compra.nombre,
-      evento: compra.evento,
-      entradas: entradasParaMail,
-      compra,
-    });
+    // La marca de «mail sin salir» la limpia un reenvío que sale bien, y la pone
+    // uno que falla: es lo que Compras muestra para saber a quién reenviar.
+    const entradasParaMail = [];
+    try {
+      for (const entrada of compra.entradas) {
+        const qrBase64 = await qrService.generarQRBase64(entrada.codigoQR);
+        entradasParaMail.push({ ...entrada, qrBase64: qrBase64.split(',')[1] });
+      }
+      await brevoService.enviarConfirmacion({
+        email: emailDestino,
+        nombre: compra.nombre,
+        evento: compra.evento,
+        entradas: entradasParaMail,
+        compra,
+      });
+    } catch (mailErr) {
+      await prisma.compra.update({ where: { id }, data: { mailFallidoAt: new Date() } })
+        .catch((e) => console.error(`❌ Compra #${id}: no se pudo marcar el mail sin salir (${e.message}).`));
+      throw mailErr;
+    }
+    if (compra.mailFallidoAt) {
+      await prisma.compra.update({ where: { id }, data: { mailFallidoAt: null } });
+    }
 
     return res.json({
       ok: true,

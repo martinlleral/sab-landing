@@ -55,6 +55,13 @@ async function emitirEntradasFaltantes(compra, { enviarMail = true } = {}) {
   }
 
   const entradas = await prisma.$transaction(async (tx) => {
+    // La compra se leyó antes, fuera de esta transacción (el barrido la elige
+    // minutos después de que falló). Si en el medio la devolvieron, no se emite:
+    // sumaría cupo a una compra devuelta y mandaría un QR que no entra. La
+    // devolución también es una transacción, así que esta lectura ya la ve.
+    const vigente = await tx.compra.findUnique({ where: { id: compra.id }, select: { mpEstado: true } });
+    if (vigente?.mpEstado !== 'approved') return null;
+
     // MENÚ DE CASA METRO: acá NO se genera nada por menú. Los menús no son
     // entradas — no tienen QR ni fila en `Entrada`, y no cuentan contra el aforo
     // de la tanda. Viven como cantidad en la compra (`Compra.cantidadMenus`), y el
@@ -84,30 +91,62 @@ async function emitirEntradasFaltantes(compra, { enviarMail = true } = {}) {
     });
   }, TX_OPTS);
 
-  if (!enviarMail) return { creadas: qrFiles.length, entradas };
-
-  const entradasParaMail = [];
-  for (const entrada of entradas) {
-    const qrBase64 = await qrService.generarQRBase64(entrada.codigoQR);
-    entradasParaMail.push({ ...entrada, qrBase64: qrBase64.split(',')[1] });
+  if (entradas === null) {
+    console.error(`⚠️ Compra #${compra.id}: dejó de estar aprobada antes de emitir (devuelta o cancelada). No se emite nada.`);
+    return { creadas: 0, entradas: [] };
   }
 
-  // Envío en SEGUNDO PLANO (no bloqueante): las entradas y el QR ya están
-  // persistidos y la página de éxito los muestra desde la BD, así que no hace
-  // falta esperar a Brevo (que con reintentos puede tardar varios segundos y
-  // colgaría la respuesta post-pago). El mail es "no crítico": si falla, queda
-  // logueado y se puede reenviar desde el backoffice.
+  if (!enviarMail) return { creadas: qrFiles.length, entradas };
+
+  // De acá en adelante las entradas ya están guardadas y nada corta la emisión:
+  // lo que puede fallar es el MAIL. Si falla, queda marcado en la compra
+  // (`marcarMailFallido`) para que se vea en Compras y se reenvíe desde ahí. En la
+  // entrada incluida el mail es el único camino del QR, y el barrido no la retoma
+  // porque ya tiene su entrada.
+  const entradasParaMail = [];
+  try {
+    for (const entrada of entradas) {
+      const qrBase64 = await qrService.generarQRBase64(entrada.codigoQR);
+      entradasParaMail.push({ ...entrada, qrBase64: qrBase64.split(',')[1] });
+    }
+  } catch (err) {
+    await marcarMailFallido(compra.id, err);
+    return { creadas: qrFiles.length, entradas };
+  }
+
+  // Envío en SEGUNDO PLANO (no bloqueante): no hace falta esperar a Brevo (que con
+  // reintentos puede tardar varios segundos y colgaría la respuesta post-pago). En
+  // una compra pagada la página de éxito muestra el QR desde la BD; en la entrada
+  // incluida, no.
   brevoService.enviarConfirmacion({
     email: compra.email,
     nombre: compra.nombre,
     evento: compra.evento,
     entradas: entradasParaMail,
     compra,
-  }).catch((mailErr) => {
-    console.error('Error al enviar email (no crítico):', mailErr.message);
-  });
+  }).catch((mailErr) => marcarMailFallido(compra.id, mailErr));
 
   return { creadas: qrFiles.length, entradas };
+}
+
+/**
+ * El mail con el QR de una compra no salió: lo dice en el log y lo marca en la
+ * compra (`mailFallidoAt`), que es lo que muestra Compras. La marca la limpia un
+ * Reenviar que sale bien. Nunca tira: si tampoco puede marcar, lo loguea.
+ *
+ * @param {number} compraId
+ * @param {Error} err
+ */
+async function marcarMailFallido(compraId, err) {
+  console.error(
+    `❌ Compra #${compraId}: la entrada está creada y el mail con el QR no salió (${err?.message}). `
+    + 'Queda marcada en Compras: Reenviar desde ahí.'
+  );
+  try {
+    await prisma.compra.update({ where: { id: compraId }, data: { mailFallidoAt: new Date() } });
+  } catch (e) {
+    console.error(`❌ Compra #${compraId}: tampoco se pudo marcar el mail sin salir (${e.message}).`);
+  }
 }
 
 /**
@@ -338,15 +377,20 @@ async function revertirCompraAprobada(compraId, { revertidaPor = null, motivo = 
       include: { entradas: { select: { validada: true } } },
     });
 
-    // Devolver stock: opuesto exacto al increment de procesarPagoAprobado. Si la
-    // compra es legacy sin tanda (tandaId null), se saltea — nunca contó stock.
+    // Devolver stock: opuesto exacto al increment de la emisión. Se devuelven las
+    // entradas que EXISTEN, no `cantidadEntradas`: `emitirEntradasFaltantes` suma
+    // el cupo y crea las entradas en la misma transacción y por la misma cantidad,
+    // así que contarlas es contar lo que se sumó. Una compra aprobada cuya
+    // emisión falló todavía no sumó nada, y devolverla no puede restar.
+    // Si la compra es legacy sin tanda (tandaId null), se saltea — nunca contó stock.
     let stockDevuelto = 0;
-    if (compra.tandaId) {
+    const emitidas = compra.entradas.length;
+    if (compra.tandaId && emitidas > 0) {
       await tx.tanda.update({
         where: { id: compra.tandaId },
-        data: { cantidadVendida: { decrement: compra.cantidadEntradas } },
+        data: { cantidadVendida: { decrement: emitidas } },
       });
-      stockDevuelto = compra.cantidadEntradas;
+      stockDevuelto = emitidas;
     }
 
     // Liberar el cupón si lo usó (CuponUso tiene @@unique([compraId])).
@@ -387,4 +431,5 @@ module.exports = {
   revertirCompraAprobada,
   emitirEntradasFaltantes,
   repararComprasSinEntradas,
+  marcarMailFallido,
 };

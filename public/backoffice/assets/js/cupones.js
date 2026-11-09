@@ -58,8 +58,14 @@
         ? 'No se puede borrar — desactivalo en su lugar'
         : 'Eliminar cupón';
       const borrarDisabled = usosDisable ? 'disabled' : '';
+      // Las dos marcas del cupón de afiliadxs van al lado del código: son lo que
+      // distingue a un cupón del mes de uno común con el mismo porcentaje.
+      const marcas = [
+        c.paraAfiliados ? '<span class="badge bg-success ms-2">Afiliadxs</span>' : '',
+        (c.unaEntradaPorCompra || c.paraAfiliados) ? '<span class="badge bg-secondary ms-1">1 por compra</span>' : '',
+      ].join('');
       return `<tr data-cupon-id="${c.id}">
-        <td><code style="background:#1a1a1a;padding:3px 8px;border-radius:4px;color:#90cdf4;font-size:.9rem;">${escHtml(c.codigo)}</code></td>
+        <td><code style="background:#1a1a1a;padding:3px 8px;border-radius:4px;color:#90cdf4;font-size:.9rem;">${escHtml(c.codigo)}</code>${marcas}</td>
         <td>${tipoBadge}</td>
         <td style="font-weight:600;">${valorTxt}</td>
         <td style="color:#888;">${usosTxt}</td>
@@ -121,7 +127,20 @@
     });
     document.getElementById('cupon-tipo').value = 'porcentaje';
     document.getElementById('cupon-activo').checked = true;
+    document.getElementById('cupon-para-afiliados').checked = false;
+    document.getElementById('cupon-una-entrada').checked = false;
+    document.getElementById('cupon-una-entrada').disabled = false;
     showWarnings(null);
+  }
+
+  // El cupón de afiliadxs siempre es de una entrada (lo garantiza `validarCupon`):
+  // al marcarlo, la otra queda prendida y sin poder tocarse, para que la pantalla no
+  // ofrezca algo que no cambia nada. Desmarcarlo la libera, sin apagarla.
+  function onParaAfiliadosChange() {
+    const paraAfiliados = document.getElementById('cupon-para-afiliados').checked;
+    const unaEntrada = document.getElementById('cupon-una-entrada');
+    if (paraAfiliados) unaEntrada.checked = true;
+    unaEntrada.disabled = paraAfiliados;
   }
 
   function actualizarSufijoValor() {
@@ -146,13 +165,17 @@
     const topeRaw = document.getElementById('cupon-tope-usos').value.trim();
     const validoRaw = document.getElementById('cupon-valido-hasta').value;
     const activo = document.getElementById('cupon-activo').checked;
+    const paraAfiliados = document.getElementById('cupon-para-afiliados').checked;
+    const unaEntradaPorCompra = document.getElementById('cupon-una-entrada').checked;
 
     if (!codigo) return showFeedback('⚠️ Falta el código', true);
     if (codigo.length < 3) return showFeedback('⚠️ El código debe tener al menos 3 caracteres', true);
     if (!Number.isFinite(valor) || valor <= 0) return showFeedback('⚠️ El valor debe ser mayor a 0', true);
     if (tipo === 'porcentaje' && valor > 100) return showFeedback('⚠️ El porcentaje no puede ser mayor a 100', true);
 
-    const body = { eventoId: _eventoId, codigo, tipo, valor, activo };
+    const body = {
+      eventoId: _eventoId, codigo, tipo, valor, activo, paraAfiliados, unaEntradaPorCompra,
+    };
     if (topeRaw) body.topeUsos = parseInt(topeRaw, 10);
     if (validoRaw) body.validoHasta = new Date(validoRaw).toISOString();
 
@@ -244,6 +267,7 @@
     document.getElementById('btn-cupon-cancelar').addEventListener('click', cerrarFormCrear);
     document.getElementById('btn-cupon-crear').addEventListener('click', crearCupon);
     document.getElementById('cupon-tipo').addEventListener('change', actualizarSufijoValor);
+    document.getElementById('cupon-para-afiliados').addEventListener('change', onParaAfiliadosChange);
 
     actualizarSufijoValor();
     cargar();
