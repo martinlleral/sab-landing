@@ -915,4 +915,7 @@ module.exports = {
   adminEventoStats,
   adminEventoMenus,
   adminStatsGlobal,
+  // Lo usa la página de afiliadxs para listar los cupones de los shows por venir
+  // con el mismo umbral que la portada.
+  umbralVisibilidadART,
 };

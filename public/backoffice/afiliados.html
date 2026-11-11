@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Afiliadxs — SAB Backoffice</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/backoffice/assets/css/bo.css">
+</head>
+<body>
+  <div class="bo-layout">
+    <aside class="bo-sidebar" id="sidebar">
+      <div class="bo-sidebar-brand">S.A. <span>BOLEROS</span></div>
+      <nav class="bo-nav">
+        <a href="/backoffice/dashboard.html" class="bo-nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
+        <a href="/backoffice/reportes.html" class="bo-nav-link"><i class="bi bi-bar-chart-line"></i> Reportes</a>
+        <a href="/backoffice/home-cms.html" class="bo-nav-link"><i class="bi bi-house-gear"></i> Home CMS</a>
+        <a href="/backoffice/eventos-lista.html" class="bo-nav-link"><i class="bi bi-calendar-event"></i> Eventos</a>
+        <a href="/backoffice/lector-qr.html" class="bo-nav-link"><i class="bi bi-qr-code-scan"></i> Lector QR</a>
+        <a href="/backoffice/validacion-accesos.html" class="bo-nav-link"><i class="bi bi-link-45deg"></i> Accesos QR</a>
+        <a href="/backoffice/afiliados.html" class="bo-nav-link active"><i class="bi bi-people"></i> Afiliadxs</a>
+        <div class="bo-nav-divider"></div>
+        <a href="#" class="bo-nav-link text-danger" onclick="handleLogout()"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a>
+      </nav>
+    </aside>
+
+    <main class="bo-main">
+      <header class="bo-topbar">
+        <button class="bo-sidebar-toggle" onclick="toggleSidebar()"><i class="bi bi-list fs-4"></i></button>
+        <h1 class="bo-page-title">Afiliadxs</h1>
+        <div class="bo-topbar-user" id="topbar-user">—</div>
+      </header>
+
+      <div class="bo-content">
+        <div id="bo-alert" class="bo-alert"></div>
+
+        <!-- La dirección privada -->
+        <div class="bo-card">
+          <div class="bo-card-header">
+            <h5 class="bo-card-title"><i class="bi bi-key me-2"></i>La dirección de la página</h5>
+          </div>
+          <div class="bo-card-body">
+            <p class="small mb-3" style="color:#999;">
+              Es la que le mandás a cada afiliadx cuando ves su alta en Mercado Pago. <strong>Cambiala una vez por mes</strong> y mandales la nueva a quienes siguen al día: <strong>la anterior deja de andar en el momento</strong>. Quien tenga la dirección entra sin usuario ni contraseña.
+            </p>
+            <div id="acceso-vigente" style="display:none;">
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <code id="acceso-url" style="font-size:.85rem;color:#ddd;word-break:break-all;background:#0f0f0f;border:1px solid #2a2a2a;border-radius:6px;padding:10px 12px;"></code>
+                <button class="btn-bo-secondary" id="btn-copiar" type="button"><i class="bi bi-clipboard me-1"></i> Copiar</button>
+                <a class="btn-bo-secondary" id="btn-abrir" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right me-1"></i> Ver la página</a>
+              </div>
+              <p class="small mt-2 mb-0" id="acceso-meta" style="color:#999;"></p>
+            </div>
+            <p id="acceso-ninguna" class="mb-0" style="display:none;color:#ccc;">Todavía no hay una dirección. Creala antes de mandarle la primera a alguien.</p>
+            <div class="mt-3">
+              <button class="btn-bo-primary" id="btn-rotar" type="button"><i class="bi bi-arrow-repeat me-1"></i> <span>Cambiar la dirección</span></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- La lista de videos -->
+        <div class="bo-card">
+          <div class="bo-card-header">
+            <h5 class="bo-card-title"><i class="bi bi-youtube me-2"></i>Los videos</h5>
+          </div>
+          <div class="bo-card-body">
+            <p class="small mb-3" style="color:#999;">
+              El link de la lista de YouTube (la «no listada»). Se ve sólo dentro de la página de afiliadxs. Los videos nuevos se suman en YouTube, adentro de la misma lista: acá no hace falta tocar nada.
+            </p>
+            <form id="form-lista" class="row g-2 align-items-end" novalidate>
+              <div class="col-md-9">
+                <label class="bo-form-label" for="listaUrl">Link de la lista</label>
+                <input type="url" class="bo-form-control" id="listaUrl" name="listaUrl" inputmode="url" autocomplete="off" placeholder="https://www.youtube.com/playlist?list=…">
+              </div>
+              <div class="col-md-3">
+                <button class="btn-bo-primary w-100" id="btn-lista" type="submit"><i class="bi bi-check2 me-1"></i> Guardar</button>
+              </div>
+            </form>
+            <p class="small mt-2 mb-0" id="lista-estado" style="color:#999;"></p>
+          </div>
+        </div>
+
+        <!-- Los códigos -->
+        <div class="bo-card">
+          <div class="bo-card-header">
+            <h5 class="bo-card-title"><i class="bi bi-ticket-perforated me-2"></i>Los códigos de cada show</h5>
+          </div>
+          <div class="bo-card-body">
+            <p class="small mb-0" style="color:#ccc;">
+              La página lista sola los cupones marcados <strong>«Para afiliadxs»</strong> de los shows publicados que vienen, con venta en la web. Se crean en cada evento, en la sección Cupones: creás el cupón y aparece. Los vencidos, los desactivados y los de shows que ya pasaron no se muestran; el que llegó a su tope aparece como agotado. Para ver lo que ve un afiliadx, «Ver la página».
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/backoffice/assets/js/bo.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      cargarAcceso();
+      cargarLista();
+      document.getElementById('btn-rotar').addEventListener('click', rotar);
+      document.getElementById('btn-copiar').addEventListener('click', copiarUrl);
+      document.getElementById('form-lista').addEventListener('submit', guardarLista);
+    });
+
+    let urlVigente = '';
+
+    function pintarAcceso(vigente) {
+      const hay = !!vigente;
+      document.getElementById('acceso-vigente').style.display = hay ? '' : 'none';
+      document.getElementById('acceso-ninguna').style.display = hay ? 'none' : '';
+      document.querySelector('#btn-rotar span').textContent = hay ? 'Cambiar la dirección' : 'Crear la dirección';
+      if (!hay) { urlVigente = ''; return; }
+      urlVigente = `${location.origin}${vigente.url}`;
+      document.getElementById('acceso-url').textContent = urlVigente;
+      document.getElementById('btn-abrir').href = urlVigente;
+      const partes = [`Creada el ${boFechaHora(vigente.createdAt)}`];
+      if (vigente.creadoPor) partes.push(`por ${vigente.creadoPor}`);
+      partes.push(vigente.ultimoAcceso ? `· último uso: ${boFechaHora(vigente.ultimoAcceso)}` : '· todavía nadie entró');
+      document.getElementById('acceso-meta').textContent = partes.join(' ');
+    }
+
+    async function cargarAcceso() {
+      try {
+        const { vigente } = await boFetch('/api/admin/afiliados/acceso');
+        pintarAcceso(vigente);
+      } catch (err) {
+        boAlert('Error al cargar la dirección: ' + err.message);
+      }
+    }
+
+    async function rotar() {
+      const hayUna = !!urlVigente;
+      if (hayUna && !boConfirm('La dirección actual deja de andar ahora mismo, para todos. ¿La cambiás?')) return;
+      const btn = document.getElementById('btn-rotar');
+      btn.disabled = true;
+      try {
+        const { vigente } = await boFetch('/api/admin/afiliados/acceso/rotar', { method: 'POST' });
+        pintarAcceso(vigente);
+        boAlert(hayUna
+          ? '✅ Dirección nueva. La anterior ya no anda: mandales ésta a quienes siguen al día.'
+          : '✅ Dirección creada. Copiala y mandásela a cada afiliadx.', 'success');
+      } catch (err) {
+        boAlert('No se pudo cambiar la dirección: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function copiarUrl() {
+      const btn = document.getElementById('btn-copiar');
+      try {
+        await navigator.clipboard.writeText(urlVigente);
+        const prev = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check2 me-1"></i> Copiada';
+        setTimeout(() => { btn.innerHTML = prev; }, 1500);
+      } catch (e) {
+        boAlert('No se pudo copiar. Seleccioná la dirección y copiala a mano.');
+      }
+    }
+
+    function pintarLista(contenido) {
+      document.getElementById('listaUrl').value = contenido.listaUrl || '';
+      document.getElementById('listaUrl').removeAttribute('aria-invalid');
+      document.getElementById('lista-estado').style.color = '#999';
+      document.getElementById('lista-estado').textContent = contenido.listaId
+        ? 'Lista cargada: la página muestra los videos.'
+        : 'Sin lista: la página no muestra la sección de videos.';
+    }
+
+    async function cargarLista() {
+      try {
+        pintarLista(await boFetch('/api/admin/afiliados/contenido'));
+      } catch (err) {
+        boAlert('Error al cargar la lista: ' + err.message);
+      }
+    }
+
+    async function guardarLista(ev) {
+      ev.preventDefault();
+      const input = document.getElementById('listaUrl');
+      const btn = document.getElementById('btn-lista');
+      btn.disabled = true;
+      try {
+        const contenido = await boFetch('/api/admin/afiliados/contenido', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listaUrl: input.value.trim() }),
+        });
+        pintarLista(contenido);
+        boAlert(contenido.listaId ? '✅ Lista guardada' : '✅ Lista borrada', 'success');
+      } catch (err) {
+        boAlert(err.message);
+        const estado = document.getElementById('lista-estado');
+        estado.textContent = `⚠️ ${err.message} No se guardó: sigue la lista anterior.`;
+        estado.style.color = '#f87171';
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

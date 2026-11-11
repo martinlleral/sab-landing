@@ -261,3 +261,14 @@ model AccesoAfiliados {
   ultimoAcceso DateTime?
   createdAt    DateTime  @default(now())
 }
+
+// Lo que la página de afiliadxs muestra además de los cupones: por ahora, la
+// lista de videos de YouTube. Una sola fila (la crea el backoffice al guardar).
+// Va en una tabla propia y NO en `Home` a propósito: `GET /api/home` es público
+// y devuelve la fila entera de Home, y la lista sólo la recibe la página
+// privada (`GET /api/afiliados/:token`). El link no va en el repo.
+model ContenidoAfiliados {
+  id        Int      @id @default(autoincrement())
+  listaUrl  String   @default("")
+  updatedAt DateTime @updatedAt
+}

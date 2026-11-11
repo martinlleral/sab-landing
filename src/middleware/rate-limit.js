@@ -65,4 +65,16 @@ const validacionQRLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes. Esperá un momento.' },
 });
 
-module.exports = { loginLimiter, comprasLimiter, cuponesValidarLimiter, reportePublicoLimiter, validacionQRLimiter };
+// Rate limiter para /api/afiliados/:token (la página de afiliadxs). La página
+// hace un solo fetch por carga: 30 req/min por IP es holgado para una persona
+// (aun recargando) y corta a quien pruebe direcciones. La dirección (64 hex) ya
+// es la barrera principal.
+const afiliadosLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_AFILIADOS_MAX, 10) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Esperá un momento.' },
+});
+
+module.exports = { loginLimiter, comprasLimiter, cuponesValidarLimiter, reportePublicoLimiter, validacionQRLimiter, afiliadosLimiter };
