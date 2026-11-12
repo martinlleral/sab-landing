@@ -44,6 +44,22 @@ model Home {
   // `ALTER TABLE ADD COLUMN` en vez de reescribir la tabla entera.
   precioMenu     Int      @default(15000)
   menuCorteHora  String   @default("18:00")
+  // Afiliaciones (escalón 0): los tres planes de suscripción de Mercado Pago que
+  // muestra /afiliate. Los carga la coordinación desde el panel; el repo no lleva
+  // ni montos ni links (defaults vacíos). Son públicos a propósito: los devuelve
+  // `GET /api/home` y se ven en la página. Un plan se muestra si tiene nombre y
+  // monto; el link sólo se acepta de Mercado Pago y por https
+  // (src/services/planes-afiliacion.service.js). Al final del modelo, como los
+  // del menú, para que la migración sea ADD COLUMN.
+  afiliacionPlan1Nombre String @default("")
+  afiliacionPlan1Monto  Int    @default(0)
+  afiliacionPlan1Link   String @default("")
+  afiliacionPlan2Nombre String @default("")
+  afiliacionPlan2Monto  Int    @default(0)
+  afiliacionPlan2Link   String @default("")
+  afiliacionPlan3Nombre String @default("")
+  afiliacionPlan3Monto  Int    @default(0)
+  afiliacionPlan3Link   String @default("")
 }
 
 model Evento {

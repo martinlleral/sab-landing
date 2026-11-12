@@ -113,7 +113,7 @@
             <li class="nav-item"><a class="nav-link" href="#descripcion">El Evento</a></li>
             <li class="nav-item"><a class="nav-link" href="#proximos">Próximos</a></li>
             <li class="nav-item"><a class="nav-link" href="#quienes-somos">Quiénes Somos</a></li>
-            <li class="nav-item"><a class="nav-link" href="#waitlist">Sumate</a></li>
+            <li class="nav-item"><a class="nav-link" id="nav-sumate" href="#waitlist">Sumate</a></li>
             <!-- Admin: acceder por URL directa /backoffice/login.html -->
           </ul>
         </div>
@@ -554,6 +554,24 @@
       /* CTA con aire respirable */
       .wl-submit-wrap{margin-top:2rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.06)}
     </style>
+    <!-- AFILIACIONES: reemplaza a la lista de espera desde la salida
+         (src/config/afiliaciones.js). Viene oculta: la muestra app.js cuando
+         /api/home responde afiliacionesAbiertas = true. Sin JS, o con /api/home
+         caído, queda la lista de espera de abajo, como antes. -->
+    <style>#afiliate{position:relative;padding:80px 0 72px;background:linear-gradient(175deg,#0a0a0a 0%,#12090c 40%,#0a0a0a 100%);overflow:hidden;scroll-margin-top:72px}#afiliate::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#c4384b44,transparent)}#afiliate .wl-header{margin-bottom:0}#afiliate .wl-title,#afiliate .wl-subtitle{text-wrap:balance}#afiliate .wl-subtitle+.wl-subtitle{margin-top:12px}#afiliate .wl-submit-wrap{border-top:0;padding-top:0;margin-top:32px;text-align:center}#afiliate .wl-btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;text-decoration:none}#afiliate .wl-btn:focus-visible{outline:2px solid #e63946;outline-offset:3px}@media (prefers-reduced-motion: reduce){#afiliate .wl-btn{transition:none}#afiliate .wl-btn:hover{transform:none}}</style>
+    <section id="afiliate" hidden aria-labelledby="afiliate-titulo">
+      <div class="wl-container">
+        <div class="wl-header">
+          <div class="wl-eyebrow">Afiliaciones</div>
+          <h2 class="wl-title" id="afiliate-titulo">Afiliate al Sindicato</h2>
+          <p class="wl-subtitle">Bancá a la orquesta con una cuota por&nbsp;mes.</p>
+          <p class="wl-subtitle">Te da tu entrada a los shows (sujeta a disponibilidad) y los videos exclusivos de la página de&nbsp;afiliadxs.</p>
+        </div>
+        <div class="wl-submit-wrap">
+          <a class="wl-btn" href="/afiliate?origen=seccion">Afiliate</a>
+        </div>
+      </div>
+    </section>
     <section id="waitlist">
       <div class="wl-container">
         <div class="wl-header">
@@ -684,6 +702,10 @@
           if(el)el.textContent=d||0;
         }catch(e){console.warn('Waitlist count:',e)}
       }
+      // El contador ya no se pide solo: lo pide app.js cuando /api/home dice que
+      // las afiliaciones no abrieron (o no respondió). Abiertas, la lista de
+      // espera se oculta y Supabase no se llama.
+      window.sabListaEspera={contar:loadCount};
 
       const f=document.getElementById('wl-form');
       if(!f)return;
@@ -764,8 +786,6 @@
           console.error('Waitlist network error:',er);
         }
       });
-
-      loadCount();
     })();
     </script>
 

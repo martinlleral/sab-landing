@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- La vuelta desde Mercado Pago: no tiene nada que buscar, no se indexa.
+       El servidor manda lo mismo en X-Robots-Tag. -->
+  <meta name="robots" content="noindex, nofollow">
+  <title>¡Gracias por afiliarte! · Sindicato Argentino de Boleros</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <style>
+    /* La misma familia de clases que /afiliate y la página de afiliadxs. */
+    html { color-scheme: dark; }
+    .af-top { border-bottom: 1px solid var(--color-border); padding: 14px 0; }
+    .af-wrap { max-width: 680px; margin: 0 auto; padding: 0 20px; }
+    .af-brand { font-family: var(--font-heading); font-weight: 700; font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; color: var(--color-text); text-decoration: none; display: inline-block; padding: 10px 0; }
+    .af-brand span { color: var(--color-accent); }
+    .af-main { padding: 56px 0 72px; background: linear-gradient(175deg, var(--color-bg) 0%, #12090c 40%, var(--color-bg) 100%); min-height: 70vh; }
+    .af-state { text-align: center; }
+    .af-eyebrow { font-family: var(--font-heading); font-size: .75rem; font-weight: 500; letter-spacing: 4px; text-transform: uppercase; color: var(--color-accent); margin-bottom: 12px; }
+    .af-title { font-family: var(--font-heading); font-size: clamp(2rem, 7vw, 3rem); font-weight: 700; text-transform: uppercase; letter-spacing: 3px; line-height: 1.1; margin-bottom: 22px; text-wrap: balance; }
+    .af-lead { color: #ccc; font-size: 1rem; line-height: 1.7; max-width: 520px; margin: 0 auto; text-wrap: pretty; }
+    .af-lead + .af-lead { margin-top: 10px; }
+    .af-note { margin: 28px auto 0; max-width: 520px; text-align: left; background: var(--color-surface); border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent); border-radius: 8px; padding: 18px 20px; }
+    .af-note p { color: #ccc; line-height: 1.7; text-wrap: pretty; }
+    .af-note p + p { margin-top: 10px; }
+    .af-link { color: var(--color-text); text-decoration: underline; text-underline-offset: 3px; }
+    .af-link:hover { color: var(--color-accent); }
+    .af-actions { display: flex; justify-content: center; margin-top: 32px; }
+    .af-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 10px 24px; border-radius: 4px; font-family: var(--font-heading); font-size: .95rem; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; border: 1px solid #444; color: var(--color-text); background: transparent; transition: border-color .2s; touch-action: manipulation; }
+    .af-btn:hover { border-color: var(--color-text-muted); color: var(--color-text); }
+    .af-btn:focus-visible, .af-brand:focus-visible, .af-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+    .af-foot { border-top: 1px solid var(--color-border); padding: 24px 0 32px; color: var(--color-text-muted); font-size: .85rem; text-align: center; }
+    @media (prefers-reduced-motion: reduce) { .af-btn { transition: none; } }
+  </style>
+</head>
+<body>
+  <header class="af-top">
+    <div class="af-wrap">
+      <a class="af-brand" href="/">S.A. <span>Boleros</span></a>
+    </div>
+  </header>
+
+  <main class="af-main">
+    <div class="af-wrap af-state">
+      <p class="af-eyebrow">Afiliaciones</p>
+      <h1 class="af-title">¡Gracias por afiliarte!</h1>
+      <p class="af-lead">Mercado Pago cobra tu primera cuota en la próxima&nbsp;hora.</p>
+      <p class="af-lead">Después te mandamos el link de la página de afiliadxs al mail con&nbsp;el&nbsp;que&nbsp;pagaste.</p>
+
+      <div class="af-note">
+        <p>Si no lo ves, buscalo en spam o&nbsp;en&nbsp;Promociones.</p>
+        <p>¿No te llegó?<br><a class="af-link" id="af-wa" href="https://wa.me/5492215917409" target="_blank" rel="noopener">Escribinos por WhatsApp</a> al&nbsp;221&nbsp;591-7409.</p>
+      </div>
+
+      <div class="af-actions">
+        <a class="af-btn" href="/">Volver al inicio</a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="af-foot">
+    <div class="af-wrap">Sindicato Argentino de Boleros · La Plata</div>
+  </footer>
+
+  <script>
+    document.getElementById('af-wa').href = 'https://wa.me/5492215917409?text=' +
+      encodeURIComponent('Hola! Me afilié y no me llegó el link de la página de afiliadxs');
+  </script>
+</body>
+</html>

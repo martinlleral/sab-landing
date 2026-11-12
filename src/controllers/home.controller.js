@@ -1,4 +1,6 @@
 const prisma = require('../utils/prisma');
+const { abiertas } = require('../config/afiliaciones');
+const { parsePlanes, planesPublicos } = require('../services/planes-afiliacion.service');
 
 /**
  * Parsea la hora de corte de la venta de menús (Sprint 7, S3). Misma forma que
@@ -27,7 +29,15 @@ async function getHome(req, res) {
   try {
     const home = await prisma.home.findFirst();
     if (!home) return res.status(404).json({ error: 'No se encontró configuración de home' });
-    return res.json(home);
+    // Las afiliaciones: si ya abrieron (lo decide el servidor, no el reloj de
+    // quien mira) y los planes listos para pintar, sin los incompletos y con el
+    // link sólo si es de Mercado Pago. La portada, /afiliate y el botón flotante
+    // leen esto mismo.
+    return res.json({
+      ...home,
+      afiliacionesAbiertas: abiertas(),
+      planesAfiliacion: planesPublicos(home),
+    });
   } catch (err) {
     console.error('Error en getHome:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -45,7 +55,11 @@ async function updateHome(req, res) {
       eventosVisiblesPortada, mostrarCicloMiercoles,
       precioMenu, menuCorteHora,
     } = req.body;
-    const data = {};
+    // Los planes de afiliación primero: un link que no es de Mercado Pago frena
+    // el guardado entero (400), así nadie cree que guardó lo que no se guardó.
+    const planes = parsePlanes(req.body);
+    if (planes.error) return res.status(400).json({ error: planes.error });
+    const data = { ...planes.data };
 
     if (textoEvento !== undefined) data.textoEvento = textoEvento;
     if (youtubeUrl !== undefined) data.youtubeUrl = youtubeUrl;

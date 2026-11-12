@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Afiliate · Sindicato Argentino de Boleros</title>
+  <meta name="description" content="Una cuota por mes para bancar a la orquesta, con tu entrada a los shows y videos exclusivos.">
+  <link rel="canonical" href="https://sindicatoargentinodeboleros.com.ar/afiliate">
+  <meta property="og:title" content="Afiliate · Sindicato Argentino de Boleros">
+  <meta property="og:description" content="Una cuota por mes para bancar a la orquesta, con tu entrada a los shows y videos exclusivos">
+  <meta property="og:image" content="https://sindicatoargentinodeboleros.com.ar/assets/img/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://sindicatoargentinodeboleros.com.ar/afiliate">
+  <meta property="og:locale" content="es_AR">
+  <meta property="og:site_name" content="Sindicato Argentino de Boleros">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <style>
+    /* Tokens de app.css (:root): --color-bg, --color-surface, --color-accent,
+       --color-accent-hover, --color-text, --color-text-muted, --color-border,
+       --font-heading, --font-body. La misma familia de clases que la página de
+       afiliadxs (public/afiliados/index.html), inline para no depender del caché
+       de /assets. El carmín como TEXTO va sólo sobre --color-bg (4,75:1). */
+    html { color-scheme: dark; scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    .af-skip { position: absolute; left: -9999px; top: 0; }
+    .af-skip:focus { left: 16px; top: 12px; z-index: 10; background: var(--color-surface); color: var(--color-text); padding: 10px 14px; border-radius: 4px; }
+
+    .af-top { border-bottom: 1px solid var(--color-border); padding: 14px 0; }
+    .af-wrap { max-width: 680px; margin: 0 auto; padding: 0 20px; }
+    .af-brand { font-family: var(--font-heading); font-weight: 700; font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; color: var(--color-text); text-decoration: none; display: inline-block; padding: 10px 0; }
+    .af-brand span { color: var(--color-accent); }
+
+    .af-main { padding: 40px 0 72px; background: linear-gradient(175deg, var(--color-bg) 0%, #12090c 40%, var(--color-bg) 100%); min-height: 70vh; }
+    .af-head { text-align: center; margin-bottom: 36px; }
+    .af-eyebrow { font-family: var(--font-heading); font-size: .75rem; font-weight: 500; letter-spacing: 4px; text-transform: uppercase; color: var(--color-accent); margin-bottom: 12px; }
+    .af-title { font-family: var(--font-heading); font-size: clamp(2rem, 7vw, 3rem); font-weight: 700; text-transform: uppercase; letter-spacing: 3px; line-height: 1.1; margin-bottom: 18px; text-wrap: balance; overflow-wrap: anywhere; min-width: 0; }
+    .af-lead { color: #ccc; font-size: 1rem; line-height: 1.7; max-width: 520px; margin: 0 auto; text-wrap: balance; }
+
+    /* app.css le da 80px de padding a todo <section>: acá el ritmo lo pone el margen */
+    .af-block { margin-top: 44px; padding: 0; scroll-margin-top: 24px; }
+    .af-h2 { font-family: var(--font-heading); font-size: 1.35rem; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; text-wrap: balance; scroll-margin-top: 24px; }
+    .af-h2::after { content: ''; display: block; width: 48px; height: 3px; background: var(--color-accent); margin-top: 10px; }
+    .af-p { color: #ccc; line-height: 1.7; margin-top: 14px; text-wrap: pretty; }
+
+    /* Qué te llevás: dos renglones con su marca, sin glifos (las fuentes no los cubren) */
+    .af-bullets { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 12px; }
+    .af-bullets li { position: relative; padding-left: 22px; color: #ccc; line-height: 1.6; text-wrap: pretty; }
+    .af-bullets li::before { content: ''; position: absolute; left: 0; top: .62em; width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent); }
+
+    .af-steps { list-style: none; counter-reset: paso; margin: 16px 0 0; padding: 0; display: grid; gap: 10px; }
+    .af-steps li { counter-increment: paso; display: flex; gap: 12px; align-items: baseline; color: #ccc; line-height: 1.5; text-wrap: pretty; }
+    .af-steps li::before { content: counter(paso); flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--color-accent); color: var(--color-text); font-family: var(--font-heading); font-size: .85rem; display: inline-flex; align-items: center; justify-content: center; }
+
+    /* Los planes: salen de /api/home (los carga la coordinación desde el panel) */
+    .af-planes { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 14px; }
+    .af-plan { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 20px; position: relative; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+    .af-plan::before { content: ''; position: absolute; top: -1px; left: 28px; right: 28px; height: 2px; background: linear-gradient(90deg, transparent, var(--color-accent), transparent); }
+    .af-plan-nombre { font-family: var(--font-heading); font-size: 1.1rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--color-text); overflow-wrap: anywhere; text-wrap: balance; }
+    .af-plan-monto { font-family: var(--font-heading); font-size: 2rem; font-weight: 700; line-height: 1.1; color: var(--color-text); font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+    .af-plan-monto small { font-family: var(--font-body); font-size: .85rem; font-weight: 400; color: var(--color-text-muted); letter-spacing: 0; margin-left: 4px; }
+    .af-plan .af-btn { margin-top: auto; width: 100%; }
+    .af-plan-monto { margin-bottom: 14px; }
+    /* El WhatsApp en lugar de «Afiliarme»: secundario, en minúscula para que entre en la tarjeta angosta */
+    .af-btn.af-btn--wa { font-family: var(--font-body); font-size: .9rem; font-weight: 600; letter-spacing: 0; text-transform: none; line-height: 1.35; }
+    .af-skel { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; height: 168px; }
+
+    .af-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px 20px; border-radius: 4px; font-family: var(--font-heading); font-size: .95rem; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; text-align: center; cursor: pointer; border: 1px solid transparent; transition: filter .2s, background-color .2s, border-color .2s; touch-action: manipulation; text-wrap: balance; }
+    .af-btn svg { width: 18px; height: 18px; flex: none; }
+    .af-btn--primary { background: var(--color-accent-hover); color: #fff; }
+    .af-btn--primary:hover { filter: brightness(.88); color: #fff; }
+    .af-btn--ghost { background: transparent; color: var(--color-text); border-color: #444; letter-spacing: 1px; }
+    .af-btn--ghost:hover { border-color: var(--color-text-muted); color: var(--color-text); }
+    .af-btn:focus-visible, .af-brand:focus-visible, .af-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+    .af-pronto { margin-top: 22px; background: var(--color-surface); border: 1px dashed var(--color-border); border-radius: 10px; padding: 20px; }
+    .af-pronto p { color: #ccc; line-height: 1.7; text-wrap: pretty; }
+    .af-pronto .af-btn { margin-top: 16px; }
+
+    .af-note { margin-top: 20px; background: var(--color-surface); border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent); border-radius: 8px; padding: 18px 20px; }
+    .af-note p { color: #ccc; line-height: 1.7; text-wrap: pretty; }
+    .af-note p + p { margin-top: 10px; }
+    .af-link { color: var(--color-text); text-decoration: underline; text-underline-offset: 3px; }
+    .af-link:hover { color: var(--color-accent); }
+
+    .af-faq { margin-top: 18px; display: grid; gap: 22px; }
+    .af-faq h3 { font-family: var(--font-body); font-size: 1rem; font-weight: 700; color: var(--color-text); line-height: 1.5; text-wrap: balance; }
+    .af-faq p { color: #ccc; line-height: 1.7; margin-top: 6px; text-wrap: pretty; }
+
+    .af-foot { border-top: 1px solid var(--color-border); padding: 24px 0 32px; color: var(--color-text-muted); font-size: .85rem; text-align: center; }
+    .af-foot a { color: var(--color-text-muted); }
+    .af-foot p + p { margin-top: 8px; }
+
+    .af-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    [hidden] { display: none !important; }
+
+    @media (min-width: 720px) {
+      .af-main { padding-top: 64px; }
+      .af-head { margin-bottom: 44px; }
+      .af-planes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .af-plan { padding: 22px 20px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .af-btn { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="af-skip" href="#contenido">Ir al contenido</a>
+
+  <header class="af-top">
+    <div class="af-wrap">
+      <a class="af-brand" href="/">S.A. <span>Boleros</span></a>
+    </div>
+  </header>
+
+  <main class="af-main" id="contenido">
+    <div class="af-wrap">
+
+      <div class="af-head">
+        <p class="af-eyebrow">Sindicato Argentino de Boleros</p>
+        <h1 class="af-title">Afiliate a este amor</h1>
+        <p class="af-lead">Somos una orquesta cooperativa.<br>Afiliarte es bancar al Sindicato&nbsp;todos&nbsp;los&nbsp;meses</p>
+      </div>
+
+      <section class="af-block" aria-labelledby="t-que">
+        <h2 class="af-h2" id="t-que">Qué te llevás</h2>
+        <ul class="af-bullets">
+          <!-- Pendiente de la coordinación: si la entrada vale sólo en los shows que se venden por esta web, este renglón lo dice -->
+          <li>Tu entrada a los shows. Una por show, sujeta a&nbsp;disponibilidad</li>
+          <li>La página de afiliadxs con videos exclusivos del Sindicato y el código para sacar tu&nbsp;entrada</li>
+        </ul>
+      </section>
+
+      <section class="af-block" id="cuanto" aria-labelledby="t-cuanto">
+        <h2 class="af-h2" id="t-cuanto">Cuánto</h2>
+        <p class="af-p">Una cuota por mes que se cobra sola&nbsp;por&nbsp;Mercado&nbsp;Pago.<br>Elegí cuánto aportar: los&nbsp;tres planes dan lo mismo y cambia sólo&nbsp;cuánto&nbsp;bancás</p>
+
+        <!-- Cargando: el esqueleto tiene la forma de las tarjetas -->
+        <div class="af-planes" id="af-cargando" aria-busy="true">
+          <p class="af-sr">Cargando los planes…</p>
+          <div class="af-skel"></div><div class="af-skel"></div><div class="af-skel"></div>
+        </div>
+        <ul class="af-planes" id="af-planes" hidden></ul>
+
+        <!-- Sin planes cargados (o sin conexión): nunca un callejón sin salida -->
+        <div class="af-pronto" id="af-pronto" hidden>
+          <p>Muy pronto te vas a poder afiliar desde acá. Mientras, escribinos por WhatsApp al 221&nbsp;591-7409.</p>
+          <a class="af-btn af-btn--ghost js-wa" data-texto="Hola! Quiero afiliarme al Sindicato" href="https://wa.me/5492215917409" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><use href="#icono-wa"/></svg>
+            Escribinos
+          </a>
+        </div>
+      </section>
+
+      <section class="af-block" aria-labelledby="t-sigue">
+        <h2 class="af-h2" id="t-sigue">Cómo sigue</h2>
+        <ol class="af-steps">
+          <li>Elegís tu plan y lo&nbsp;pagás&nbsp;en&nbsp;Mercado&nbsp;Pago</li>
+          <li>Te mandamos el link de la página de afiliadxs al mail con&nbsp;el&nbsp;que&nbsp;pagaste</li>
+          <li>Ahí están los videos y el código para sacar tu entrada en&nbsp;cada&nbsp;show</li>
+        </ol>
+      </section>
+
+      <section class="af-block" aria-labelledby="t-baja">
+        <h2 class="af-h2" id="t-baja">Darte de baja</h2>
+        <div class="af-note">
+          <p>Cuando quieras y sin trámites, con el Botón de baja de servicio que está al&nbsp;pie&nbsp;de&nbsp;la&nbsp;web.</p>
+          <p>Te confirmamos la baja con un código dentro de las 24&nbsp;horas.</p>
+        </div>
+      </section>
+
+      <section class="af-block" aria-labelledby="t-faq">
+        <h2 class="af-h2" id="t-faq">Preguntas frecuentes</h2>
+        <div class="af-faq">
+          <!-- Pendiente de la coordinación: «¿La entrada vale en todos los shows?» entra con su respuesta -->
+          <div>
+            <h3>¿Puedo llevar a alguien con mi entrada?</h3>
+            <p>Tu entrada de afiliadx es para vos: una&nbsp;por&nbsp;persona y&nbsp;por&nbsp;show. Las&nbsp;de&nbsp;quienes vengan con vos se compran en la web&nbsp;como&nbsp;siempre</p>
+          </div>
+          <div>
+            <h3>¿Tenés otra duda?</h3>
+            <p><a class="af-link js-wa" data-texto="Hola! Tengo una duda sobre las afiliaciones" href="https://wa.me/5492215917409" target="_blank" rel="noopener">Escribinos por WhatsApp</a> al 221&nbsp;591-7409</p>
+          </div>
+        </div>
+      </section>
+
+      <p class="af-sr" id="af-aviso" aria-live="polite"></p>
+    </div>
+  </main>
+
+  <footer class="af-foot">
+    <div class="af-wrap">
+      <p>Sindicato Argentino de Boleros · La Plata</p>
+      <!-- El Botón de baja de servicio (Disposición 954/2025) lo pone la S5 acá,
+           como en el resto del sitio. Hasta entonces, la baja va por WhatsApp. -->
+      <p id="af-pie-baja"><a class="js-wa" data-texto="Hola! Quiero darme de baja de mi afiliación" href="https://wa.me/5492215917409" target="_blank" rel="noopener">Darte de baja</a></p>
+    </div>
+  </footer>
+
+  <!-- Íconos: se usan con <use>, sin pintar HTML desde el script -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="icono-wa" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z"/></symbol>
+  </svg>
+
+  <script>
+  (function () {
+    'use strict';
+
+    // Los planes (nombre, monto y link) vienen de /api/home: los carga la
+    // coordinación desde el panel. Todo se pinta con textContent. Un plan sin
+    // link válido ofrece el WhatsApp en lugar del botón; sin planes, «muy pronto».
+    var WA = 'https://wa.me/5492215917409';
+    var $ = function (id) { return document.getElementById(id); };
+
+    function linkWa(texto) { return WA + '?text=' + encodeURIComponent(texto); }
+    document.querySelectorAll('.js-wa').forEach(function (a) {
+      if (a.dataset.texto) a.href = linkWa(a.dataset.texto);
+    });
+
+    function el(tag, cls, texto) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (texto != null) n.textContent = texto;
+      return n;
+    }
+    function iconoWa() {
+      var ns = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('fill', 'currentColor');
+      var use = document.createElementNS(ns, 'use');
+      use.setAttribute('href', '#icono-wa');
+      svg.appendChild(use);
+      return svg;
+    }
+    function plata(n) { return '$' + Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 }); }
+
+    function tarjeta(p) {
+      var li = el('li', 'af-plan');
+      li.appendChild(el('h3', 'af-plan-nombre', p.nombre));
+      var monto = el('p', 'af-plan-monto', plata(p.monto));
+      monto.appendChild(el('small', null, 'por mes'));
+      li.appendChild(monto);
+      var b;
+      if (p.link && /^https:\/\//.test(p.link)) {
+        b = el('a', 'af-btn af-btn--primary', 'Afiliarme');
+        b.href = p.link;
+        b.setAttribute('aria-label', 'Afiliarme con el plan ' + p.nombre);
+      } else {
+        b = el('a', 'af-btn af-btn--ghost af-btn--wa');
+        b.appendChild(iconoWa());
+        b.appendChild(document.createTextNode('Escribinos por WhatsApp para afiliarte'));
+        b.href = linkWa('Hola! Quiero afiliarme con el plan ' + p.nombre);
+        b.target = '_blank';
+        b.rel = 'noopener';
+      }
+      li.appendChild(b);
+      return li;
+    }
+
+    function pintar(planes) {
+      $('af-cargando').hidden = true;
+      $('af-cargando').setAttribute('aria-busy', 'false');
+      var ul = $('af-planes');
+      ul.replaceChildren();
+      if (!planes.length) { ul.hidden = true; $('af-pronto').hidden = false; return; }
+      planes.forEach(function (p) { ul.appendChild(tarjeta(p)); });
+      ul.hidden = false;
+      $('af-pronto').hidden = true;
+    }
+
+    fetch('/api/home', { credentials: 'omit' })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (home) {
+        var planes = Array.isArray(home && home.planesAfiliacion) ? home.planesAfiliacion : [];
+        pintar(planes.filter(function (p) { return p && p.nombre && p.monto > 0; }));
+      })
+      .catch(function () { pintar([]); });
+  })();
+  </script>
+</body>
+</html>

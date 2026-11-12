@@ -147,9 +147,36 @@ async function loadHome() {
 
     buildVideo(data.youtubeUrl);
     renderStats(data);
+    aplicarAfiliaciones(data.afiliacionesAbiertas === true);
   } catch (e) {
     console.warn('loadHome error:', e.message);
+    aplicarAfiliaciones(false);
   }
+}
+
+// Afiliaciones (escalón 0). Si ya abrieron lo dice el SERVIDOR
+// (afiliacionesAbiertas, src/config/afiliaciones.js), no el reloj de quien mira.
+// Abiertas: el menú pasa de «Sumate» a «Afiliate» y lleva a /afiliate, la sección
+// nueva reemplaza a la lista de espera y Supabase no se llama. Cerradas, o si
+// /api/home no respondió: la portada de antes, con su contador.
+function aplicarAfiliaciones(abiertas) {
+  const nueva = document.getElementById('afiliate');
+  if (abiertas && nueva) {
+    nueva.hidden = false;
+    const lista = document.getElementById('waitlist');
+    if (lista) lista.hidden = true;
+    const nav = document.getElementById('nav-sumate');
+    if (nav) {
+      nav.textContent = 'Afiliate';
+      nav.href = '/afiliate?origen=menu';
+    }
+    // Quien llega con el ancla vieja (/#waitlist, del sitemap o de un link
+    // guardado) cae en la sección nueva y no en un hueco.
+    if (location.hash === '#waitlist') nueva.scrollIntoView();
+    return;
+  }
+  const espera = window.sabListaEspera;
+  if (espera && typeof espera.contar === 'function') espera.contar();
 }
 
 function renderStats(data) {

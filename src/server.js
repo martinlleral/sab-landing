@@ -148,6 +148,12 @@ app.use(express.static(path.join(__dirname, '../public'), {
       res.set('X-Robots-Tag', 'noindex, nofollow');
       res.set('Referrer-Policy', 'no-referrer');
     }
+    // /afiliate y su vuelta se sirven por su ruta (afiliate.controller). Si
+    // alguien pide el archivo, que no se indexe la copia: la dirección es la ruta.
+    const base = path.basename(filePath);
+    if (base === 'afiliate.html' || base === 'afiliate-gracias.html') {
+      res.set('X-Robots-Tag', 'noindex, nofollow');
+    }
   },
 }));
 

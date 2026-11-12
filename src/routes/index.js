@@ -15,6 +15,7 @@ const { publicRouter: reportePublic, adminRouter: reporteAdmin } = require('./re
 const { publicRouter: validacionPublic, adminRouter: validacionAdmin } = require('./validacion.routes');
 const { publicRouter: afiliadosPublic, adminRouter: afiliadosAdmin } = require('./afiliados.routes');
 const afiliadosController = require('../controllers/afiliados.controller');
+const afiliateController = require('../controllers/afiliate.controller');
 const dashboardRoutes = require('./dashboard.routes');
 const entradasRoutes = require('./entradas.routes');
 const usuariosRoutes = require('./usuarios.routes');
@@ -73,6 +74,12 @@ router.get('/validar/:token', (_req, res) => {
 // JS manda la dirección a /api/afiliados/:token. `/afiliados` sola muestra el
 // mismo cartel de «no vigente».
 router.get(['/afiliados', '/afiliados/:token'], afiliadosController.paginaHtml);
+
+// La página pública para afiliarse y la vuelta desde Mercado Pago (escalón 0).
+// Existen desde el deploy; los links de la portada aparecen recién con la salida
+// (src/config/afiliaciones.js).
+router.get('/afiliate', afiliateController.pagina);
+router.get('/afiliate/gracias', afiliateController.gracias);
 
 // Backoffice HTML
 router.use('/backoffice', backofficeRoutes);
