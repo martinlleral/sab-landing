@@ -44,6 +44,22 @@ model Home {
   // `ALTER TABLE ADD COLUMN` en vez de reescribir la tabla entera.
   precioMenu     Int      @default(15000)
   menuCorteHora  String   @default("18:00")
+  // Afiliaciones (escalón 0): los tres planes de suscripción de Mercado Pago que
+  // muestra /afiliate. Los carga la coordinación desde el panel; el repo no lleva
+  // ni montos ni links (defaults vacíos). Son públicos a propósito: los devuelve
+  // `GET /api/home` y se ven en la página. Un plan se muestra si tiene nombre y
+  // monto; el link sólo se acepta de Mercado Pago y por https
+  // (src/services/planes-afiliacion.service.js). Al final del modelo, como los
+  // del menú, para que la migración sea ADD COLUMN.
+  afiliacionPlan1Nombre String @default("")
+  afiliacionPlan1Monto  Int    @default(0)
+  afiliacionPlan1Link   String @default("")
+  afiliacionPlan2Nombre String @default("")
+  afiliacionPlan2Monto  Int    @default(0)
+  afiliacionPlan2Link   String @default("")
+  afiliacionPlan3Nombre String @default("")
+  afiliacionPlan3Monto  Int    @default(0)
+  afiliacionPlan3Link   String @default("")
 }
 
 model Evento {
@@ -260,4 +276,35 @@ model AccesoAfiliados {
   creadoPor    String    @default("")
   ultimoAcceso DateTime?
   createdAt    DateTime  @default(now())
+}
+
+// Lo que la página de afiliadxs muestra además de los cupones: por ahora, la
+// lista de videos de YouTube. Una sola fila (la crea el backoffice al guardar).
+// Va en una tabla propia y NO en `Home` a propósito: `GET /api/home` es público
+// y devuelve la fila entera de Home, y la lista sólo la recibe la página
+// privada (`GET /api/afiliados/:token`). El link no va en el repo.
+model ContenidoAfiliados {
+  id        Int      @id @default(autoincrement())
+  listaUrl  String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+// Un pedido del Botón de baja de servicio (Disposición 954/2025): un link a la
+// vista, sin registración previa, que da un código de identificación. En el
+// escalón 0 la suscripción la cancela la coordinación en el panel de Mercado
+// Pago (por el mail) y acá la marca como hecha. Se guarda ANTES de los avisos:
+// si un mail falla, el pedido no se pierde y el panel lo muestra sin marca.
+model BajaServicio {
+  id                    Int       @id @default(autoincrement())
+  codigo                String    @unique
+  nombre                String
+  email                 String
+  mensaje               String    @default("")
+  confirmacionEnviadaAt DateTime?
+  avisoEnviadoAt        DateTime?
+  atendidaAt            DateTime?
+  atendidaPor           String    @default("")
+  createdAt             DateTime  @default(now())
+
+  @@index([createdAt])
 }

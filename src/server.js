@@ -141,6 +141,19 @@ app.use(express.static(path.join(__dirname, '../public'), {
     if (filePath.includes(`${path.sep}backoffice${path.sep}`)) {
       res.set('Cache-Control', 'no-store');
     }
+    // La página de afiliadxs también puede llegar por acá (`/afiliados/` cae en
+    // su index.html): los mismos encabezados que le pone su ruta.
+    if (filePath.includes(`${path.sep}afiliados${path.sep}`)) {
+      res.set('Cache-Control', 'no-store');
+      res.set('X-Robots-Tag', 'noindex, nofollow');
+      res.set('Referrer-Policy', 'no-referrer');
+    }
+    // /afiliate y su vuelta se sirven por su ruta (afiliate.controller). Si
+    // alguien pide el archivo, que no se indexe la copia: la dirección es la ruta.
+    const base = path.basename(filePath);
+    if (base === 'afiliate.html' || base === 'afiliate-gracias.html' || base === 'baja.html') {
+      res.set('X-Robots-Tag', 'noindex, nofollow');
+    }
   },
 }));
 

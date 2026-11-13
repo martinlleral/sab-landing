@@ -438,9 +438,120 @@ async function enviarInvitacion({ email, nombre, evento, entrada }) {
   });
 }
 
+// ── El Botón de baja de servicio ─────────────────────────────────────────────
+
+// Un mail simple (HTML + texto), por el transport que haya.
+async function enviarSimple({ to, subject, html, text }) {
+  const destinos = Array.isArray(to) ? to : [to];
+  if (useBrevoHttp()) {
+    let ultimo;
+    for (const email of destinos) ultimo = await sendViaBrevoHttp({ to: email, toName: email, subject, html, text });
+    return ultimo;
+  }
+  return getTransporter().sendMail({ from: fromAddress(), to: destinos.join(', '), subject, html, text });
+}
+
+function marcoMail(titulo, cuerpo) {
+  return `
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:Arial,sans-serif; background:#f4f4f4; margin:0; padding:0;">
+  <div style="max-width:600px; margin:0 auto; background:#fff;">
+    <div style="background:#111; padding:28px; text-align:center;">
+      <h1 style="color:#fff; margin:0; font-size:18px; letter-spacing:2px;">SINDICATO ARGENTINO DE BOLEROS</h1>
+      <p style="color:#ccc; margin:8px 0 0;">${titulo}</p>
+    </div>
+    <div style="padding:28px; color:#333; font-size:15px; line-height:1.6;">${cuerpo}</div>
+    <div style="background:#111; padding:16px; text-align:center;">
+      <p style="color:#888; font-size:12px; margin:0;">© Sindicato Argentino de Boleros</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+// A quien pidió la baja: SÓLO su código y textos fijos. Nada de lo que escribió
+// en el formulario (ni el nombre ni el comentario): el formulario no tiene login,
+// y si el mail repitiera lo escrito, cualquiera podría mandar a cualquier
+// dirección un mail con la firma del Sindicato y el texto que quisiera.
+function buildHtmlBajaRecibida({ codigo }) {
+  return marcoMail('Botón de baja de servicio', `
+      <h2 style="color:#111; margin-top:0;">Recibimos tu pedido de baja</h2>
+      <p>Tu código de baja es:</p>
+      <p style="font-family:Consolas,Menlo,monospace; font-size:22px; font-weight:bold; letter-spacing:2px; background:#f4f4f4; border-radius:6px; padding:12px 16px; text-align:center;">${escapeHtml(codigo)}</p>
+      <p>Guardalo: es el comprobante de tu pedido. Cancelamos tu suscripción de Mercado Pago dentro de las 24 horas y desde ahí no se te cobra más.</p>
+      <p style="background:#fff3cd; border-left:4px solid #ffc107; border-radius:6px; padding:12px 16px;"><strong>¿No lo pediste vos?</strong> Escribinos ya por WhatsApp al <a href="https://wa.me/5492215917409" style="color:#111; font-weight:bold;">221 591-7409</a> con este código y lo frenamos.</p>`);
+}
+
+function textoBajaRecibida({ codigo }) {
+  return [
+    'Recibimos tu pedido de baja.',
+    `Tu código de baja es: ${codigo}`,
+    'Guardalo: es el comprobante de tu pedido. Cancelamos tu suscripción de Mercado Pago dentro de las 24 horas y desde ahí no se te cobra más.',
+    '¿No lo pediste vos? Escribinos ya por WhatsApp al 221 591-7409 con este código y lo frenamos.',
+  ].join('\n\n');
+}
+
+async function enviarBajaRecibida({ email, codigo }) {
+  console.log(`📧 Enviando código de baja ${codigo} — transport: ${useBrevoHttp() ? 'brevo-http' : 'smtp'}`);
+  return enviarSimple({
+    to: email,
+    subject: `Tu pedido de baja: ${codigo}`,
+    html: buildHtmlBajaRecibida({ codigo }),
+    text: textoBajaRecibida({ codigo }),
+  });
+}
+
+function fechaHoraAR(d) {
+  return new Date(d).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', dateStyle: 'full', timeStyle: 'short' });
+}
+
+// A la coordinación: el pedido entero, escapado, y qué hacer.
+function buildHtmlAvisoBaja({ baja }) {
+  const fila = (k, v) => `<tr><td style="padding:6px 12px 6px 0; color:#666; vertical-align:top;">${k}</td><td style="padding:6px 0;"><strong>${escapeHtml(v)}</strong></td></tr>`;
+  return marcoMail('Pedido de baja de una afiliación', `
+      <h2 style="color:#111; margin-top:0;">Alguien pidió la baja</h2>
+      <table style="border-collapse:collapse; font-size:15px;">
+        ${fila('Código', baja.codigo)}
+        ${fila('Nombre', baja.nombre)}
+        ${fila('Mail', baja.email)}
+        ${fila('Cuándo', fechaHoraAR(baja.createdAt))}
+        ${baja.mensaje ? fila('Comentario', baja.mensaje) : ''}
+      </table>
+      <p style="margin-top:20px;"><strong>Qué hacer, dentro de las 24 horas:</strong> en el panel de Mercado Pago, buscá la suscripción con ese mail y cancelala. Después, en el panel del sitio (Afiliadxs → Pedidos de baja), marcala como hecha. Si no encontrás una suscripción con ese mail, escribile a esa persona.</p>
+      <p style="color:#666; font-size:13px;">A la persona ya le llegó su código. Si no lo pidió ella, va a escribir al WhatsApp.</p>`);
+}
+
+function textoAvisoBaja({ baja }) {
+  return [
+    'Alguien pidió la baja de su afiliación.',
+    `Código: ${baja.codigo}`,
+    `Nombre: ${baja.nombre}`,
+    `Mail: ${baja.email}`,
+    `Cuándo: ${fechaHoraAR(baja.createdAt)}`,
+    baja.mensaje ? `Comentario: ${baja.mensaje}` : '',
+    'Qué hacer, dentro de las 24 horas: en el panel de Mercado Pago, buscá la suscripción con ese mail y cancelala. Después, en el panel del sitio (Afiliadxs → Pedidos de baja), marcala como hecha.',
+  ].filter(Boolean).join('\n');
+}
+
+async function enviarAvisoBaja({ destinatarios, baja }) {
+  console.log(`📧 Aviso de baja ${baja.codigo} a la coordinación (${destinatarios.length} dirección/es)`);
+  return enviarSimple({
+    to: destinatarios,
+    subject: `Pedido de baja ${baja.codigo}`,
+    html: buildHtmlAvisoBaja({ baja }),
+    text: textoAvisoBaja({ baja }),
+  });
+}
+
 module.exports = {
   enviarConfirmacion,
   enviarInvitacion,
+  enviarBajaRecibida,
+  enviarAvisoBaja,
+  _buildHtmlBajaRecibidaForTest: buildHtmlBajaRecibida,
+  _buildHtmlAvisoBajaForTest: buildHtmlAvisoBaja,
   _buildHtmlForTest: buildHtml,
   _resolverDireccionForTest: resolverDireccion,
 };

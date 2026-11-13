@@ -31,6 +31,7 @@
           <i class="bi bi-qr-code-scan"></i> Lector QR
         </a>
         <a href="/backoffice/validacion-accesos.html" class="bo-nav-link"><i class="bi bi-link-45deg"></i> Accesos QR</a>
+        <a href="/backoffice/afiliados.html" class="bo-nav-link"><i class="bi bi-people"></i> Afiliadxs</a>
         <div class="bo-nav-divider"></div>
         <a href="#" class="bo-nav-link text-danger" onclick="handleLogout()">
           <i class="bi bi-box-arrow-right"></i> Cerrar sesión
@@ -197,6 +198,67 @@
               </div>
             </div>
 
+            <!-- Afiliaciones (escalón 0): los tres planes que muestra /afiliate.
+                 Viven en Home y salen por /api/home, que es público: está bien,
+                 porque se ven en la página. -->
+            <div class="col-12">
+              <div class="bo-card">
+                <div class="bo-card-header">
+                  <h5 class="bo-card-title"><i class="bi bi-heart me-2"></i>Afiliaciones · los tres planes</h5>
+                </div>
+                <div class="bo-card-body">
+                  <p class="small mb-3" style="color:#666;">
+                    Los planes que se muestran en <a href="/afiliate" target="_blank" rel="noopener">/afiliate</a>.
+                    Un plan <strong>aparece si tiene nombre y monto</strong>. El link lo da Mercado Pago al crear el plan
+                    («Planes de suscripción»): sin link, en lugar del botón «Afiliarme» la página ofrece el WhatsApp.
+                  </p>
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="afiliacionPlan1Nombre">Plan 1 · nombre</label>
+                      <input type="text" maxlength="60" class="bo-form-control" id="afiliacionPlan1Nombre" name="afiliacionPlan1Nombre" autocomplete="off">
+                    </div>
+                    <div class="col-md-3">
+                      <label class="bo-form-label" for="afiliacionPlan1Monto">Monto por mes (ARS)</label>
+                      <input type="number" min="0" step="1" inputmode="numeric" class="bo-form-control" id="afiliacionPlan1Monto" name="afiliacionPlan1Monto">
+                    </div>
+                    <div class="col-md-5">
+                      <label class="bo-form-label" for="afiliacionPlan1Link">Link del plan en Mercado Pago</label>
+                      <input type="url" class="bo-form-control" id="afiliacionPlan1Link" name="afiliacionPlan1Link" placeholder="https://www.mercadopago.com.ar/subscriptions/…" autocomplete="off">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="afiliacionPlan2Nombre">Plan 2 · nombre</label>
+                      <input type="text" maxlength="60" class="bo-form-control" id="afiliacionPlan2Nombre" name="afiliacionPlan2Nombre" autocomplete="off">
+                    </div>
+                    <div class="col-md-3">
+                      <label class="bo-form-label" for="afiliacionPlan2Monto">Monto por mes (ARS)</label>
+                      <input type="number" min="0" step="1" inputmode="numeric" class="bo-form-control" id="afiliacionPlan2Monto" name="afiliacionPlan2Monto">
+                    </div>
+                    <div class="col-md-5">
+                      <label class="bo-form-label" for="afiliacionPlan2Link">Link del plan en Mercado Pago</label>
+                      <input type="url" class="bo-form-control" id="afiliacionPlan2Link" name="afiliacionPlan2Link" placeholder="https://www.mercadopago.com.ar/subscriptions/…" autocomplete="off">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="bo-form-label" for="afiliacionPlan3Nombre">Plan 3 · nombre</label>
+                      <input type="text" maxlength="60" class="bo-form-control" id="afiliacionPlan3Nombre" name="afiliacionPlan3Nombre" autocomplete="off">
+                    </div>
+                    <div class="col-md-3">
+                      <label class="bo-form-label" for="afiliacionPlan3Monto">Monto por mes (ARS)</label>
+                      <input type="number" min="0" step="1" inputmode="numeric" class="bo-form-control" id="afiliacionPlan3Monto" name="afiliacionPlan3Monto">
+                    </div>
+                    <div class="col-md-5">
+                      <label class="bo-form-label" for="afiliacionPlan3Link">Link del plan en Mercado Pago</label>
+                      <input type="url" class="bo-form-control" id="afiliacionPlan3Link" name="afiliacionPlan3Link" placeholder="https://www.mercadopago.com.ar/subscriptions/…" autocomplete="off">
+                    </div>
+                  </div>
+                  <p class="small mb-0 mt-3" style="color:#e0a800;">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    El monto de acá es <strong>el que se muestra</strong>; lo que se cobra lo fija el plan en Mercado Pago.
+                    Si cambia la cuota, cambiala en los dos lugares. El link sólo se acepta si es de Mercado Pago.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <!-- Sección "El Evento" (ciclo Amor de Miércoles): mostrar / ocultar -->
             <div class="col-12">
               <div class="bo-card">
@@ -349,6 +411,12 @@
         // Default "18:00": bases viejas (o una fila creada antes del Sprint 7) no
         // traen el campo, y mostrar el input vacío haría creer que no hay corte.
         document.getElementById('menuCorteHora').value = data.menuCorteHora || '18:00';
+        // Afiliaciones: los tres planes (vacíos hasta que se carguen).
+        for (let i = 1; i <= 3; i += 1) {
+          document.getElementById(`afiliacionPlan${i}Nombre`).value = data[`afiliacionPlan${i}Nombre`] ?? '';
+          document.getElementById(`afiliacionPlan${i}Monto`).value = data[`afiliacionPlan${i}Monto`] ?? 0;
+          document.getElementById(`afiliacionPlan${i}Link`).value = data[`afiliacionPlan${i}Link`] ?? '';
+        }
         ecoCorteMenu();
         document.getElementById('menuCorteHora').addEventListener('input', ecoCorteMenu);
         // Default true: si el campo no viniera (bases viejas), lo tratamos como visible.

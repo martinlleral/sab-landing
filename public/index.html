@@ -113,7 +113,7 @@
             <li class="nav-item"><a class="nav-link" href="#descripcion">El Evento</a></li>
             <li class="nav-item"><a class="nav-link" href="#proximos">Próximos</a></li>
             <li class="nav-item"><a class="nav-link" href="#quienes-somos">Quiénes Somos</a></li>
-            <li class="nav-item"><a class="nav-link" href="#waitlist">Sumate</a></li>
+            <li class="nav-item"><a class="nav-link" id="nav-sumate" href="#waitlist">Sumate</a></li>
             <!-- Admin: acceder por URL directa /backoffice/login.html -->
           </ul>
         </div>
@@ -554,6 +554,24 @@
       /* CTA con aire respirable */
       .wl-submit-wrap{margin-top:2rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.06)}
     </style>
+    <!-- AFILIACIONES: reemplaza a la lista de espera desde la salida
+         (src/config/afiliaciones.js). Viene oculta: la muestra app.js cuando
+         /api/home responde afiliacionesAbiertas = true. Sin JS, o con /api/home
+         caído, queda la lista de espera de abajo, como antes. -->
+    <style>#afiliate{position:relative;padding:80px 0 72px;background:linear-gradient(175deg,#0a0a0a 0%,#12090c 40%,#0a0a0a 100%);overflow:hidden;scroll-margin-top:72px}#afiliate::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#c4384b44,transparent)}#afiliate .wl-header{margin-bottom:0}#afiliate .wl-title,#afiliate .wl-subtitle{text-wrap:balance}#afiliate .wl-subtitle+.wl-subtitle{margin-top:12px}#afiliate .wl-submit-wrap{border-top:0;padding-top:0;margin-top:32px;text-align:center}#afiliate .wl-btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;text-decoration:none}#afiliate .wl-btn:focus-visible{outline:2px solid #e63946;outline-offset:3px}@media (prefers-reduced-motion: reduce){#afiliate .wl-btn{transition:none}#afiliate .wl-btn:hover{transform:none}}</style>
+    <section id="afiliate" hidden aria-labelledby="afiliate-titulo">
+      <div class="wl-container">
+        <div class="wl-header">
+          <div class="wl-eyebrow">Afiliaciones</div>
+          <h2 class="wl-title" id="afiliate-titulo">Afiliate al Sindicato</h2>
+          <p class="wl-subtitle">Bancá a la orquesta con una cuota por&nbsp;mes.</p>
+          <p class="wl-subtitle">Te da tu entrada a los shows (sujeta a disponibilidad) y los videos exclusivos de la página de&nbsp;afiliadxs.</p>
+        </div>
+        <div class="wl-submit-wrap">
+          <a class="wl-btn" href="/afiliate?origen=seccion">Afiliate</a>
+        </div>
+      </div>
+    </section>
     <section id="waitlist">
       <div class="wl-container">
         <div class="wl-header">
@@ -684,6 +702,10 @@
           if(el)el.textContent=d||0;
         }catch(e){console.warn('Waitlist count:',e)}
       }
+      // El contador ya no se pide solo: lo pide app.js cuando /api/home dice que
+      // las afiliaciones no abrieron (o no respondió). Abiertas, la lista de
+      // espera se oculta y Supabase no se llama.
+      window.sabListaEspera={contar:loadCount};
 
       const f=document.getElementById('wl-form');
       if(!f)return;
@@ -764,8 +786,6 @@
           console.error('Waitlist network error:',er);
         }
       });
-
-      loadCount();
     })();
     </script>
 
@@ -785,6 +805,9 @@
             <i class="bi bi-youtube" aria-hidden="true"></i>
           </a>
         </div>
+        <!-- El Botón de baja de servicio (Disposición 954/2025). Aparece con la
+             salida de las afiliaciones, junto con el resto (app.js). -->
+        <p class="footer-baja" id="pie-baja" hidden><a href="/baja">Botón de baja de servicio</a></p>
         <p class="footer-copy">© 2026 Sindicato Argentino de Boleros. Todos los derechos reservados.</p>
       </div>
     </footer>
@@ -1012,6 +1035,16 @@
     </div>
   </div>
 
+  <!-- BOTÓN FLOTANTE «Afiliate» (escalón 0). Viene oculto: lo arranca app.js con la
+       salida de las afiliaciones y assets/js/afiliate-flotante.js decide cuándo se ve.
+       Abajo a la izquierda, a la altura del de WhatsApp (que no se mueve), y por
+       debajo del modal de compra (Bootstrap: backdrop 1050, modal 1055). -->
+  <style>.afl{position:fixed;left:16px;bottom:calc(28px + env(safe-area-inset-bottom,0px));z-index:1030;display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .3s ease}.afl.afl--visible{opacity:1}.afl-pill{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;border-radius:999px;background:var(--color-accent-hover);color:#fff;font-family:var(--font-heading);font-size:1rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-decoration:none;box-shadow:0 4px 12px rgba(0,0,0,.45);touch-action:manipulation;white-space:nowrap}.afl-pill:hover{color:#fff;filter:brightness(.9)}.afl-cerrar{width:44px;height:44px;flex:none;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:50%;border:1px solid #555;background:var(--color-surface2);color:var(--color-text);cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.45);touch-action:manipulation}.afl-cerrar svg{width:16px;height:16px}.afl-cerrar:hover{border-color:var(--color-text-muted)}.afl-pill:focus-visible,.afl-cerrar:focus-visible{outline:2px solid var(--color-text);outline-offset:3px}html.afl-en-juego{scroll-padding-bottom:96px}html.afl-en-juego body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}.footer-baja{margin:-16px 0 16px}.footer-baja a{display:inline-block;padding:12px 4px;color:var(--color-text);font-size:.85rem;text-underline-offset:3px}.footer-baja a:hover{color:var(--color-accent)}.footer-baja a:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}@media (min-width:768px){.afl{left:24px}}@media (max-height:479px){.afl{display:none!important}}@media (prefers-reduced-motion:reduce){.afl{transition:none}}@media print{.afl{display:none!important}}</style>
+  <div class="afl" id="afiliate-flotante" hidden>
+    <a class="afl-pill" href="/afiliate?origen=flotante">Afiliate</a>
+    <button class="afl-cerrar" type="button" aria-label="Cerrar invitación a afiliarse"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button>
+  </div>
+
   <!-- WhatsApp flotante -->
   <a href="https://wa.me/5492215917409?text=Hola!%20Quiero%20consultar%20por%20las%20entradas"
      target="_blank" rel="noopener"
@@ -1023,6 +1056,8 @@
 
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- El botón flotante «Afiliate» (antes de app.js, que lo arranca) -->
+  <script src="/assets/js/afiliate-flotante.js"></script>
   <!-- App JS -->
   <script src="/assets/js/app.js"></script>
 

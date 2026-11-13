@@ -65,4 +65,28 @@ const validacionQRLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes. Esperá un momento.' },
 });
 
-module.exports = { loginLimiter, comprasLimiter, cuponesValidarLimiter, reportePublicoLimiter, validacionQRLimiter };
+// Rate limiter para /api/afiliados/:token (la página de afiliadxs). La página
+// hace un solo fetch por carga: 30 req/min por IP es holgado para una persona
+// (aun recargando) y corta a quien pruebe direcciones. La dirección (64 hex) ya
+// es la barrera principal.
+const afiliadosLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_AFILIADOS_MAX, 10) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Esperá un momento.' },
+});
+
+// Rate limiter para POST /api/bajas (el Botón de baja de servicio). Una persona
+// pide la baja una vez (dos si se equivocó de mail): 5 cada 15 min por IP es
+// holgado y corta a quien use el formulario para mandar mails. El tope diario de
+// mails (bajas.service.js) es la segunda barrera, para muchas IPs.
+const bajasLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_BAJAS_MAX, 10) || 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Hiciste varios pedidos seguidos. Esperá unos minutos y probá de nuevo.', code: 'BAJA_DEMASIADOS' },
+});
+
+module.exports = { loginLimiter, comprasLimiter, cuponesValidarLimiter, reportePublicoLimiter, validacionQRLimiter, afiliadosLimiter, bajasLimiter };

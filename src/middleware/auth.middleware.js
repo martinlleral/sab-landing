@@ -1,5 +1,6 @@
 const reportTokenService = require('../services/reportToken.service');
 const validationTokenService = require('../services/validationToken.service');
+const afiliadosService = require('../services/afiliados.service');
 
 // Helper: chequea si la request entrante es una ruta de API.
 // Usar req.originalUrl en vez de req.path — cuando el middleware está montado
@@ -82,4 +83,25 @@ async function requireValidationToken(req, res, next) {
   }
 }
 
-module.exports = { requireAuth, requireAdmin, requireReportToken, requireValidationToken };
+// Middleware de la página PÚBLICA de afiliadxs (escalón 0). La dirección
+// privada es la llave: si está vigente, la deja en req.accesoAfiliados y sigue.
+// El fallo es UNIFORME (el mismo 404 para la dirección vieja, la inventada y la
+// mal formada) y el code real sólo va al log, sin la dirección. no-store en las
+// dos respuestas: ni la página ni el rechazo se guardan en un caché.
+async function requireAccesoAfiliados(req, res, next) {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const { valido, registro, code } = await afiliadosService.validarAcceso(req.params.token);
+    if (!valido) {
+      console.warn(`[afiliados] dirección rechazada code=${code}`);
+      return res.status(404).json({ error: 'Esta dirección no está vigente' });
+    }
+    req.accesoAfiliados = registro;
+    next();
+  } catch (err) {
+    console.error('Error en requireAccesoAfiliados:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+module.exports = { requireAuth, requireAdmin, requireReportToken, requireValidationToken, requireAccesoAfiliados };
