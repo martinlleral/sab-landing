@@ -35,6 +35,12 @@ services:
       # Supabase (lectura del waitlist desde el dashboard de Reportes)
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_KEY=${SUPABASE_KEY:-}
+      # Afiliaciones: la salida (vacía = la fecha de src/config/afiliaciones.js; con
+      # una fecha ISO con offset, la corre con un reinicio, sin deploy) y a quién le
+      # llegan los pedidos del Botón de baja (una o varias direcciones, con coma).
+      # Sin estas dos líneas el contenedor no las ve aunque estén en el .env.
+      - AFILIACIONES_SALIDA=${AFILIACIONES_SALIDA:-}
+      - BAJAS_AVISO_EMAIL=${BAJAS_AVISO_EMAIL:-}
       - PORT=3000
     restart: unless-stopped
     deploy:
