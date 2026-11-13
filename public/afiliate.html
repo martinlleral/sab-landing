@@ -91,6 +91,8 @@
 
     .af-foot { border-top: 1px solid var(--color-border); padding: 24px 0 32px; color: var(--color-text-muted); font-size: .85rem; text-align: center; }
     .af-foot a { color: var(--color-text-muted); }
+    .af-foot .af-pie-baja { color: var(--color-text); display: inline-block; padding: 12px 4px; text-underline-offset: 3px; }
+    .af-foot .af-pie-baja:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
     .af-foot p + p { margin-top: 8px; }
 
     .af-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -147,7 +149,7 @@
 
         <!-- Sin planes cargados (o sin conexión): nunca un callejón sin salida -->
         <div class="af-pronto" id="af-pronto" hidden>
-          <p>Muy pronto te vas a poder afiliar desde acá. Mientras, escribinos por WhatsApp al 221&nbsp;591-7409.</p>
+          <p>Muy pronto te vas a poder afiliar desde acá. Mientras, escribinos por WhatsApp <span style="white-space:nowrap">al 221 591-7409.</span></p>
           <a class="af-btn af-btn--ghost js-wa" data-texto="Hola! Quiero afiliarme al Sindicato" href="https://wa.me/5492215917409" target="_blank" rel="noopener">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><use href="#icono-wa"/></svg>
             Escribinos
@@ -167,7 +169,7 @@
       <section class="af-block" aria-labelledby="t-baja">
         <h2 class="af-h2" id="t-baja">Darte de baja</h2>
         <div class="af-note">
-          <p>Cuando quieras y sin trámites, con el Botón de baja de servicio que está al&nbsp;pie&nbsp;de&nbsp;la&nbsp;web.</p>
+          <p>Cuando quieras y sin trámites, con el <a class="af-link" href="/baja">Botón de baja de servicio</a> que está al&nbsp;pie&nbsp;de&nbsp;la&nbsp;web.</p>
           <p>Te confirmamos la baja con un código dentro de las 24&nbsp;horas.</p>
         </div>
       </section>
@@ -194,9 +196,8 @@
   <footer class="af-foot">
     <div class="af-wrap">
       <p>Sindicato Argentino de Boleros · La Plata</p>
-      <!-- El Botón de baja de servicio (Disposición 954/2025) lo pone la S5 acá,
-           como en el resto del sitio. Hasta entonces, la baja va por WhatsApp. -->
-      <p id="af-pie-baja"><a class="js-wa" data-texto="Hola! Quiero darme de baja de mi afiliación" href="https://wa.me/5492215917409" target="_blank" rel="noopener">Darte de baja</a></p>
+      <!-- El Botón de baja de servicio (Disposición 954/2025): a la vista, sin login -->
+      <p id="af-pie-baja"><a class="af-pie-baja" href="/baja">Botón de baja de servicio</a></p>
     </div>
   </footer>
 

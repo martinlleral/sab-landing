@@ -92,6 +92,28 @@
             </p>
           </div>
         </div>
+
+        <!-- Los pedidos del Botón de baja de servicio -->
+        <div class="bo-card" id="bajas">
+          <div class="bo-card-header d-flex justify-content-between align-items-center">
+            <h5 class="bo-card-title"><i class="bi bi-door-open me-2"></i>Pedidos de baja</h5>
+            <button class="btn-bo-secondary" id="btn-bajas-recargar" type="button"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar</button>
+          </div>
+          <div class="bo-card-body">
+            <p class="small mb-3" style="color:#999;">
+              Los que llegan por el <strong>Botón de baja de servicio</strong> (<a href="/baja" target="_blank" rel="noopener" style="color:#ccc;">/baja</a>). <strong>Hay 24 horas para hacerla:</strong> en el panel de Mercado Pago buscá la suscripción con ese mail y cancelala; después marcala acá como hecha. La persona ya tiene su código.
+            </p>
+            <p id="bajas-vacio" class="mb-0" style="display:none;color:#ccc;">Todavía no llegó ningún pedido de baja.</p>
+            <div class="table-responsive" id="bajas-tabla-wrap" style="display:none;">
+              <table class="bo-table">
+                <thead>
+                  <tr><th>Cuándo</th><th>Código</th><th>Quién</th><th>Comentario</th><th>Mails</th><th>Estado</th></tr>
+                </thead>
+                <tbody id="bajas-filas"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -102,6 +124,8 @@
     document.addEventListener('DOMContentLoaded', () => {
       cargarAcceso();
       cargarLista();
+      cargarBajas();
+      document.getElementById('btn-bajas-recargar').addEventListener('click', cargarBajas);
       document.getElementById('btn-rotar').addEventListener('click', rotar);
       document.getElementById('btn-copiar').addEventListener('click', copiarUrl);
       document.getElementById('form-lista').addEventListener('submit', guardarLista);
@@ -177,6 +201,81 @@
         pintarLista(await boFetch('/api/admin/afiliados/contenido'));
       } catch (err) {
         boAlert('Error al cargar la lista: ' + err.message);
+      }
+    }
+
+    // ── Los pedidos de baja. Todo con textContent: los datos los escribió
+    // cualquiera en un formulario público.
+    function celda(fila, texto, estilo) {
+      const td = document.createElement('td');
+      if (texto instanceof Node) td.appendChild(texto); else td.textContent = texto;
+      if (estilo) td.style.cssText = estilo;
+      fila.appendChild(td);
+      return td;
+    }
+    function filaBaja(b) {
+      const tr = document.createElement('tr');
+      const cuando = document.createElement('div');
+      const d = document.createElement('div'); d.textContent = boFecha(b.createdAt);
+      const h = document.createElement('div'); h.textContent = new Date(b.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); h.style.color = '#999';
+      cuando.append(d, h);
+      celda(tr, cuando, 'white-space:nowrap;');
+      const cod = document.createElement('code'); cod.textContent = b.codigo; cod.style.color = '#ddd';
+      celda(tr, cod, 'white-space:nowrap;');
+      const quien = document.createElement('div');
+      const n = document.createElement('div'); n.textContent = b.nombre; n.style.fontWeight = '600';
+      const m = document.createElement('div'); m.textContent = b.email; m.style.cssText = 'color:#999;word-break:break-all;';
+      quien.append(n, m);
+      celda(tr, quien);
+      celda(tr, b.mensaje || '—', 'max-width:220px;white-space:pre-wrap;overflow-wrap:anywhere;color:#ccc;');
+      // Si salió cada mail (con ícono y con texto: no sólo el color).
+      const mails = document.createElement('div');
+      [[b.confirmacionEnviadaAt, 'a la persona'], [b.avisoEnviadoAt, 'a la coordinación']].forEach(([salio, quien]) => {
+        const r = document.createElement('div');
+        const i = document.createElement('i'); i.className = `bi ${salio ? 'bi-check2' : 'bi-x-lg'} me-1`; i.setAttribute('aria-hidden', 'true');
+        i.style.color = salio ? '#4ade80' : '#f87171';
+        r.append(i, document.createTextNode(`${salio ? 'Salió' : 'No salió'} ${quien}`));
+        mails.appendChild(r);
+      });
+      celda(tr, mails, 'font-size:.8rem;color:#999;white-space:nowrap;');
+      const estado = document.createElement('div');
+      estado.className = 'd-flex flex-wrap align-items-center gap-2';
+      const badge = document.createElement('span');
+      badge.className = 'badge-estado ' + (b.atendidaAt ? 'approved' : 'pending');
+      badge.textContent = b.atendidaAt ? 'Hecha' : 'Pendiente';
+      badge.title = b.atendidaAt ? `${boFechaHora(b.atendidaAt)}${b.atendidaPor ? ' · ' + b.atendidaPor : ''}` : '';
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'btn-bo-secondary'; btn.style.whiteSpace = 'nowrap';
+      btn.textContent = b.atendidaAt ? 'Deshacer' : 'Marcar hecha';
+      btn.setAttribute('aria-label', `${b.atendidaAt ? 'Deshacer' : 'Marcar hecha'} la baja ${b.codigo}`);
+      btn.addEventListener('click', () => marcarBaja(b, !b.atendidaAt, btn));
+      estado.append(badge, btn);
+      celda(tr, estado);
+      return tr;
+    }
+    async function cargarBajas() {
+      try {
+        const { bajas } = await boFetch('/api/admin/bajas');
+        const filas = document.getElementById('bajas-filas');
+        filas.replaceChildren(...bajas.map(filaBaja));
+        document.getElementById('bajas-vacio').style.display = bajas.length ? 'none' : '';
+        document.getElementById('bajas-tabla-wrap').style.display = bajas.length ? '' : 'none';
+      } catch (err) {
+        boAlert('Error al cargar los pedidos de baja: ' + err.message);
+      }
+    }
+    async function marcarBaja(b, atendida, btn) {
+      btn.disabled = true;
+      try {
+        await boFetch(`/api/admin/bajas/${b.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ atendida }),
+        });
+        boAlert(atendida ? `✅ Baja ${b.codigo} marcada como hecha` : `Baja ${b.codigo} otra vez pendiente`, 'success');
+        await cargarBajas();
+      } catch (err) {
+        boAlert('No se pudo cambiar el estado: ' + err.message);
+        btn.disabled = false;
       }
     }
 

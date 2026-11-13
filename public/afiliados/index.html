@@ -75,6 +75,9 @@
     .af-skel--video { aspect-ratio: 16 / 9; height: auto; }
 
     .af-foot { border-top: 1px solid var(--color-border); padding: 24px 0 32px; color: var(--color-text-muted); font-size: .85rem; text-align: center; }
+    .af-foot p + p { margin-top: 8px; }
+    .af-foot .af-pie-baja { color: var(--color-text); display: inline-block; padding: 12px 4px; text-underline-offset: 3px; }
+    .af-foot .af-pie-baja:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
     .af-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     [hidden] { display: none !important; }
@@ -172,7 +175,11 @@
   </main>
 
   <footer class="af-foot">
-    <div class="af-wrap">Sindicato Argentino de Boleros · La Plata</div>
+    <div class="af-wrap">
+      <p>Sindicato Argentino de Boleros · La Plata</p>
+      <!-- El Botón de baja de servicio (Disposición 954/2025): a la vista, sin login -->
+      <p><a class="af-pie-baja" href="/baja">Botón de baja de servicio</a></p>
+    </div>
   </footer>
 
   <script>

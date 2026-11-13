@@ -170,6 +170,12 @@ function aplicarAfiliaciones(abiertas) {
       nav.textContent = 'Afiliate';
       nav.href = '/afiliate?origen=menu';
     }
+    // El Botón de baja de servicio, al pie: aparece con lo demás.
+    const pieBaja = document.getElementById('pie-baja');
+    if (pieBaja) pieBaja.hidden = false;
+    // El botón flotante «Afiliate» (assets/js/afiliate-flotante.js): con esto
+    // queda en juego; él decide cuándo se ve (pasado el hero, sin el modal…).
+    if (window.sabFlotante && typeof window.sabFlotante.iniciar === 'function') window.sabFlotante.iniciar();
     // Quien llega con el ancla vieja (/#waitlist, del sitemap o de un link
     // guardado) cae en la sección nueva y no en un hueco.
     if (location.hash === '#waitlist') nueva.scrollIntoView();

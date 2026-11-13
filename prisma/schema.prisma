@@ -288,3 +288,23 @@ model ContenidoAfiliados {
   listaUrl  String   @default("")
   updatedAt DateTime @updatedAt
 }
+
+// Un pedido del Botón de baja de servicio (Disposición 954/2025): un link a la
+// vista, sin registración previa, que da un código de identificación. En el
+// escalón 0 la suscripción la cancela la coordinación en el panel de Mercado
+// Pago (por el mail) y acá la marca como hecha. Se guarda ANTES de los avisos:
+// si un mail falla, el pedido no se pierde y el panel lo muestra sin marca.
+model BajaServicio {
+  id                    Int       @id @default(autoincrement())
+  codigo                String    @unique
+  nombre                String
+  email                 String
+  mensaje               String    @default("")
+  confirmacionEnviadaAt DateTime?
+  avisoEnviadoAt        DateTime?
+  atendidaAt            DateTime?
+  atendidaPor           String    @default("")
+  createdAt             DateTime  @default(now())
+
+  @@index([createdAt])
+}

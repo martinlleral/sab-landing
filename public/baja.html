@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Botón de baja de servicio · Sindicato Argentino de Boleros</title>
+  <meta name="description" content="Para dar de baja tu afiliación al Sindicato, sin trámites">
+  <link rel="canonical" href="https://sindicatoargentinodeboleros.com.ar/baja">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <style>
+    /* Tokens de app.css (:root). La misma familia de clases que /afiliate, inline
+       para no depender del caché de /assets. El carmín como TEXTO va sólo sobre
+       --color-bg (4,75:1); el botón usa --color-accent-hover de fondo con texto
+       blanco (5,9:1). */
+    html { color-scheme: dark; scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    .af-skip { position: absolute; left: -9999px; top: 0; }
+    .af-skip:focus { left: 16px; top: 12px; z-index: 10; background: var(--color-surface); color: var(--color-text); padding: 10px 14px; border-radius: 4px; }
+
+    .af-top { border-bottom: 1px solid var(--color-border); padding: 14px 0; }
+    .af-wrap { max-width: 560px; margin: 0 auto; padding: 0 20px; }
+    .af-brand { font-family: var(--font-heading); font-weight: 700; font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; color: var(--color-text); text-decoration: none; display: inline-block; padding: 10px 0; }
+    .af-brand span { color: var(--color-accent); }
+
+    .af-main { padding: 40px 0 72px; background: linear-gradient(175deg, var(--color-bg) 0%, #12090c 40%, var(--color-bg) 100%); min-height: 70vh; }
+    .af-head { text-align: center; margin-bottom: 32px; }
+    .af-eyebrow { font-family: var(--font-heading); font-size: .75rem; font-weight: 500; letter-spacing: 4px; text-transform: uppercase; color: var(--color-accent); margin-bottom: 12px; }
+    .af-title { font-family: var(--font-heading); font-size: clamp(2rem, 7vw, 2.75rem); font-weight: 700; text-transform: uppercase; letter-spacing: 3px; line-height: 1.1; margin-bottom: 16px; text-wrap: balance; overflow-wrap: anywhere; min-width: 0; }
+    .af-title:focus { outline: none; }
+    .af-lead { color: #ccc; font-size: 1rem; line-height: 1.7; max-width: 460px; margin: 0 auto; text-wrap: balance; }
+
+    /* El formulario: una tarjeta, campos grandes para el pulgar */
+    .bj-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 24px 20px; position: relative; }
+    .bj-card::before { content: ''; position: absolute; top: -1px; left: 28px; right: 28px; height: 2px; background: linear-gradient(90deg, transparent, var(--color-accent), transparent); }
+    .bj-campo + .bj-campo { margin-top: 20px; }
+    .bj-label { display: block; font-weight: 600; color: var(--color-text); margin-bottom: 6px; }
+    .bj-label small { font-weight: 400; color: var(--color-text-muted); margin-left: 4px; font-size: .9rem; }
+    .bj-hint { color: var(--color-text-muted); font-size: .9rem; line-height: 1.5; margin: -2px 0 8px; text-wrap: pretty; }
+    .bj-input { display: block; width: 100%; min-height: 48px; padding: 11px 14px; font: inherit; font-size: 16px; color: var(--color-text); background: var(--color-bg); border: 1px solid #555; border-radius: 6px; touch-action: manipulation; }
+    textarea.bj-input { min-height: 96px; resize: vertical; line-height: 1.5; }
+    .bj-input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-color: var(--color-text-muted); }
+    .bj-input[aria-invalid="true"] { border-color: #f87171; }
+    .bj-err { color: #f87171; font-size: .9rem; line-height: 1.5; margin-top: 6px; text-wrap: pretty; }
+    .bj-err:empty { display: none; }
+
+    .af-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 10px 22px; border-radius: 4px; font-family: var(--font-heading); font-size: 1rem; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; text-align: center; cursor: pointer; border: 1px solid transparent; transition: filter .2s, background-color .2s, border-color .2s; touch-action: manipulation; text-wrap: balance; }
+    .af-btn--primary { background: var(--color-accent-hover); color: #fff; }
+    .af-btn--primary:hover { filter: brightness(.88); color: #fff; }
+    .af-btn--primary:disabled { cursor: progress; filter: saturate(.6); }
+    .af-btn--ghost { background: transparent; color: var(--color-text); border-color: #444; letter-spacing: 1px; }
+    .af-btn--ghost:hover { border-color: var(--color-text-muted); color: var(--color-text); }
+    .af-btn:focus-visible, .af-brand:focus-visible, .af-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+    .bj-enviar { width: 100%; margin-top: 24px; }
+    .bj-girando { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; animation: bj-gira .8s linear infinite; flex: none; }
+    @keyframes bj-gira { to { transform: rotate(360deg); } }
+    .bj-al-pie { color: var(--color-text-muted); font-size: .9rem; text-align: center; margin-top: 12px; }
+
+    .af-note { margin-top: 20px; background: var(--color-surface); border: 1px solid var(--color-border); border-left: 3px solid #f87171; border-radius: 8px; padding: 16px 18px; }
+    .af-note p { color: #ddd; line-height: 1.6; text-wrap: pretty; }
+    .af-link { color: var(--color-text); text-decoration: underline; text-underline-offset: 3px; }
+    .af-link:hover { color: var(--color-accent); }
+
+    /* El aviso de datos: chico, pero legible (--color-text-muted sobre --color-bg, 6,95:1) */
+    .bj-datos { margin-top: 28px; color: var(--color-text-muted); font-size: .8rem; line-height: 1.6; }
+    .bj-datos p { text-wrap: pretty; }
+    .bj-datos p + p { margin-top: 8px; }
+    .bj-nowrap { white-space: nowrap; }
+    .bj-datos a { color: var(--color-text-muted); }
+
+    /* Listo: el código grande, para copiarlo o sacarle una foto */
+    .bj-listo { text-align: center; }
+    .bj-codigo-label { font-family: var(--font-heading); font-size: .8rem; letter-spacing: 3px; text-transform: uppercase; color: var(--color-text-muted); margin-top: 8px; }
+    .bj-codigo { margin: 10px auto 0; display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 14px; max-width: 100%; }
+    .bj-codigo code { font-family: 'JetBrains Mono', Consolas, Menlo, monospace; font-size: clamp(1.25rem, 6vw, 1.6rem); font-weight: 700; letter-spacing: 2px; color: var(--color-text); overflow-wrap: anywhere; }
+    .bj-copiar { min-height: 44px; padding: 8px 14px; font-size: .85rem; }
+    .bj-listo .bj-texto { color: #ccc; line-height: 1.7; margin-top: 18px; text-align: left; text-wrap: pretty; }
+    .bj-listo .bj-texto + .bj-texto { margin-top: 10px; }
+    .bj-acciones { margin-top: 26px; display: grid; gap: 12px; }
+
+    .af-foot { border-top: 1px solid var(--color-border); padding: 24px 0 32px; color: var(--color-text-muted); font-size: .85rem; text-align: center; }
+
+    .af-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    [hidden] { display: none !important; }
+
+    @media (min-width: 720px) {
+      .af-main { padding-top: 64px; }
+      .bj-card { padding: 28px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .af-btn { transition: none; }
+      .bj-girando { animation: none; border-top-color: rgba(255,255,255,.45); }
+    }
+  </style>
+</head>
+<body>
+  <a class="af-skip" href="#contenido">Ir al contenido</a>
+
+  <header class="af-top">
+    <div class="af-wrap">
+      <a class="af-brand" href="/">S.A. <span>Boleros</span></a>
+    </div>
+  </header>
+
+  <main class="af-main" id="contenido">
+    <div class="af-wrap">
+
+      <!-- El pedido -->
+      <div id="bj-pedido">
+        <div class="af-head">
+          <p class="af-eyebrow">Botón de baja de servicio</p>
+          <h1 class="af-title">Darte de baja</h1>
+          <p class="af-lead">Completá tus datos y damos de baja tu afiliación al Sindicato. Sin&nbsp;trámites</p>
+        </div>
+
+        <form class="bj-card" id="baja-form" novalidate>
+          <div class="bj-campo">
+            <label class="bj-label" for="bj-nombre">Nombre y apellido</label>
+            <input class="bj-input" id="bj-nombre" name="nombre" type="text" autocomplete="name" autocapitalize="words" spellcheck="false" aria-describedby="err-nombre">
+            <p class="bj-err" id="err-nombre"></p>
+          </div>
+          <div class="bj-campo">
+            <label class="bj-label" for="bj-email">Mail</label>
+            <p class="bj-hint" id="hint-email">Con el que pagás la&nbsp;cuota</p>
+            <input class="bj-input" id="bj-email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" aria-describedby="hint-email err-email">
+            <p class="bj-err" id="err-email"></p>
+          </div>
+          <div class="bj-campo">
+            <label class="bj-label" for="bj-mensaje">¿Querés contarnos algo? <small>(opcional)</small></label>
+            <textarea class="bj-input" id="bj-mensaje" name="mensaje" rows="3" aria-describedby="err-mensaje"></textarea>
+            <p class="bj-err" id="err-mensaje"></p>
+          </div>
+
+          <button class="af-btn af-btn--primary bj-enviar" id="bj-enviar" type="submit">
+            <span class="bj-girando" id="bj-girando" aria-hidden="true" hidden></span>
+            <span>Pedir la baja</span>
+          </button>
+          <p class="bj-al-pie">Te damos tu código en el&nbsp;momento</p>
+
+          <div class="af-note" id="bj-error" role="alert" hidden>
+            <p><span id="bj-error-texto"></span> <a class="af-link js-wa" data-texto="Hola! Quiero darme de baja de mi afiliación" href="https://wa.me/5492215917409" target="_blank" rel="noopener">escribinos por WhatsApp</a></p>
+          </div>
+        </form>
+
+        <div class="bj-datos">
+          <p>Tus datos los usa el Sindicato Argentino de Boleros sólo para darte de baja y avisarte que la&nbsp;recibimos.</p>
+          <p>Para verlos, corregirlos o borrarlos, escribinos por <a class="js-wa" data-texto="Hola! Quiero consultar por mis datos" href="https://wa.me/5492215917409" target="_blank" rel="noopener">WhatsApp</a> <span class="bj-nowrap">al 221 591-7409.</span></p>
+          <p>El titular de los datos personales tiene la facultad de ejercer el derecho de acceso a los mismos en forma gratuita a intervalos no inferiores a seis meses, salvo que se acredite un interés legítimo al efecto conforme lo establecido en el artículo 14, inciso 3 de la Ley N.º&nbsp;25.326. La Agencia de Acceso a la Información Pública, en su carácter de Órgano de Control de la Ley N.º&nbsp;25.326, tiene la atribución de atender las denuncias y reclamos que interpongan quienes resulten afectados en sus derechos por incumplimiento de las normas vigentes en materia de protección de datos personales.</p>
+        </div>
+      </div>
+
+      <!-- Listo: el código -->
+      <div class="bj-listo" id="bj-listo" hidden>
+        <div class="af-head">
+          <p class="af-eyebrow">Listo</p>
+          <h1 class="af-title" id="bj-listo-titulo" tabindex="-1">Recibimos tu pedido de baja</h1>
+        </div>
+        <div class="bj-card">
+          <p class="bj-codigo-label" id="bj-codigo-label">Tu código</p>
+          <div class="bj-codigo">
+            <code id="bj-codigo"></code>
+            <button class="af-btn af-btn--ghost bj-copiar" id="bj-copiar" type="button">Copiar</button>
+          </div>
+          <p class="bj-texto">Guardalo: es el comprobante de tu pedido y también te llega por&nbsp;mail.</p>
+          <p class="bj-texto">Cancelamos tu suscripción de Mercado&nbsp;Pago dentro de las 24&nbsp;horas y desde ahí no&nbsp;se&nbsp;te&nbsp;cobra&nbsp;más.</p>
+          <div class="bj-acciones">
+            <a class="af-btn af-btn--ghost js-wa" data-texto="Hola! Pedí la baja de mi afiliación y tengo una duda" href="https://wa.me/5492215917409" target="_blank" rel="noopener">¿Dudas? Escribinos</a>
+            <a class="af-btn af-btn--ghost" href="/">Volver al inicio</a>
+          </div>
+        </div>
+      </div>
+
+      <p class="af-sr" id="bj-aviso" aria-live="polite"></p>
+    </div>
+  </main>
+
+  <footer class="af-foot">
+    <div class="af-wrap">Sindicato Argentino de Boleros · La Plata</div>
+  </footer>
+
+  <script>
+  (function () {
+    'use strict';
+
+    // El servidor valida de nuevo y es el que manda: esto sólo adelanta el aviso
+    // al lado del campo. Todo se pinta con textContent.
+    var WA = 'https://wa.me/5492215917409';
+    var $ = function (id) { return document.getElementById(id); };
+    document.querySelectorAll('.js-wa').forEach(function (a) {
+      if (a.dataset.texto) a.href = WA + '?text=' + encodeURIComponent(a.dataset.texto);
+    });
+
+    var form = $('baja-form');
+    var CAMPOS = ['nombre', 'email', 'mensaje'];
+    var SIGNOS = /[<>]/;
+    var MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    function valores() {
+      return {
+        nombre: $('bj-nombre').value.replace(/\s+/g, ' ').trim(),
+        email: $('bj-email').value.trim(),
+        mensaje: $('bj-mensaje').value.trim(),
+      };
+    }
+
+    function validar(v) {
+      var e = {};
+      if (!v.nombre) e.nombre = 'Escribí tu nombre y apellido.';
+      else if (v.nombre.length < 2 || v.nombre.length > 120) e.nombre = 'Entre 2 y 120 letras.';
+      else if (SIGNOS.test(v.nombre)) e.nombre = 'El nombre no admite los signos de menor y mayor.';
+      if (!v.email) e.email = 'Escribí tu mail.';
+      else if (v.email.length > 254 || !MAIL.test(v.email) || SIGNOS.test(v.email)) e.email = 'Revisá el mail: tiene que ser como nombre@ejemplo.com.';
+      if (v.mensaje.length > 500) e.mensaje = 'Hasta 500 letras.';
+      else if (SIGNOS.test(v.mensaje)) e.mensaje = 'El comentario no admite los signos de menor y mayor.';
+      return e;
+    }
+
+    function mostrarErrores(e) {
+      var primero = null;
+      CAMPOS.forEach(function (c) {
+        var input = $('bj-' + c);
+        $('err-' + c).textContent = e[c] || '';
+        if (e[c]) { input.setAttribute('aria-invalid', 'true'); if (!primero) primero = input; }
+        else input.removeAttribute('aria-invalid');
+      });
+      if (primero) primero.focus();
+      return !!primero;
+    }
+
+    function errorGeneral(texto) {
+      $('bj-error-texto').textContent = texto;
+      $('bj-error').hidden = !texto;
+    }
+
+    function enviando(si) {
+      $('bj-enviar').disabled = si;
+      $('bj-enviar').setAttribute('aria-busy', si ? 'true' : 'false');
+      $('bj-girando').hidden = !si;
+    }
+
+    function listo(codigo) {
+      $('bj-codigo').textContent = codigo;
+      $('bj-pedido').hidden = true;
+      $('bj-listo').hidden = false;
+      window.scrollTo(0, 0);
+      $('bj-listo-titulo').focus();
+    }
+
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      errorGeneral('');
+      var v = valores();
+      if (mostrarErrores(validar(v))) return;
+      enviando(true);
+      fetch('/api/bajas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'omit',
+        body: JSON.stringify(v),
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { return { r: r, b: b }; }); })
+        .then(function (x) {
+          if (x.r.status === 201 && x.b.codigo) return listo(x.b.codigo);
+          if (x.r.status === 400 && x.b.campos) return mostrarErrores(x.b.campos);
+          if (x.r.status === 429) return errorGeneral('Hiciste varios pedidos seguidos. Esperá unos minutos y probá de nuevo, o');
+          errorGeneral('No pudimos mandar tu pedido. Probá de nuevo en un rato, o');
+        })
+        .catch(function () { errorGeneral('No pudimos mandar tu pedido: parece que no hay conexión. Probá de nuevo, o'); })
+        .then(function () { enviando(false); });
+    });
+
+    // En el comentario, Ctrl/⌘+Enter también envía (Enter solo, un renglón nuevo).
+    $('bj-mensaje').addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true })); }
+    });
+
+    $('bj-copiar').addEventListener('click', function () {
+      var codigo = $('bj-codigo').textContent;
+      var ok = function () { $('bj-copiar').textContent = 'Copiado'; $('bj-aviso').textContent = 'Código copiado'; setTimeout(function () { $('bj-copiar').textContent = 'Copiar'; }, 1800); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(codigo).then(ok, function () { seleccionar(); });
+      } else seleccionar();
+    });
+    function seleccionar() {
+      var r = document.createRange(); r.selectNodeContents($('bj-codigo'));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      $('bj-aviso').textContent = 'Código seleccionado: copialo a mano';
+    }
+  })();
+  </script>
+</body>
+</html>
